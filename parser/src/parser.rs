@@ -48,7 +48,7 @@ impl<'t> peg::ParseLiteral for Parser<'t, '_> {
         };
         use Token::*;
         match (&elem.node, literal) {
-            (LPar, "(") | (RPar, ")") => peg::RuleResult::Matched(pos + 1, ()),
+            (LPar, "(") | (RPar, ")") | (Dot, ".") => peg::RuleResult::Matched(pos + 1, ()),
             _ => peg::RuleResult::Failed,
         }
     }
@@ -59,15 +59,21 @@ peg::parser! {
         use syntax::ExprKind::*;
         use syntax::LitKind::*;
         /// 括弧をつけなくても関数の引数になれる式
+        #[cache_left_rec]
         pub rule simple_exp() -> Expr<'t>
             = "(" e:exp() ")" { e }
             / l:l() "(" ")" r:r() { Expr::new(Lit(Unit), (l, r)) }
+            / e1:simple_exp() "." "(" e2:exp() ")" r:r() {
+                let span = (e1.span.start, r);
+                Expr::new(Get(Box::new(e1), Box::new(e2)), span)
+            }
             / [Spanned { node, span }] {?
                 Ok(Spanned {
                     node: match node {
                         Token::Int(i) => Lit(Int(*i)),
                         Token::Bool(b) => Lit(Bool(*b)),
                         Token::Float(f) => Lit(Float(*f)),
+                        Token::Ident(x) => Var(x),
                         _ => Err("")?,
                     },
                     span: span.clone(),
@@ -77,8 +83,8 @@ peg::parser! {
         pub rule exp() -> Expr<'t> = precedence!{
             e:simple_exp() { e }
         }
-        rule l() -> Loc<usize> = p:position!() { parser_ref.tokens[p].span.start.clone() }
-        rule r() -> Loc<usize> = p:position!() { parser_ref.tokens[p - 1].span.end.clone() }
+        rule l() -> Loc<usize> = p:position!() { parser_ref.tokens[p].span.start }
+        rule r() -> Loc<usize> = p:position!() { parser_ref.tokens[p - 1].span.end }
     }
 }
 
@@ -90,10 +96,13 @@ mod tests {
 
     #[test]
     fn test_simple_exp() {
-        let input = "((*  *)()     )";
-        let f = mincaml::simple_exp;
-        let span = test_parser(input, f).span;
-        assert_eq!(span.range(), 7..9);
+        assert_eq!(
+            test_parser("((*  *)()     )", mincaml::simple_exp).range(),
+            7..9
+        );
+        test_parser("a", mincaml::simple_exp);
+        test_parser("a.(0)", mincaml::simple_exp);
+        test_parser("a.(0).(0)", mincaml::simple_exp);
     }
 
     type PegRule<'a> = for<'lexer> fn(
