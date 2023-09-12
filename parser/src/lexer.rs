@@ -205,9 +205,9 @@ impl<'input> Iterator for Lexer<'input> {
             let consumed = self.last_remain_len - remain_len;
             self.last_remain_len = remain_len;
 
-            let lo = self.current_loc.clone();
+            let lo = self.current_loc;
             self.current_loc.char_pos += consumed;
-            let hi = self.current_loc.clone();
+            let hi = self.current_loc;
             let span = (lo, hi);
 
             use LexState::*;

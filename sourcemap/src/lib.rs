@@ -1,4 +1,4 @@
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Loc<Size = usize> {
     pub char_pos: Size,
 }
