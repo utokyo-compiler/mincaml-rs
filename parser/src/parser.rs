@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use sourcemap::{Loc, Spanned};
 use syntax::Expr;
 
@@ -47,17 +49,62 @@ impl<'t> peg::ParseLiteral for Parser<'t, '_> {
             return peg::RuleResult::Failed;
         };
         use Token::*;
-        match (&elem.node, literal) {
-            (LPar, "(") | (RPar, ")") | (Dot, ".") => peg::RuleResult::Matched(pos + 1, ()),
-            _ => peg::RuleResult::Failed,
+        macro_rules! match_tokens {
+            ($expr:expr, $literal:ident { $($l:ident $r:literal)* }) => {
+                match $expr {
+                    $(
+                        $l => match $literal {
+                            $r => peg::RuleResult::Matched(pos + 1, ()),
+                            _ => peg::RuleResult::Failed,
+                        },
+                    )*
+                    _ => peg::RuleResult::Failed,
+                }
+            };
         }
+        match_tokens!(&elem.node, literal {
+            LPar "("
+            RPar ")"
+            Not "not"
+            Hyphen "-"
+            Plus "+"
+            Ast "*"
+            Slash "/"
+            HyphenDot "-."
+            PlusDot "+."
+            AstDot "*."
+            SlashDot "/."
+            Equal "="
+            LessGreater "<>"
+            LessEqual "<="
+            GreaterEqual ">="
+            Less "<"
+            Greater ">"
+            If "if"
+            Then "then"
+            Else "else"
+            Let "let"
+            In "in"
+            Rec "rec"
+            Comma ","
+            ArrayMake "Array.make"
+            Dot "."
+            LessHyphen "<-"
+            Semi ";"
+        })
     }
 }
 
 peg::parser! {
     pub grammar mincaml<'t, 'lexer>(parser_ref: &Parser<'t, 'lexer>) for Parser<'t, 'lexer> {
+        use syntax::*;
         use syntax::ExprKind::*;
         use syntax::LitKind::*;
+        use syntax::UnOp::*;
+        use syntax::BinOp::*;
+        use syntax::BBinOpKind::*;
+        use syntax::IBinOpKind::*;
+        use syntax::FBinOpKind::*;
         /// 括弧をつけなくても関数の引数になれる式
         #[cache_left_rec]
         pub rule simple_exp() -> Expr<'t>
@@ -80,16 +127,93 @@ peg::parser! {
                 })
             }
         /// 一般の式
-        pub rule exp() -> Expr<'t> = precedence!{
-            e:simple_exp() { e }
+        pub rule exp() -> Expr<'t>
+            = l:l() "Array.make" e1:simple_exp() e2:simple_exp() {
+                let span = (l, e2.span.end);
+                Expr::new(ArrayMake(Box::new(e1), Box::new(e2)), span)
+            }
+            / l:l() "not" e:simple_exp() {
+                let span = (l, e.span.end);
+                Expr::new(Unary(Not, Box::new(e)), span)
+            }
+            / e:exp_infix() { e }
+            / e1:simple_exp() "." "(" e2:exp() ")" "<-" e3:exp() {
+                let span = (e1.span.start, e3.span.end);
+                Expr::new(Set(Box::new(e1), Box::new(e2), Box::new(e3)), span)
+            }
+            / v:simple_exp()+ {
+                let mut v = VecDeque::from_iter(v);
+                let e1 = v.pop_front().unwrap();
+                if !v.is_empty() {
+                    let span = (e1.span.start, v.back().unwrap().span.end);
+                    Expr::new(App(Box::new(e1), v.into()), span)
+                }
+                else {
+                    e1
+                }
+            }
+        rule exp_infix() -> Expr<'t> = precedence! {
+            x:(@) r:op_rel() y:@ {
+                let span = (x.span.start, y.span.end);
+                Expr::new(Binary(BBinOp(r), Box::new(x), Box::new(y)), span)
+            }
+            --
+            x:(@) "+" y:@ {
+                let span = (x.span.start, y.span.end);
+                Expr::new(Binary(IBinOp(Add), Box::new(x), Box::new(y)), span)
+            }
+            x:(@) "-" y:@ {
+                let span = (x.span.start, y.span.end);
+                Expr::new(Binary(IBinOp(Sub), Box::new(x), Box::new(y)), span)
+            }
+            x:(@) "+." y:@ {
+                let span = (x.span.start, y.span.end);
+                Expr::new(Binary(FBinOp(FAdd), Box::new(x), Box::new(y)), span)
+            }
+            x:(@) "-." y:@ {
+                let span = (x.span.start, y.span.end);
+                Expr::new(Binary(FBinOp(FSub), Box::new(x), Box::new(y)), span)
+            }
+            --
+            x:(@) "*" y:@ {
+                let span = (x.span.start, y.span.end);
+                Expr::new(Binary(IBinOp(Mul), Box::new(x), Box::new(y)), span)
+            }
+            x:(@) "/" y:@ {
+                let span = (x.span.start, y.span.end);
+                Expr::new(Binary(IBinOp(Div), Box::new(x), Box::new(y)), span)
+            }
+            x:(@) "*." y:@ {
+                let span = (x.span.start, y.span.end);
+                Expr::new(Binary(FBinOp(FMul), Box::new(x), Box::new(y)), span)
+            }
+            x:(@) "/." y:@ {
+                let span = (x.span.start, y.span.end);
+                Expr::new(Binary(FBinOp(FDiv), Box::new(x), Box::new(y)), span)
+            }
         }
-        rule l() -> Loc<usize> = p:position!() { parser_ref.tokens[p].span.start }
+        rule op_rel() -> BBinOpKind
+            = "<>" { Ne }
+            / "<=" { Le }
+            / ">=" { Ge }
+            / "<" { Lt }
+            / ">" { Gt }
+            / "=" { Eq }
+        rule l() -> Loc<usize> = p:position!() {?
+            if p < parser_ref.tokens.len() {
+                Ok(parser_ref.tokens[p].span.start)
+            } else {
+                Err("")
+            }
+        }
         rule r() -> Loc<usize> = p:position!() { parser_ref.tokens[p - 1].span.end }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use syntax::{ExprKind, UnOp};
+
     use crate::lexer::Lexer;
 
     use super::*;
@@ -105,6 +229,16 @@ mod tests {
         test_parser("a.(0).(0)", mincaml::simple_exp);
     }
 
+    #[test]
+    fn test_exp() {
+        let spanned = test_parser("a b c", mincaml::exp);
+        assert!(matches!(spanned.node, ExprKind::App(_, _)));
+        let spanned = test_parser("Array.make 1 1", mincaml::exp);
+        assert!(matches!(spanned.node, ExprKind::ArrayMake(_, _)));
+        let spanned = test_parser("not true", mincaml::exp);
+        assert!(matches!(spanned.node, ExprKind::Unary(UnOp::Not, _)));
+    }
+
     type PegRule<'a> = for<'lexer> fn(
         &Parser<'a, 'lexer>,
         &Parser<'a, 'lexer>,
@@ -114,6 +248,7 @@ mod tests {
     >;
     fn test_parser<'a>(input: &'a str, f: PegRule<'a>) -> Spanned<syntax::ExprKind<'a>> {
         let v = Lexer::new(input).read_to_vec().unwrap();
+        // dbg!(&v);
         let p = Parser::new(&v);
         f(&p, &p).unwrap()
     }

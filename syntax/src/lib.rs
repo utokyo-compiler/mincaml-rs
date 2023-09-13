@@ -51,8 +51,6 @@ pub enum IBinOpKind {
     Sub,
     Mul,
     Div,
-    Sll,
-    Srl,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -61,7 +59,6 @@ pub enum FBinOpKind {
     FSub,
     FMul,
     FDiv,
-    Fless,
 }
 
 #[derive(Debug, Clone, Copy)]
