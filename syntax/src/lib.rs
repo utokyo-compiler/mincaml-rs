@@ -4,33 +4,41 @@ use sourcemap::Spanned;
 
 pub type Ident<'input> = &'input str;
 
-pub type Expr<'a> = Spanned<ExprKind<'a>>;
+pub type Expr<'a, 'b> = Spanned<ExprKind<'a, 'b>>;
 
 #[derive(Debug, Clone)]
-pub enum ExprKind<'input> {
+pub enum ExprKind<'input, 'b> {
     Lit(LitKind),
-    Unary(UnOp, Box<Expr<'input>>),
-    Binary(BinOp, Box<Expr<'input>>, Box<Expr<'input>>),
-    If(Box<Expr<'input>>, Box<Expr<'input>>, Box<Expr<'input>>),
-    Let(LetKind<'input>),
-    Then(Box<Expr<'input>>, Box<Expr<'input>>),
+    Unary(UnOp, &'b Expr<'input, 'b>),
+    Binary(BinOp, &'b Expr<'input, 'b>, &'b Expr<'input, 'b>),
+    If(
+        &'b Expr<'input, 'b>,
+        &'b Expr<'input, 'b>,
+        &'b Expr<'input, 'b>,
+    ),
+    Let(LetKind<'input, 'b>),
+    Then(&'b Expr<'input, 'b>, &'b Expr<'input, 'b>),
     Var(Ident<'input>),
-    App(Box<Expr<'input>>, Vec<Expr<'input>>),
-    Tuple(Vec<Expr<'input>>),
-    ArrayMake(Box<Expr<'input>>, Box<Expr<'input>>),
-    Get(Box<Expr<'input>>, Box<Expr<'input>>),
-    Set(Box<Expr<'input>>, Box<Expr<'input>>, Box<Expr<'input>>),
+    App(&'b Expr<'input, 'b>, Vec<Expr<'input, 'b>>),
+    Tuple(Vec<Expr<'input, 'b>>),
+    ArrayMake(&'b Expr<'input, 'b>, &'b Expr<'input, 'b>),
+    Get(&'b Expr<'input, 'b>, &'b Expr<'input, 'b>),
+    Set(
+        &'b Expr<'input, 'b>,
+        &'b Expr<'input, 'b>,
+        &'b Expr<'input, 'b>,
+    ),
 }
 
 #[derive(Debug, Clone)]
-pub struct FunDef<'a> {
+pub struct FunDef<'a, 'b> {
     pub name: Ident<'a>,
     pub args: Vec<Ident<'a>>,
-    pub body: Box<Expr<'a>>,
+    pub body: &'b Expr<'a, 'b>,
 }
 
-impl<'a> FunDef<'a> {
-    pub fn new(name: Ident<'a>, args: Vec<Ident<'a>>, body: Box<Expr<'a>>) -> Self {
+impl<'a, 'b> FunDef<'a, 'b> {
+    pub fn new(name: Ident<'a>, args: Vec<Ident<'a>>, body: &'b Expr<'a, 'b>) -> Self {
         Self { name, args, body }
     }
 }
@@ -100,8 +108,8 @@ impl Display for LitKind {
 }
 
 #[derive(Debug, Clone)]
-pub enum LetKind<'a> {
-    LetVar(Ident<'a>, Box<Expr<'a>>, Box<Expr<'a>>),
-    LetRec(FunDef<'a>, Box<Expr<'a>>),
-    LetTuple(Vec<Ident<'a>>, Box<Expr<'a>>, Box<Expr<'a>>),
+pub enum LetKind<'a, 'b> {
+    LetVar(Ident<'a>, &'b Expr<'a, 'b>, &'b Expr<'a, 'b>),
+    LetRec(FunDef<'a, 'b>, &'b Expr<'a, 'b>),
+    LetTuple(Vec<Ident<'a>>, &'b Expr<'a, 'b>, &'b Expr<'a, 'b>),
 }

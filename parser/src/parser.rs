@@ -1,5 +1,6 @@
 use std::fmt;
 
+use bumpalo::Bump;
 use sourcemap::{Loc, Spanned};
 use syntax::Expr;
 
@@ -19,7 +20,7 @@ mod mincaml;
 pub type SelectedParser = lalrpop::LalrpopParser;
 
 pub trait Parser {
-    fn parse<'t>(lexer: impl Lexer<'t>) -> Result<Expr<'t>, Error<'t>>;
+    fn parse<'t, 'b: 't>(bump: &'b Bump, lexer: impl Lexer<'t>) -> Result<Expr<'t, 'b>, Error<'t>>;
 }
 
 #[derive(Debug, Clone)]

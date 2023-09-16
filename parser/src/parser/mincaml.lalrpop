@@ -1,8 +1,9 @@
+use bumpalo::Bump;
 use sourcemap::{Loc, Spanned};
 use syntax::{*, ExprKind::*, LitKind::*, BinOp::*, IBinOpKind::*, BBinOpKind::*, FBinOpKind::*, UnOp::*, LetKind::*};
 use crate::lexer::{Error as LexError, Token};
 
-grammar<'input>;
+grammar<'input>(bump: &'input Bump);
 extern {
     type Location = Loc;
     type Error = LexError<'input>;
@@ -66,78 +67,78 @@ BooleanBinOp: BinOp = {
     ">" => BBinOp(Gt)
 };
 
-Literal: Expr<'input> = {
+Literal: Expr<'input, 'input> = {
     <l:@L> "(" ")" <r:@R> => Spanned::new(Lit(Unit), (l, r)),
     <l:@L> <x:Bool> <r:@R> => Spanned::new(Lit(Bool(x)), (l, r)),
     <l:@L> <x:Int> <r:@R> => Spanned::new(Lit(Int(x)), (l, r)),
     <l:@L> <x:Float> <r:@R> => Spanned::new(Lit(Float(x)), (l, r)),
 }
 
-SimpleExpr: Expr<'input> = {
+SimpleExpr: Expr<'input, 'input> = {
     "(" <x:Expr> ")" => x,
     <l:@L> "(" <e:Elems> ")" <r:@R>
         => Spanned::new(Tuple(e), (l, r)),
     Literal,
     <l:@L> <x:Ident> <r:@R> => Spanned::new(Var(x), (l, r)),
-    <l:@L> <s:SimpleExpr> "." "(" <x:Expr> ")" <r:@R> => Spanned::new(Get(Box::new(s), Box::new(x)), (l, r)),
+    <l:@L> <s:SimpleExpr> "." "(" <x:Expr> ")" <r:@R> => Spanned::new(Get(bump.alloc(s), bump.alloc(x)), (l, r)),
 }
 
-AboveIf: Expr<'input> = {
+AboveIf: Expr<'input, 'input> = {
     #[precedence(level="0")]
     SimpleExpr,
 
     // (a b)
     #[precedence(level="1")]
     <l:@L> <e1:SimpleExpr> <e2:ActualArgs> <r:@R>
-        => Spanned::new(App(Box::new(e1), e2), (l, r)),
+        => Spanned::new(App(bump.alloc(e1), e2), (l, r)),
     <l:@L> "Array.make" <e1:SimpleExpr> <e2:AboveIf> <r:@R>
-        => Spanned::new(ArrayMake(Box::new(e1), Box::new(e2)), (l, r)),
+        => Spanned::new(ArrayMake(bump.alloc(e1), bump.alloc(e2)), (l, r)),
     <l:@L> "not" <e1:SimpleExpr> <r:@R>
-        => Spanned::new(Unary(Not, Box::new(e1)), (l, r)),
+        => Spanned::new(Unary(Not, bump.alloc(e1)), (l, r)),
 
     // -
     #[precedence(level="2")]
     <l:@L> "-" <e1:AboveIf> <r:@R>
-        => Spanned::new(Unary(Neg, Box::new(e1)), (l, r)),
+        => Spanned::new(Unary(Neg, bump.alloc(e1)), (l, r)),
 
     // -.
     <l:@L> "-." <e1:AboveIf> <r:@R>
-        => Spanned::new(Unary(FNeg, Box::new(e1)), (l, r)),
+        => Spanned::new(Unary(FNeg, bump.alloc(e1)), (l, r)),
 
     // * *. /.
     #[precedence(level="3")]
     #[assoc(side="left")]
     <l:@L> <e1:AboveIf> <op:FactorOp> <e2:AboveIf> <r:@R>
-        => Spanned::new(Binary(op, Box::new(e1), Box::new(e2)), (l, r)),
+        => Spanned::new(Binary(op, bump.alloc(e1), bump.alloc(e2)), (l, r)),
 
     // + - +. -.
     #[precedence(level="4")]
     #[assoc(side="left")]
     <l:@L> <e1:AboveIf> <op:TermOp> <e2:AboveIf> <r:@R>
-        => Spanned::new(Binary(op, Box::new(e1), Box::new(e2)), (l, r)),
+        => Spanned::new(Binary(op, bump.alloc(e1), bump.alloc(e2)), (l, r)),
 
     // = <> < > <= >=
     #[precedence(level="5")]
     #[assoc(side="left")]
     <l:@L> <e1:AboveIf> <op:BooleanBinOp> <e2:AboveIf> <r:@R>
-        => Spanned::new(Binary(op, Box::new(e1), Box::new(e2)), (l, r)),
+        => Spanned::new(Binary(op, bump.alloc(e1), bump.alloc(e2)), (l, r)),
 
     // .() <-
     #[precedence(level="6")]
     <l:@L> <e1:SimpleExpr> "." "(" <e2:Expr> ")" "<-" <e3:If> <r:@R>
-        => Spanned::new(Set(Box::new(e1), Box::new(e2), Box::new(e3)), (l, r)),
+        => Spanned::new(Set(bump.alloc(e1), bump.alloc(e2), bump.alloc(e3)), (l, r)),
 }
 
-If: Expr<'input> = {
+If: Expr<'input, 'input> = {
     AboveIf,
     // if (restricted)
     <l:@L> "if" <e1:Expr> "then" <e2:Expr> "else" <e3:If> <r:@R>
-        => Spanned::new(If(Box::new(e1), Box::new(e2), Box::new(e3)), (l, r)),
+        => Spanned::new(If(bump.alloc(e1), bump.alloc(e2), bump.alloc(e3)), (l, r)),
 }
 
 // trick, 'let ...' has lowest prec but begins with the keyword "let"
 // which distinguishs them from Expr -> Expr ';' Expr
-BelowIf: Expr<'input> = {
+BelowIf: Expr<'input, 'input> = {
     If,
     <l:@L> "let" <e:LetFollows> <r:@R>
         => Spanned::new(Let(e), (l, r)),
@@ -145,32 +146,32 @@ BelowIf: Expr<'input> = {
     <l1:@L> "if" <e1:Expr> "then" <e2:Expr> "else"
         <l2:@L> "let" <e3:LetFollows> <r:@R>
         => Spanned::new(If(
-            Box::new(e1),
-            Box::new(e2),
-            Box::new(Spanned::new(Let(e3), (l2, r)))
+            bump.alloc(e1),
+            bump.alloc(e2),
+            bump.alloc(Spanned::new(Let(e3), (l2, r)))
         ), (l1, r)),
 }
 
-LetFollows: LetKind<'input> = {
+LetFollows: LetKind<'input, 'input> = {
     <x:Ident> "=" <e1:Expr> "in" <e2:Expr>
-        => LetVar(x, Box::new(e1), Box::new(e2)),
+        => LetVar(x, bump.alloc(e1), bump.alloc(e2)),
 
     "rec" <x:Ident> <arg:FormalArgs> "=" <e1:Expr> "in" <e2:Expr>
-        => LetRec(FunDef::new(x, arg, Box::new(e1)), Box::new(e2)),
+        => LetRec(FunDef::new(x, arg, bump.alloc(e1)), bump.alloc(e2)),
 
     "(" <p:Pat> ")" "=" <e1:Expr> "in" <e2:Expr>
-        => LetTuple(p, Box::new(e1), Box::new(e2)),
+        => LetTuple(p, bump.alloc(e1), bump.alloc(e2)),
 }
 
-SemiSeq: Expr<'input> = {
+SemiSeq: Expr<'input, 'input> = {
     BelowIf,
     <l:@L> <e1:If> ";" <e2:SemiSeq> <r:@R> => Spanned::new(
-        Then(Box::new(e1), Box::new(e2)),
+        Then(bump.alloc(e1), bump.alloc(e2)),
         (l, r)
     ),
 }
 
-pub Expr: Expr<'input> = SemiSeq;
+pub Expr: Expr<'input, 'input> = SemiSeq;
 
 FormalArgs: Vec<Ident<'input>> = {
     <mut a:FormalArgs> <i:Ident> => {
@@ -180,7 +181,7 @@ FormalArgs: Vec<Ident<'input>> = {
     Ident => vec![<>],
 }
 
-ActualArgs: Vec<Expr<'input>> = {
+ActualArgs: Vec<Expr<'input, 'input>> = {
     <mut a:ActualArgs> <s:SimpleExpr> => {
         a.push(s);
         a
@@ -188,7 +189,7 @@ ActualArgs: Vec<Expr<'input>> = {
     SimpleExpr => vec![<>],
 }
 
-Elems: Vec<Expr<'input>> = {
+Elems: Vec<Expr<'input, 'input>> = {
     <mut a:Elems> "," <i:Expr> => {
         a.push(i);
         a

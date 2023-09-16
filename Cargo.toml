@@ -15,6 +15,7 @@ edition = "2021"
 
 [workspace.dependencies]
 thiserror = "1.0.48"
+bumpalo = "3.14.0"
 sourcemap = { path = "./sourcemap" }
 syntax = { path = "./syntax" }
 parser = { path = "./parser" }

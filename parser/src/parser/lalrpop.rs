@@ -2,6 +2,7 @@ use crate::{
     lexer::{Error as LexError, Lexer, Token},
     parser::{Error, ExpectedTokens, ParseError, Parser},
 };
+use bumpalo::Bump;
 use sourcemap::{Loc, Spanned};
 
 use super::mincaml;
@@ -9,11 +10,14 @@ use super::mincaml;
 pub struct LalrpopParser;
 
 impl Parser for LalrpopParser {
-    fn parse<'t>(lexer: impl Lexer<'t>) -> Result<syntax::Expr<'t>, crate::parser::Error<'t>> {
+    fn parse<'t, 'b: 't>(
+        bump: &'b Bump,
+        lexer: impl Lexer<'t>,
+    ) -> Result<syntax::Expr<'t, 'b>, crate::parser::Error<'t>> {
         let lexer = LexerWrapper::new(lexer);
         let parser = mincaml::ExprParser::new();
 
-        parser.parse(lexer).map_err(convert_error)
+        parser.parse(bump, lexer).map_err(convert_error)
     }
 }
 
