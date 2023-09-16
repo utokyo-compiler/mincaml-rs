@@ -8,6 +8,12 @@ mod plex;
 #[cfg(feature = "plex")]
 pub type SelectedLexer<'a> = plex::PlexLexer<'a>;
 
+const _: () = {
+    use std::marker::PhantomData;
+    struct IsLexer<'a, T: Lexer<'a>>(PhantomData<&'a T>);
+    let _ = IsLexer::<SelectedLexer>(PhantomData);
+};
+
 pub trait Lexer<'input>: Iterator<Item = Result<'input, Spanned<Token<'input>>>> {
     fn new(input: &'input str) -> Self;
 

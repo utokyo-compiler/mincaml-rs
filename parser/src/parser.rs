@@ -19,6 +19,12 @@ mod mincaml;
 #[cfg(feature = "lalrpop")]
 pub type SelectedParser = lalrpop::LalrpopParser;
 
+const _: () = {
+    use std::marker::PhantomData;
+    struct IsParser<T: Parser>(PhantomData<T>);
+    let _ = IsParser::<SelectedParser>(PhantomData);
+};
+
 pub trait Parser {
     fn parse<'t, 'b: 't>(bump: &'b Bump, lexer: impl Lexer<'t>) -> Result<Expr<'t, 'b>, Error<'t>>;
 }
