@@ -14,6 +14,9 @@ type SelectedParser = peg::PegParser;
 #[cfg(feature = "lalrpop")]
 mod lalrpop;
 #[cfg(feature = "lalrpop")]
+#[allow(clippy::all)]
+mod mincaml;
+#[cfg(feature = "lalrpop")]
 type SelectedParser = lalrpop::LalrpopParser;
 
 pub type Error<'a> = parser::Error<'a>;

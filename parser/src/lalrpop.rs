@@ -1,8 +1,8 @@
 use crate::{
     lexer::{Error as LexError, Lexer, Token},
+    mincaml,
     parser::{Error, ExpectedTokens, ParseError, Parser},
 };
-use lalrpop_util::lalrpop_mod;
 use sourcemap::{Loc, Spanned};
 
 pub struct LalrpopParser;
@@ -40,8 +40,6 @@ impl<'input, L: Lexer<'input>> LexerWrapper<'input, L> {
     }
 }
 
-lalrpop_mod!(pub mincaml);
-
 type LalrpopError<'a> = lalrpop_util::ParseError<Loc, Token<'a>, LexError<'a>>;
 
 fn convert_error(err: LalrpopError) -> Error {
@@ -50,7 +48,7 @@ fn convert_error(err: LalrpopError) -> Error {
         LalrpopError::ExtraToken {
             token: (lo, tok, hi),
         } => ParseError::ExtraToken(Spanned::new(tok, (lo, hi))),
-        LalrpopError::User { error } => unreachable!("unexpected user error: {}", error.node),
+        LalrpopError::User { error } => return Error::LexError(error),
         LalrpopError::UnrecognizedToken {
             token: (lo, tok, hi),
             expected,
