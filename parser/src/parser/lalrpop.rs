@@ -1,9 +1,10 @@
 use crate::{
     lexer::{Error as LexError, Lexer, Token},
-    mincaml,
     parser::{Error, ExpectedTokens, ParseError, Parser},
 };
 use sourcemap::{Loc, Spanned};
+
+use super::mincaml;
 
 pub struct LalrpopParser;
 

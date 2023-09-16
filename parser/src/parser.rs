@@ -5,6 +5,19 @@ use syntax::Expr;
 
 use crate::lexer::{self, Lexer, Token};
 
+#[cfg(feature = "peg")]
+mod peg;
+#[cfg(feature = "peg")]
+pub type SelectedParser = peg::PegParser;
+
+#[cfg(feature = "lalrpop")]
+mod lalrpop;
+#[cfg(feature = "lalrpop")]
+#[allow(clippy::all)]
+mod mincaml;
+#[cfg(feature = "lalrpop")]
+pub type SelectedParser = lalrpop::LalrpopParser;
+
 pub trait Parser {
     fn parse<'t>(lexer: impl Lexer<'t>) -> Result<Expr<'t>, Error<'t>>;
 }

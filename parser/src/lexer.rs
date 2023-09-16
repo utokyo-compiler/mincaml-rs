@@ -3,6 +3,11 @@ use std::str::FromStr;
 use sourcemap::Spanned;
 use thiserror::Error;
 
+#[cfg(feature = "plex")]
+mod plex;
+#[cfg(feature = "plex")]
+pub type SelectedLexer<'a> = plex::PlexLexer<'a>;
+
 pub trait Lexer<'input>: Iterator<Item = Result<'input, Spanned<Token<'input>>>> {
     fn new(input: &'input str) -> Self;
 

@@ -2,13 +2,13 @@
 
 a mincaml port written in Rust
 
-## file correspondence
+## module correspondence
 
 | mincaml      | mincaml-rs                    |
 | ------------ | ----------------------------- |
 | syntax.ml    | syntax/src/lib.rs             |
-| lexer.mll    | parser/src/lexer.rs           |
-| parser.mly   | parser/src/parser.rs          |
+| lexer.mll    | parser/src/lexer              |
+| parser.mly   | parser/src/parser             |
 | type.ml      | ty/src/lib.rs                 |
 | typing.ml    | typing/src/lib.rs             |
 | kNormal.ml   | ir_knorm/src/lib.rs           |

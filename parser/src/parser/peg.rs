@@ -8,6 +8,8 @@ use crate::{
     parser::{Error, ParseError, Parser},
 };
 
+use super::ExpectedTokens;
+
 pub struct PegParser;
 
 impl Parser for PegParser {
@@ -16,7 +18,10 @@ impl Parser for PegParser {
         let parser = PegParserImpl::new(&tokens);
         mincaml::exp(&parser, &parser).map_err(|e| {
             let span = parser.tokens[e.location].to_owned();
-            Error::ParseError(ParseError::UnexpectedToken(span, e.expected))
+            Error::ParseError(ParseError::UnexpectedToken(
+                span,
+                ExpectedTokens(e.expected.tokens().map(|s| s.to_string()).collect()),
+            ))
         })
     }
 }
@@ -230,7 +235,7 @@ peg::parser! {
 mod tests {
     use syntax::{ExprKind, UnOp};
 
-    use crate::{lexer::Lexer, plex::PlexLexer};
+    use crate::lexer::{Lexer, SelectedLexer};
 
     use super::*;
 
@@ -263,7 +268,7 @@ mod tests {
         peg::error::ParseError<<PegParserImpl<'a, 'lexer> as peg::Parse>::PositionRepr>,
     >;
     fn test_parser<'a>(input: &'a str, f: PegRule<'a>) -> Spanned<syntax::ExprKind<'a>> {
-        let v = PlexLexer::new(input).read_to_vec().unwrap();
+        let v = SelectedLexer::new(input).read_to_vec().unwrap();
         // dbg!(&v);
         let p = PegParserImpl::new(&v);
         f(&p, &p).unwrap()
