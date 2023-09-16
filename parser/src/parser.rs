@@ -227,7 +227,7 @@ peg::parser! {
 mod tests {
     use syntax::{ExprKind, UnOp};
 
-    use crate::lexer::Lexer;
+    use crate::{lexer::Lexer, plex::PlexLexer};
 
     use super::*;
 
@@ -260,7 +260,7 @@ mod tests {
         peg::error::ParseError<<Parser<'a, 'lexer> as peg::Parse>::PositionRepr>,
     >;
     fn test_parser<'a>(input: &'a str, f: PegRule<'a>) -> Spanned<syntax::ExprKind<'a>> {
-        let v = Lexer::new(input).read_to_vec().unwrap();
+        let v = PlexLexer::new(input).read_to_vec().unwrap();
         // dbg!(&v);
         let p = Parser::new(&v);
         f(&p, &p).unwrap()
