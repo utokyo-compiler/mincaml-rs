@@ -3,20 +3,20 @@ use syntax::Expr;
 mod lexer;
 #[cfg(feature = "plex")]
 mod plex;
+#[cfg(feature = "plex")]
+type SelectedLexer<'a> = plex::PlexLexer<'a>;
 
 mod parser;
+#[cfg(feature = "peg")]
+mod peg;
+#[cfg(feature = "peg")]
+type SelectedParser = peg::PegParser;
 
-#[derive(Debug, Clone)]
-pub enum Error<'a> {
-    LexError(lexer::Error<'a>),
-    ParseError(parser::Error<'a>),
-}
+pub type Error<'a> = parser::Error<'a>;
 
-#[cfg(all(feature = "plex", feature = "peg"))]
 pub fn lex_and_parse(input: &str) -> Result<Expr<'_>, Error<'_>> {
     use lexer::Lexer;
+    use parser::Parser;
 
-    let lexer = plex::PlexLexer::new(input);
-    let tokens = lexer.read_to_vec().map_err(Error::LexError)?;
-    parser::parse(&tokens).map_err(Error::ParseError)
+    SelectedParser::parse(SelectedLexer::new(input))
 }
