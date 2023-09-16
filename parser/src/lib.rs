@@ -11,6 +11,10 @@ mod parser;
 mod peg;
 #[cfg(feature = "peg")]
 type SelectedParser = peg::PegParser;
+#[cfg(feature = "lalrpop")]
+mod lalrpop;
+#[cfg(feature = "lalrpop")]
+type SelectedParser = lalrpop::LalrpopParser;
 
 pub type Error<'a> = parser::Error<'a>;
 

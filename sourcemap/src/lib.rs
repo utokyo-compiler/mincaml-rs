@@ -1,4 +1,4 @@
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Loc<Size = usize> {
     pub char_pos: Size,
 }
@@ -13,6 +13,12 @@ impl<Size> Loc<Size> {
 pub struct Span<T> {
     pub start: T,
     pub end: T,
+}
+
+impl<T> Span<T> {
+    pub fn new(start: T, end: T) -> Self {
+        Self { start, end }
+    }
 }
 
 impl<U> Span<Loc<U>> {
