@@ -5,6 +5,19 @@ use syntax::Expr;
 
 use crate::lexer::Token;
 
+pub fn parse<'t>(tokens: &[Spanned<Token<'t>>]) -> Result<Expr<'t>, Error<'t>> {
+    let parser = Parser::new(tokens);
+    mincaml::exp(&parser, &parser).map_err(|e| {
+        let span = parser.tokens[e.location].to_owned();
+        Error::PegError(span, e.expected)
+    })
+}
+
+#[derive(Debug, Clone)]
+pub enum Error<'t> {
+    PegError(Spanned<Token<'t>>, peg::error::ExpectedSet),
+}
+
 struct Parser<'t, 'lexer> {
     tokens: &'lexer [Spanned<Token<'t>>],
 }

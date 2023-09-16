@@ -41,8 +41,10 @@ pub enum Token<'a> {
     RPar,
 }
 
-#[derive(Debug, Clone, PartialEq, Error)]
-pub enum Error<'a> {
+pub type Error<'a> = Spanned<ErrorKind<'a>>;
+
+#[derive(Debug, Clone, Error)]
+pub enum ErrorKind<'a> {
     #[error("reached EOF before comment closes")]
     UnclosedComment,
     #[error("unrecognized token `{0}`")]
@@ -53,7 +55,7 @@ pub enum Error<'a> {
     IllegalFloatConstant(&'a str, <f32 as FromStr>::Err),
 }
 
-type Result<'a, T> = std::result::Result<T, Spanned<Error<'a>>>;
+type Result<'a, T> = std::result::Result<T, Error<'a>>;
 
 enum CommentState {
     Open,
@@ -73,14 +75,14 @@ enum LexState<'a> {
     Token(Token<'a>),
     Skip,
     CommentBegin,
-    Error(Error<'a>),
+    Error(ErrorKind<'a>),
 }
 
 lexer! {
     fn next_token(text: 'input) -> LexState<'input>;
 
     r"\(\*" => LexState::CommentBegin,
-    r"[\t\r ]" => LexState::Skip,
+    r"[\t\r \n]" => LexState::Skip,
     r"\(" => LexState::Token(Token::LPar),
     r"\)" => LexState::Token(Token::RPar),
     r"true" => LexState::Token(Token::Bool(true)),
@@ -89,13 +91,13 @@ lexer! {
     r"0|[1-9][0-9]*" => {
         match text.parse() {
             Ok(i) => LexState::Token(Token::Int(i)),
-            Err(e) => LexState::Error(Error::IllegalIntegerConstant(text, e)),
+            Err(e) => LexState::Error(ErrorKind::IllegalIntegerConstant(text, e)),
         }
     },
     r"0|[1-9][0-9]*\.[0-9]*([eE][+-]?[0-9]+)?" => {
         match text.parse() {
             Ok(i) => LexState::Token(Token::Float(i)),
-            Err(e) => LexState::Error(Error::IllegalFloatConstant(text, e)),
+            Err(e) => LexState::Error(ErrorKind::IllegalFloatConstant(text, e)),
         }
     },
     r"\-" => LexState::Token(Token::Hyphen),
@@ -124,7 +126,7 @@ lexer! {
     r"<\-" => LexState::Token(Token::LessHyphen),
     r";" => LexState::Token(Token::Semi),
     r"[a-z_][0-9A-Za-z_]*" => LexState::Token(Token::Ident(text)),
-    r"." => LexState::Error(Error::UnrecognizedToken(text))
+    r"." => LexState::Error(ErrorKind::UnrecognizedToken(text))
 }
 
 #[derive(Debug, Clone)]
@@ -146,13 +148,13 @@ impl<'input> Lexer<'input> {
         self.collect()
     }
 
-    fn skip_comment(&mut self) -> std::result::Result<(), Error<'input>> {
+    fn skip_comment(&mut self) -> std::result::Result<(), ErrorKind<'input>> {
         let mut depth = 0;
         loop {
             let state = consume_comment(self.remain);
             if state.is_none() {
                 // EOF
-                return Err(Error::UnclosedComment);
+                return Err(ErrorKind::UnclosedComment);
             }
 
             let (state, remaining) = state.unwrap();
