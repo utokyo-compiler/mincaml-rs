@@ -53,3 +53,38 @@ impl<T, U> Spanned<T, Loc<U>> {
         self.span.range()
     }
 }
+
+pub struct MultipleInputFiles {
+    strings: Vec<String>,
+    offset_accum: Vec<usize>,
+}
+
+impl MultipleInputFiles {
+    pub fn new(strings: Vec<String>) -> Self {
+        let offset_accum = strings
+            .iter()
+            .scan(0, |offset, s| {
+                let old_offset = *offset;
+                *offset += s.chars().count();
+                Some(old_offset)
+            })
+            .collect();
+        Self {
+            strings,
+            offset_accum,
+        }
+    }
+    pub fn concatenated(&self) -> String {
+        self.strings.join("")
+    }
+    pub fn get(&self, loc: Loc) -> Option<(&'_ str, Loc)> {
+        let idx = self
+            .offset_accum
+            .binary_search(&loc.char_pos)
+            .unwrap_or_else(|idx| idx - 1);
+        Some((
+            &self.strings[idx],
+            Loc::new(loc.char_pos - self.offset_accum[idx]),
+        ))
+    }
+}
