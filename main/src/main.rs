@@ -6,7 +6,7 @@ use serde::Deserialize;
 use sourcemap::MultipleInputFiles;
 
 #[derive(Parser, Debug)]
-struct Cli {
+struct CommandLine {
     #[clap(flatten)]
     command_line: Config,
     #[clap(long, value_name = "FILE")]
@@ -38,15 +38,15 @@ impl Config {
 }
 
 fn main() {
-    let cli = Cli::parse();
+    let command_line = CommandLine::parse();
 
-    let config = if let Some(path) = cli.config {
+    let config = if let Some(path) = command_line.config {
         let config = fs::read_to_string(path).unwrap();
         toml::from_str(&config).unwrap()
     } else {
         Config::default()
     };
-    let config = cli.command_line.merge(config);
+    let config = command_line.command_line.merge(config);
     let input_pathes = config
         .input
         .unwrap_or_else(|| exit_with("input files are required"));
@@ -70,7 +70,7 @@ fn main() {
 }
 
 fn exit_with(message: &'static str) -> ! {
-    <Cli as clap::CommandFactory>::command()
+    <CommandLine as clap::CommandFactory>::command()
         .error(clap::error::ErrorKind::MissingRequiredArgument, message)
         .exit();
 }

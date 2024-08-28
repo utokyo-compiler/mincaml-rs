@@ -9,7 +9,7 @@ impl<Size> Loc<Size> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Span<T> {
     pub start: T,
     pub end: T,
@@ -21,10 +21,10 @@ impl<T> Span<T> {
     }
 }
 
-impl<U> Span<Loc<U>> {
-    pub fn range(&self) -> std::ops::Range<U>
+impl<Size> Span<Loc<Size>> {
+    pub fn range(&self) -> std::ops::Range<Size>
     where
-        U: std::ops::Add + Copy,
+        Size: std::ops::Add + Copy,
     {
         self.start.char_pos..self.end.char_pos
     }
@@ -45,10 +45,10 @@ impl<T, U> Spanned<T, U> {
     }
 }
 
-impl<T, U> Spanned<T, Loc<U>> {
-    pub fn range(&self) -> std::ops::Range<U>
+impl<T, Size> Spanned<T, Loc<Size>> {
+    pub fn range(&self) -> std::ops::Range<Size>
     where
-        U: std::ops::Add + Copy,
+        Size: std::ops::Add + Copy,
     {
         self.span.range()
     }

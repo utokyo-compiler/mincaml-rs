@@ -19,6 +19,7 @@ mod mincaml;
 #[cfg(feature = "lalrpop")]
 pub type SelectedParser = lalrpop::LalrpopParser;
 
+/// Assertion that the selected parser implements `Parser`.
 const _: () = {
     use std::marker::PhantomData;
     struct IsParser<T: Parser>(PhantomData<T>);
@@ -26,21 +27,24 @@ const _: () = {
 };
 
 pub trait Parser {
-    fn parse<'t, 'b: 't>(bump: &'b Bump, lexer: impl Lexer<'t>) -> Result<Expr<'t, 'b>, Error<'t>>;
+    fn parse<'input, 'arena: 'input>(
+        bump: &'arena Bump,
+        lexer: impl Lexer<'input>,
+    ) -> Result<Expr<'input, 'arena>, Error<'input>>;
 }
 
 #[derive(Debug, Clone)]
-pub enum Error<'a> {
-    LexError(lexer::Error<'a>),
-    ParseError(ParseError<'a>),
+pub enum Error<'input> {
+    LexError(lexer::Error<'input>),
+    ParseError(ParseError<'input>),
 }
 
 #[derive(Debug, Clone)]
-pub enum ParseError<'t> {
+pub enum ParseError<'input> {
     UnrecognizedEof(Loc),
     InvalidToken(Loc),
-    ExtraToken(Spanned<Token<'t>>),
-    UnexpectedToken(Spanned<Token<'t>>, ExpectedTokens),
+    ExtraToken(Spanned<Token<'input>>),
+    UnexpectedToken(Spanned<Token<'input>>, ExpectedTokens),
 }
 
 #[derive(Debug, Clone, PartialEq)]

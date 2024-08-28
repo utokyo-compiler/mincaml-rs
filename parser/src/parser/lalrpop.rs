@@ -10,14 +10,14 @@ use super::mincaml;
 pub struct LalrpopParser;
 
 impl Parser for LalrpopParser {
-    fn parse<'t, 'b: 't>(
-        bump: &'b Bump,
-        lexer: impl Lexer<'t>,
-    ) -> Result<syntax::Expr<'t, 'b>, crate::parser::Error<'t>> {
+    fn parse<'input, 'arena: 'input>(
+        bump: &'arena Bump,
+        lexer: impl Lexer<'input>,
+    ) -> Result<syntax::Expr<'input, 'arena>, crate::parser::Error<'input>> {
         let lexer = LexerWrapper::new(lexer);
         let parser = mincaml::ExprParser::new();
 
-        parser.parse(bump, lexer).map_err(convert_error)
+        parser.parse(bump, lexer).map_err(Error::from_lalrpop_error)
     }
 }
 
@@ -47,17 +47,19 @@ impl<'input, L: Lexer<'input>> LexerWrapper<'input, L> {
 
 type LalrpopError<'a> = lalrpop_util::ParseError<Loc, Token<'a>, LexError<'a>>;
 
-fn convert_error(err: LalrpopError) -> Error {
-    Error::ParseError(match err {
-        LalrpopError::InvalidToken { location } => ParseError::InvalidToken(location),
-        LalrpopError::ExtraToken {
-            token: (lo, tok, hi),
-        } => ParseError::ExtraToken(Spanned::new(tok, (lo, hi))),
-        LalrpopError::User { error } => return Error::LexError(error),
-        LalrpopError::UnrecognizedToken {
-            token: (lo, tok, hi),
-            expected,
-        } => ParseError::UnexpectedToken(Spanned::new(tok, (lo, hi)), ExpectedTokens(expected)),
-        LalrpopError::UnrecognizedEof { location, .. } => ParseError::UnrecognizedEof(location),
-    })
+impl<'input> Error<'input> {
+    fn from_lalrpop_error(err: LalrpopError<'input>) -> Self {
+        Self::ParseError(match err {
+            LalrpopError::InvalidToken { location } => ParseError::InvalidToken(location),
+            LalrpopError::ExtraToken {
+                token: (lo, tok, hi),
+            } => ParseError::ExtraToken(Spanned::new(tok, (lo, hi))),
+            LalrpopError::User { error } => return Error::LexError(error),
+            LalrpopError::UnrecognizedToken {
+                token: (lo, tok, hi),
+                expected,
+            } => ParseError::UnexpectedToken(Spanned::new(tok, (lo, hi)), ExpectedTokens(expected)),
+            LalrpopError::UnrecognizedEof { location, .. } => ParseError::UnrecognizedEof(location),
+        })
+    }
 }

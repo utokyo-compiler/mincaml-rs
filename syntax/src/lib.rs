@@ -4,41 +4,49 @@ use sourcemap::Spanned;
 
 pub type Ident<'input> = &'input str;
 
-pub type Expr<'a, 'b> = Spanned<ExprKind<'a, 'b>>;
+pub type Expr<'input, 'arena> = Spanned<ExprKind<'input, 'arena>>;
 
 #[derive(Debug, Clone)]
-pub enum ExprKind<'input, 'b> {
+pub enum ExprKind<'input, 'arena> {
     Lit(LitKind),
-    Unary(UnOp, &'b Expr<'input, 'b>),
-    Binary(BinOp, &'b Expr<'input, 'b>, &'b Expr<'input, 'b>),
-    If(
-        &'b Expr<'input, 'b>,
-        &'b Expr<'input, 'b>,
-        &'b Expr<'input, 'b>,
+    Unary(UnOp, &'arena Expr<'input, 'arena>),
+    Binary(
+        BinOp,
+        &'arena Expr<'input, 'arena>,
+        &'arena Expr<'input, 'arena>,
     ),
-    Let(LetKind<'input, 'b>),
-    Then(&'b Expr<'input, 'b>, &'b Expr<'input, 'b>),
+    If(
+        &'arena Expr<'input, 'arena>,
+        &'arena Expr<'input, 'arena>,
+        &'arena Expr<'input, 'arena>,
+    ),
+    Let(LetKind<'input, 'arena>),
+    Then(&'arena Expr<'input, 'arena>, &'arena Expr<'input, 'arena>),
     Var(Ident<'input>),
-    App(&'b Expr<'input, 'b>, Vec<Expr<'input, 'b>>),
-    Tuple(Vec<Expr<'input, 'b>>),
-    ArrayMake(&'b Expr<'input, 'b>, &'b Expr<'input, 'b>),
-    Get(&'b Expr<'input, 'b>, &'b Expr<'input, 'b>),
+    App(&'arena Expr<'input, 'arena>, Vec<Expr<'input, 'arena>>),
+    Tuple(Vec<Expr<'input, 'arena>>),
+    ArrayMake(&'arena Expr<'input, 'arena>, &'arena Expr<'input, 'arena>),
+    Get(&'arena Expr<'input, 'arena>, &'arena Expr<'input, 'arena>),
     Set(
-        &'b Expr<'input, 'b>,
-        &'b Expr<'input, 'b>,
-        &'b Expr<'input, 'b>,
+        &'arena Expr<'input, 'arena>,
+        &'arena Expr<'input, 'arena>,
+        &'arena Expr<'input, 'arena>,
     ),
 }
 
 #[derive(Debug, Clone)]
-pub struct FunDef<'a, 'b> {
-    pub name: Ident<'a>,
-    pub args: Vec<Ident<'a>>,
-    pub body: &'b Expr<'a, 'b>,
+pub struct FunDef<'input, 'arena> {
+    pub name: Ident<'input>,
+    pub args: Vec<Ident<'input>>,
+    pub body: &'arena Expr<'input, 'arena>,
 }
 
-impl<'a, 'b> FunDef<'a, 'b> {
-    pub fn new(name: Ident<'a>, args: Vec<Ident<'a>>, body: &'b Expr<'a, 'b>) -> Self {
+impl<'input, 'arena> FunDef<'input, 'arena> {
+    pub fn new(
+        name: Ident<'input>,
+        args: Vec<Ident<'input>>,
+        body: &'arena Expr<'input, 'arena>,
+    ) -> Self {
         Self { name, args, body }
     }
 }
@@ -108,8 +116,16 @@ impl Display for LitKind {
 }
 
 #[derive(Debug, Clone)]
-pub enum LetKind<'a, 'b> {
-    LetVar(Ident<'a>, &'b Expr<'a, 'b>, &'b Expr<'a, 'b>),
-    LetRec(FunDef<'a, 'b>, &'b Expr<'a, 'b>),
-    LetTuple(Vec<Ident<'a>>, &'b Expr<'a, 'b>, &'b Expr<'a, 'b>),
+pub enum LetKind<'input, 'arena> {
+    LetVar(
+        Ident<'input>,
+        &'arena Expr<'input, 'arena>,
+        &'arena Expr<'input, 'arena>,
+    ),
+    LetRec(FunDef<'input, 'arena>, &'arena Expr<'input, 'arena>),
+    LetTuple(
+        Vec<Ident<'input>>,
+        &'arena Expr<'input, 'arena>,
+        &'arena Expr<'input, 'arena>,
+    ),
 }

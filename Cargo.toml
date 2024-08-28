@@ -14,11 +14,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [workspace.dependencies]
-thiserror = "1.0.48"
-bumpalo = "3.14.0"
-serde = { version = "1.0.188", features = ["derive"] }
-toml = "0.8.0"
-clap = { version = "4.4.3", features = ["derive"] }
+thiserror = "1.0.63"
+bumpalo = "3.16.0"
+serde = { version = "1.0.209", features = ["derive"] }
+toml = "0.8.19"
+clap = { version = "4.5.16", features = ["derive"] }
 sourcemap = { path = "./sourcemap" }
 syntax = { path = "./syntax" }
 parser = { path = "./parser" }

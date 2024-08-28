@@ -6,12 +6,13 @@ use thiserror::Error;
 #[cfg(feature = "plex")]
 mod plex;
 #[cfg(feature = "plex")]
-pub type SelectedLexer<'a> = plex::PlexLexer<'a>;
+pub type SelectedLexer<'input> = plex::PlexLexer<'input>;
 
+/// Assertion that the selected lexer implements `Lexer`.
 const _: () = {
     use std::marker::PhantomData;
-    struct IsLexer<'a, T: Lexer<'a>>(PhantomData<&'a T>);
-    let _ = IsLexer::<SelectedLexer>(PhantomData);
+    struct AssertIsLexer<'input, T: Lexer<'input>>(PhantomData<&'input T>);
+    let _ = AssertIsLexer::<SelectedLexer>(PhantomData);
 };
 
 pub trait Lexer<'input>: Iterator<Item = Result<'input, Spanned<Token<'input>>>> {
@@ -26,11 +27,11 @@ pub trait Lexer<'input>: Iterator<Item = Result<'input, Spanned<Token<'input>>>>
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum Token<'a> {
+pub enum Token<'input> {
     Int(i32),
     Bool(bool),
     Float(f32),
-    Ident(&'a str),
+    Ident(&'input str),
     Not,
     Hyphen,
     Plus,
@@ -61,18 +62,18 @@ pub enum Token<'a> {
     RPar,
 }
 
-pub type Error<'a> = Spanned<ErrorKind<'a>>;
+pub type Error<'input> = Spanned<ErrorKind<'input>>;
 
 #[derive(Debug, Clone, Error)]
-pub enum ErrorKind<'a> {
+pub enum ErrorKind<'input> {
     #[error("reached EOF before comment closes")]
     UnclosedComment,
     #[error("unrecognized token `{0}`")]
-    UnrecognizedToken(&'a str),
-    #[error("cannot parse `{0}` as integer constant: {1}")]
-    IllegalIntegerConstant(&'a str, <i32 as FromStr>::Err),
-    #[error("cannot parse `{0}` as float constant: {1}")]
-    IllegalFloatConstant(&'a str, <f32 as FromStr>::Err),
+    UnrecognizedToken(&'input str),
+    #[error("cannot parse `{0}` as an integer constant: {1}")]
+    IllegalIntegerConstant(&'input str, <i32 as FromStr>::Err),
+    #[error("cannot parse `{0}` as a float constant: {1}")]
+    IllegalFloatConstant(&'input str, <f32 as FromStr>::Err),
 }
 
-pub type Result<'a, T> = std::result::Result<T, Error<'a>>;
+pub type Result<'input, T> = std::result::Result<T, Error<'input>>;

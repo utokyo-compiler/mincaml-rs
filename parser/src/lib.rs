@@ -6,10 +6,10 @@ mod parser;
 
 pub type Error<'a> = parser::Error<'a>;
 
-pub fn lex_and_parse<'input, 'b: 'input>(
-    bump: &'b Bump,
+pub fn lex_and_parse<'input, 'alloc: 'input>(
+    bump: &'alloc Bump,
     input: &'input str,
-) -> Result<Expr<'input, 'b>, Error<'input>> {
+) -> Result<Expr<'input, 'alloc>, Error<'input>> {
     use lexer::Lexer;
     use parser::Parser;
 
