@@ -1,6 +1,6 @@
 use plex::lexer;
 
-use sourcemap::{Loc, Spanned};
+use sourcemap::{Loc, LocSize, Spanned};
 
 use crate::lexer::{ErrorKind, Lexer, Result, Token};
 
@@ -79,8 +79,8 @@ lexer! {
 #[derive(Debug, Clone)]
 pub struct PlexLexer<'input> {
     remain: &'input str,
-    last_remain_len: usize,
-    current_loc: Loc<usize>,
+    last_remain_len: LocSize,
+    current_loc: Loc,
 }
 
 impl<'input> PlexLexer<'input> {

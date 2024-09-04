@@ -18,6 +18,7 @@ const _: () = {
 pub trait Lexer<'input>: Iterator<Item = Result<'input, Spanned<Token<'input>>>> {
     fn new(input: &'input str) -> Self;
 
+    #[allow(unused)]
     fn read_to_vec(self) -> Result<'input, Vec<Spanned<Token<'input>>>>
     where
         Self: Sized,

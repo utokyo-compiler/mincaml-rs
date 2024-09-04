@@ -1,9 +1,16 @@
 [workspace]
 members = [
   "main",
+  "syntax",
   "parser",
   "sourcemap",
-  "syntax",
+  "ty",
+  "typing",
+  "ir_typed_ast",
+  "ir_knorm",
+  "ir_closure",
+  "ir_asm_virtual",
+  "data_structure",
 ]
 resolver = "2"
 
@@ -16,9 +23,20 @@ edition = "2021"
 [workspace.dependencies]
 thiserror = "1.0.63"
 bumpalo = "3.16.0"
+typed-arena = "2.0.2"
+cfg-if = "1.0.0"
 serde = { version = "1.0.209", features = ["derive"] }
 toml = "0.8.19"
+rustc-hash = "2.0.0"
 clap = { version = "4.5.16", features = ["derive"] }
-sourcemap = { path = "./sourcemap" }
+
 syntax = { path = "./syntax" }
 parser = { path = "./parser" }
+sourcemap = { path = "./sourcemap" }
+ty = { path = "./ty" }
+typing = { path = "./typing" }
+ir_typed_ast = { path = "./ir_typed_ast" }
+ir_knorm = { path = "./ir_knorm" }
+ir_closure = { path = "./ir_closure" }
+ir_asm_virtual = { path = "./ir_asm_virtual" }
+data_structure = { path = "./data_structure" }

@@ -1,43 +1,45 @@
-#[derive(Debug, Clone, Copy, Default)]
-pub struct Loc<Size = usize> {
-    pub char_pos: Size,
+pub type LocSize = usize;
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub struct Loc {
+    pub char_pos: LocSize,
 }
 
-impl<Size> Loc<Size> {
-    pub fn new(char_pos: Size) -> Self {
+impl Loc {
+    pub fn new(char_pos: LocSize) -> Self {
         Self { char_pos }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Span<T> {
-    pub start: T,
-    pub end: T,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Span {
+    pub start: Loc,
+    pub end: Loc,
 }
 
-impl<T> Span<T> {
-    pub fn new(start: T, end: T) -> Self {
+impl Span {
+    pub fn new(start: Loc, end: Loc) -> Self {
         Self { start, end }
     }
 }
 
-impl<Size> Span<Loc<Size>> {
-    pub fn range(&self) -> std::ops::Range<Size>
+impl Span {
+    pub fn range(&self) -> std::ops::Range<LocSize>
     where
-        Size: std::ops::Add + Copy,
+        LocSize: std::ops::Add + Copy,
     {
         self.start.char_pos..self.end.char_pos
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Spanned<T, U = Loc<usize>> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Spanned<T> {
     pub node: T,
-    pub span: Span<U>,
+    pub span: Span,
 }
 
-impl<T, U> Spanned<T, U> {
-    pub fn new(node: T, (start, end): (U, U)) -> Self {
+impl<T> Spanned<T> {
+    pub fn new(node: T, (start, end): (Loc, Loc)) -> Self {
         Self {
             node,
             span: Span { start, end },
@@ -45,10 +47,10 @@ impl<T, U> Spanned<T, U> {
     }
 }
 
-impl<T, Size> Spanned<T, Loc<Size>> {
-    pub fn range(&self) -> std::ops::Range<Size>
+impl<T> Spanned<T> {
+    pub fn range(&self) -> std::ops::Range<LocSize>
     where
-        Size: std::ops::Add + Copy,
+        LocSize: std::ops::Add + Copy,
     {
         self.span.range()
     }

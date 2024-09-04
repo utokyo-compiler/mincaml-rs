@@ -1,10 +1,12 @@
 use std::fmt;
 
-use bumpalo::Bump;
 use sourcemap::{Loc, Spanned};
-use syntax::Expr;
+use syntax::{Expr, ExprKind};
 
-use crate::lexer::{self, Lexer, Token};
+use crate::{
+    context::ParsingContext,
+    lexer::{self, Lexer, Token},
+};
 
 #[cfg(feature = "peg")]
 mod peg;
@@ -27,10 +29,10 @@ const _: () = {
 };
 
 pub trait Parser {
-    fn parse<'input, 'arena: 'input>(
-        bump: &'arena Bump,
+    fn parse<'input, 'ctx>(
+        alloc: Allocator<'ctx>,
         lexer: impl Lexer<'input>,
-    ) -> Result<Expr<'input, 'arena>, Error<'input>>;
+    ) -> Result<Expr<'ctx>, Error<'input>>;
 }
 
 #[derive(Debug, Clone)]
@@ -58,5 +60,25 @@ impl fmt::Display for ExpectedTokens {
             1 => write!(f, "{}", v[0]),
             _ => write!(f, "one of [{}]", v.join(", ")),
         }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct Allocator<'ctx> {
+    ctx: &'ctx ParsingContext<'ctx>,
+}
+
+impl<'ctx> Allocator<'ctx> {
+    pub(crate) fn new(ctx: &'ctx ParsingContext<'ctx>) -> Self {
+        Self { ctx }
+    }
+
+    #[inline(always)]
+    pub(crate) fn spanned(self, expr: ExprKind<'ctx>, span: (Loc, Loc)) -> Expr<'ctx> {
+        Spanned::new(self.ctx.intern_expr(expr), span)
+    }
+
+    pub(crate) fn ctx(&self) -> &ParsingContext<'ctx> {
+        self.ctx
     }
 }

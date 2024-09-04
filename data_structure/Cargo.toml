@@ -1,0 +1,11 @@
+[package]
+name = "data_structure"
+version.workspace = true
+edition.workspace = true
+
+[features]
+
+[dependencies]
+typed-arena.workspace = true
+
+cfg-if.workspace = true

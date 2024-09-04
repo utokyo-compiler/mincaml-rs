@@ -1,57 +1,53 @@
 use std::fmt::Display;
 
+use data_structure::interning::Interned;
 use sourcemap::Spanned;
 
-pub type Ident<'input> = &'input str;
+pub type Ident<'ctx> = Interned<'ctx, str>;
 
-pub type Expr<'input, 'arena> = Spanned<ExprKind<'input, 'arena>>;
+pub type Expr<'ctx> = Spanned<Interned<'ctx, ExprKind<'ctx>>>;
 
-#[derive(Debug, Clone)]
-pub enum ExprKind<'input, 'arena> {
-    Lit(LitKind),
-    Unary(UnOp, &'arena Expr<'input, 'arena>),
-    Binary(
-        BinOp,
-        &'arena Expr<'input, 'arena>,
-        &'arena Expr<'input, 'arena>,
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ExprKind<'ctx> {
+    Const(LitKind),
+    Unary(UnOp, Expr<'ctx>),
+    Binary(BinOp, Expr<'ctx>, Expr<'ctx>),
+    If(Expr<'ctx>, Expr<'ctx>, Expr<'ctx>),
+    Let(LetKind<'ctx>),
+    Then(Expr<'ctx>, Expr<'ctx>),
+    Var(Ident<'ctx>),
+    App(Expr<'ctx>, Vec<Expr<'ctx>>),
+    Tuple(Vec<Expr<'ctx>>),
+    ArrayMake(Expr<'ctx>, Expr<'ctx>),
+    Get(
+        Expr<'ctx>,
+        // .(
+        Expr<'ctx>,
+        // ) ,
     ),
-    If(
-        &'arena Expr<'input, 'arena>,
-        &'arena Expr<'input, 'arena>,
-        &'arena Expr<'input, 'arena>,
-    ),
-    Let(LetKind<'input, 'arena>),
-    Then(&'arena Expr<'input, 'arena>, &'arena Expr<'input, 'arena>),
-    Var(Ident<'input>),
-    App(&'arena Expr<'input, 'arena>, Vec<Expr<'input, 'arena>>),
-    Tuple(Vec<Expr<'input, 'arena>>),
-    ArrayMake(&'arena Expr<'input, 'arena>, &'arena Expr<'input, 'arena>),
-    Get(&'arena Expr<'input, 'arena>, &'arena Expr<'input, 'arena>),
     Set(
-        &'arena Expr<'input, 'arena>,
-        &'arena Expr<'input, 'arena>,
-        &'arena Expr<'input, 'arena>,
+        Expr<'ctx>,
+        // .( ,
+        Expr<'ctx>,
+        // ) <- ,
+        Expr<'ctx>,
     ),
 }
 
-#[derive(Debug, Clone)]
-pub struct FunDef<'input, 'arena> {
-    pub name: Ident<'input>,
-    pub args: Vec<Ident<'input>>,
-    pub body: &'arena Expr<'input, 'arena>,
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct FunDef<'ctx> {
+    pub name: Ident<'ctx>,
+    pub args: Vec<Ident<'ctx>>,
+    pub body: Expr<'ctx>,
 }
 
-impl<'input, 'arena> FunDef<'input, 'arena> {
-    pub fn new(
-        name: Ident<'input>,
-        args: Vec<Ident<'input>>,
-        body: &'arena Expr<'input, 'arena>,
-    ) -> Self {
+impl<'ctx> FunDef<'ctx> {
+    pub fn new(name: Ident<'ctx>, args: Vec<Ident<'ctx>>, body: Expr<'ctx>) -> Self {
         Self { name, args, body }
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BBinOpKind {
     Eq,
     Le,
@@ -61,7 +57,7 @@ pub enum BBinOpKind {
     Gt,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IBinOpKind {
     Add,
     Sub,
@@ -69,7 +65,7 @@ pub enum IBinOpKind {
     Div,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FBinOpKind {
     FAdd,
     FSub,
@@ -82,26 +78,26 @@ pub enum FUnOpKind {
     Fneg,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BinOp {
     BBinOp(BBinOpKind),
     IBinOp(IBinOpKind),
     FBinOp(FBinOpKind),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UnOp {
     Not,
     Neg,
     FNeg,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LitKind {
     Unit,
     Bool(bool),
     Int(i32),
-    Float(f32),
+    Float(u32),
 }
 
 impl Display for LitKind {
@@ -110,22 +106,14 @@ impl Display for LitKind {
             LitKind::Unit => write!(f, "()"),
             LitKind::Bool(b) => write!(f, "{b}"),
             LitKind::Int(i) => write!(f, "{i}"),
-            LitKind::Float(fl) => write!(f, "{fl}"),
+            LitKind::Float(f_bits) => write!(f, "{}", f32::from_bits(*f_bits)),
         }
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum LetKind<'input, 'arena> {
-    LetVar(
-        Ident<'input>,
-        &'arena Expr<'input, 'arena>,
-        &'arena Expr<'input, 'arena>,
-    ),
-    LetRec(FunDef<'input, 'arena>, &'arena Expr<'input, 'arena>),
-    LetTuple(
-        Vec<Ident<'input>>,
-        &'arena Expr<'input, 'arena>,
-        &'arena Expr<'input, 'arena>,
-    ),
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum LetKind<'ctx> {
+    LetVar(Ident<'ctx>, Expr<'ctx>, Expr<'ctx>),
+    LetRec(FunDef<'ctx>, Expr<'ctx>),
+    LetTuple(Vec<Ident<'ctx>>, Expr<'ctx>, Expr<'ctx>),
 }

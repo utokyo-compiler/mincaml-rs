@@ -2,22 +2,23 @@ use crate::{
     lexer::{Error as LexError, Lexer, Token},
     parser::{Error, ExpectedTokens, ParseError, Parser},
 };
-use bumpalo::Bump;
 use sourcemap::{Loc, Spanned};
 
-use super::mincaml;
+use super::{mincaml, Allocator};
 
 pub struct LalrpopParser;
 
 impl Parser for LalrpopParser {
-    fn parse<'input, 'arena: 'input>(
-        bump: &'arena Bump,
+    fn parse<'input, 'ctx>(
+        alloc: Allocator<'ctx>,
         lexer: impl Lexer<'input>,
-    ) -> Result<syntax::Expr<'input, 'arena>, crate::parser::Error<'input>> {
+    ) -> Result<syntax::Expr<'ctx>, crate::parser::Error<'input>> {
         let lexer = LexerWrapper::new(lexer);
         let parser = mincaml::ExprParser::new();
 
-        parser.parse(bump, lexer).map_err(Error::from_lalrpop_error)
+        parser
+            .parse(alloc, lexer)
+            .map_err(Error::from_lalrpop_error)
     }
 }
 

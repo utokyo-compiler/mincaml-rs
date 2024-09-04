@@ -131,7 +131,7 @@ peg::parser! {
         #[cache_left_rec]
         pub rule simple_exp() -> Expr<'t, 'b>
             = "(" e:exp() ")" { e }
-            / l:l() "(" ")" r:r() { Expr::new(Lit(Unit), (l, r)) }
+            / l:l() "(" ")" r:r() { Expr::new(Const(Unit), (l, r)) }
             / e1:simple_exp() "." "(" e2:exp() ")" r:r() {
                 let span = (e1.span.start, r);
                 Expr::new(Get(bump.alloc(e1), bump.alloc(e2)), span)
@@ -139,9 +139,9 @@ peg::parser! {
             / [Spanned { node, span }] {?
                 Ok(Spanned {
                     node: match node {
-                        Token::Int(i) => Lit(Int(*i)),
-                        Token::Bool(b) => Lit(Bool(*b)),
-                        Token::Float(f) => Lit(Float(*f)),
+                        Token::Int(i) => Const(Int(*i)),
+                        Token::Bool(b) => Const(Bool(*b)),
+                        Token::Float(f) => Const(Float(*f)),
                         Token::Ident(x) => Var(x),
                         _ => Err("")?,
                     },

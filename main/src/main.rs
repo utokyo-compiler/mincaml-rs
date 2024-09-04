@@ -1,9 +1,11 @@
 use std::{fs, path::PathBuf};
 
-use bumpalo::Bump;
 use clap::Parser;
 use serde::Deserialize;
 use sourcemap::MultipleInputFiles;
+
+mod compiler;
+mod context;
 
 #[derive(Parser, Debug)]
 struct CommandLine {
@@ -63,10 +65,7 @@ fn main() {
     let files = MultipleInputFiles::new(input_contents);
     let input = files.concatenated();
 
-    let bump = Bump::new();
-
-    let _expr = parser::lex_and_parse(&bump, &input).unwrap();
-    todo!()
+    compiler::run_compiler(&input)
 }
 
 fn exit_with(message: &'static str) -> ! {
