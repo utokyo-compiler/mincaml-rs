@@ -1,11 +1,12 @@
 use std::{
     borrow::Borrow,
-    collections::HashSet,
     fmt::Debug,
     hash::{Hash, Hasher},
     ops::Deref,
     sync::Mutex,
 };
+
+use rustc_hash::FxHashSet;
 
 mod sealed {
     #[derive(Clone, Copy)]
@@ -80,13 +81,29 @@ impl<T> Deref for Interned<'_, T> {
 }
 
 pub struct HashSetInterner<K> {
-    set: Mutex<HashSet<K>>,
+    set: Mutex<FxHashSet<K>>,
 }
 
 impl<K: Hash + Eq + Copy> HashSetInterner<K> {
     pub fn new() -> Self {
         Self {
             set: Default::default(),
+        }
+    }
+
+    #[inline]
+    pub fn intern_ref<Q>(&self, value: &Q, new: impl FnOnce() -> K) -> K
+    where
+        K: Borrow<Q>,
+        Q: ?Sized + Hash + Eq,
+    {
+        match self.set.lock().unwrap().get(value) {
+            Some(x) => *x,
+            None => {
+                let value = new();
+                self.set.lock().unwrap().insert(value);
+                value
+            }
         }
     }
 

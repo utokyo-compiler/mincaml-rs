@@ -7,5 +7,6 @@ edition.workspace = true
 
 [dependencies]
 typed-arena.workspace = true
+rustc-hash.workspace = true
 
 cfg-if.workspace = true

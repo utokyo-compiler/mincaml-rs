@@ -34,6 +34,13 @@ pub enum ExprKind<'ctx> {
     ),
 }
 
+impl<'ctx> ExprKind<'ctx> {
+    /// Returns the kind of the expression. This is useful for dereferencing.
+    pub fn kind(&self) -> &Self {
+        self
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FunDef<'ctx> {
     pub name: Ident<'ctx>,

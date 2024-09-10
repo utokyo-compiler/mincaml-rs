@@ -72,7 +72,7 @@ Literal: Expr<'ctx> = {
     <l:@L> "(" ")" <r:@R> => alloc.spanned(Const(Unit), (l, r)),
     <l:@L> <x:Bool> <r:@R> => alloc.spanned(Const(Bool(x)), (l, r)),
     <l:@L> <x:Int> <r:@R> => alloc.spanned(Const(Int(x)), (l, r)),
-    <l:@L> <x:Float> <r:@R> => alloc.spanned(Const(Float(x)), (l, r)),
+    <l:@L> <x:Float> <r:@R> => alloc.spanned(Const(Float(x.to_bits())), (l, r)),
 }
 
 SimpleExpr: Expr<'ctx> = {
@@ -80,7 +80,7 @@ SimpleExpr: Expr<'ctx> = {
     <l:@L> "(" <e:Elems> ")" <r:@R>
         => alloc.spanned(Tuple(e), (l, r)),
     Literal,
-    <l:@L> <x:Ident> <r:@R> => alloc.spanned(Var(x), (l, r)),
+    <l:@L> <x:Ident> <r:@R> => alloc.spanned(Var(alloc.ctx().intern_ident(x)), (l, r)),
     <l:@L> <s:SimpleExpr> "." "(" <x:Expr> ")" <r:@R> => alloc.spanned(Get(s, x), (l, r)),
 }
 
@@ -155,10 +155,10 @@ BelowIf: Expr<'ctx> = {
 
 LetFollows: LetKind<'ctx> = {
     <x:Ident> "=" <e1:Expr> "in" <e2:Expr>
-        => LetVar(x, e1, e2),
+        => LetVar(alloc.ctx().intern_ident(x), e1, e2),
 
     "rec" <x:Ident> <arg:FormalArgs> "=" <e1:Expr> "in" <e2:Expr>
-        => LetRec(FunDef::new(x, arg, e1), e2),
+        => LetRec(FunDef::new(alloc.ctx().intern_ident(x), arg, e1), e2),
 
     "(" <p:Pat> ")" "=" <e1:Expr> "in" <e2:Expr>
         => LetTuple(p, e1, e2),
@@ -174,12 +174,12 @@ SemiSeq: Expr<'ctx> = {
 
 pub Expr: Expr<'ctx> = SemiSeq;
 
-FormalArgs: Vec<Ident<'input>> = {
+FormalArgs: Vec<Ident<'ctx>> = {
     <mut a:FormalArgs> <i:Ident> => {
         a.push(alloc.ctx().intern_ident(i));
         a
     },
-    Ident => vec![<>],
+    Ident => vec![alloc.ctx().intern_ident(<>)],
 }
 
 ActualArgs: Vec<Expr<'ctx>> = {
@@ -198,10 +198,10 @@ Elems: Vec<Expr<'ctx>> = {
     <i1:Expr> "," <i2:Expr> => vec![i1, i2],
 }
 
-Pat: Vec<Ident<'input>> = {
+Pat: Vec<Ident<'ctx>> = {
     <mut a:Pat> "," <i:Ident> => {
-        a.push(i);
+        a.push(alloc.ctx().intern_ident(i));
         a
     },
-    <i1:Ident> "," <i2:Ident> => vec![i1, i2],
+    Ident => vec![alloc.ctx().intern_ident(<>)],
 }

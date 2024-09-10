@@ -38,6 +38,14 @@ pub struct Spanned<T> {
     pub span: Span,
 }
 
+impl<T: std::ops::Deref> std::ops::Deref for Spanned<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.node
+    }
+}
+
 impl<T> Spanned<T> {
     pub fn new(node: T, (start, end): (Loc, Loc)) -> Self {
         Self {

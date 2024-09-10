@@ -4,6 +4,6 @@ pub fn run_compiler(input: String) {
     let arena = Arena::new();
     let global_ctxt = GlobalContext::new(&arena);
 
-    let parsed = parser::lex_and_parse(&arena, &input).unwrap();
-    let _typed = typing::typeck(parsed, global_ctxt.typing_context()).unwrap();
+    let parsed = parser::lex_and_parse(global_ctxt.parsing_context(), &input).unwrap();
+    let _typed = typing::typeck(global_ctxt.typing_context(), parsed).unwrap();
 }

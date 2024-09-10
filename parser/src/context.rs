@@ -24,10 +24,10 @@ impl<'ctx> ParsingContext<'ctx> {
         }
     }
 
-    pub fn intern_ident(&self, ident: &'ctx str) -> syntax::Ident<'ctx> {
+    pub fn intern_ident(&self, ident: &str) -> syntax::Ident<'ctx> {
         Interned::new_unchecked(
             self.ident_interner
-                .intern(ident, |ident| self.ident_arena.alloc_str(ident)),
+                .intern_ref(ident, || self.ident_arena.alloc_str(ident)),
         )
     }
 

@@ -44,12 +44,6 @@ impl TyVarId {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Typed<'ctx, T> {
-    pub node: T,
-    pub ty: Ty<'ctx>,
-}
-
 impl<'ctx> Ty<'ctx> {
     pub fn new(ctx: &TypingContext<'ctx>, kind: TyKind<'ctx>) -> Self {
         ctx.mk_ty_from_kind(kind)
@@ -58,4 +52,50 @@ impl<'ctx> Ty<'ctx> {
     pub fn kind(self) -> &'ctx TyKind<'ctx> {
         self.0 .0
     }
+
+    #[inline(always)]
+    pub fn mk_unit(ctx: &TypingContext<'ctx>) -> Self {
+        Self::new(ctx, TyKind::Unit)
+    }
+
+    #[inline(always)]
+    pub fn mk_bool(ctx: &TypingContext<'ctx>) -> Self {
+        Self::new(ctx, TyKind::Bool)
+    }
+
+    #[inline(always)]
+    pub fn mk_int(ctx: &TypingContext<'ctx>) -> Self {
+        Self::new(ctx, TyKind::Int)
+    }
+
+    #[inline(always)]
+    pub fn mk_float(ctx: &TypingContext<'ctx>) -> Self {
+        Self::new(ctx, TyKind::Float)
+    }
+
+    #[inline(always)]
+    pub fn mk_fun(ctx: &TypingContext<'ctx>, args: Tys<'ctx>, ret: Ty<'ctx>) -> Self {
+        Self::new(ctx, TyKind::Fun(args, ret))
+    }
+
+    #[inline(always)]
+    pub fn mk_tuple(ctx: &TypingContext<'ctx>, tys: Tys<'ctx>) -> Self {
+        Self::new(ctx, TyKind::Tuple(tys))
+    }
+
+    #[inline(always)]
+    pub fn mk_array(ctx: &TypingContext<'ctx>, ty: Ty<'ctx>) -> Self {
+        Self::new(ctx, TyKind::Array(ty))
+    }
+
+    #[inline(always)]
+    pub fn mk_ty_var(ctx: &TypingContext<'ctx>) -> Self {
+        Self::new(ctx, TyKind::TyVar(ctx.fresh_ty_var()))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Typed<'ctx, T> {
+    pub node: T,
+    pub ty: Ty<'ctx>,
 }

@@ -1,43 +1,45 @@
-use std::{cell::RefCell, fmt::Debug};
+use std::fmt::Debug;
 
 use data_structure::interning::Interned;
 use sourcemap::Spanned;
-use ty::{TyKind, Typed};
-
-pub type Ident<'input, 'ctx> = Typed<'ctx, syntax::Ident<'input>>;
-
-pub type Expr<'input, 'ctx> = Typed<'ctx, Spanned<&'ctx ExprKind<'input, 'ctx>>>;
+use ty::Typed;
 
 #[derive(Debug, Clone)]
-pub enum ExprKind<'input, 'ctx> {
+pub struct DisambiguatedIdent<'ctx> {
+    pub name: syntax::Ident<'ctx>,
+    disambiguator: u32,
+}
+
+pub type Ident<'ctx> = Typed<'ctx, DisambiguatedIdent<'ctx>>;
+
+pub type Expr<'ctx> = Typed<'ctx, Spanned<Interned<'ctx, ExprKind<'ctx>>>>;
+
+#[derive(Debug, Clone)]
+pub enum ExprKind<'ctx> {
     Const(syntax::LitKind),
-    Unary(syntax::UnOp, Expr<'input, 'ctx>),
-    Binary(syntax::BinOp, Expr<'input, 'ctx>, Expr<'input, 'ctx>),
-    If(Expr<'input, 'ctx>, Expr<'input, 'ctx>, Expr<'input, 'ctx>),
-    Let(LetKind<'input, 'ctx>),
-    Then(Expr<'input, 'ctx>, Expr<'input, 'ctx>),
-    Var(Ident<'input, 'ctx>),
-    App(Expr<'input, 'ctx>, Vec<Expr<'input, 'ctx>>),
-    Tuple(Vec<Expr<'input, 'ctx>>),
-    ArrayMake(Expr<'input, 'ctx>, Expr<'input, 'ctx>),
-    Get(Expr<'input, 'ctx>, Expr<'input, 'ctx>),
-    Set(Expr<'input, 'ctx>, Expr<'input, 'ctx>, Expr<'input, 'ctx>),
+    Unary(syntax::UnOp, Expr<'ctx>),
+    Binary(syntax::BinOp, Expr<'ctx>, Expr<'ctx>),
+    If(Expr<'ctx>, Expr<'ctx>, Expr<'ctx>),
+    Let(LetKind<'ctx>),
+    Then(Expr<'ctx>, Expr<'ctx>),
+    Var(Ident<'ctx>),
+    App(Expr<'ctx>, Vec<Expr<'ctx>>),
+    Tuple(Vec<Expr<'ctx>>),
+    ArrayMake(Expr<'ctx>, Expr<'ctx>),
+    Get(Expr<'ctx>, Expr<'ctx>),
+    Set(Expr<'ctx>, Expr<'ctx>, Expr<'ctx>),
 }
 
 #[derive(Debug, Clone)]
-pub struct FunDef<'input, 'ctx> {
-    pub name: Ident<'input, 'ctx>,
-    pub args: Vec<Ident<'input, 'ctx>>,
-    pub body: Expr<'input, 'ctx>,
+pub struct FunDef<'ctx> {
+    pub name: Ident<'ctx>,
+    pub args: Vec<Ident<'ctx>>,
+    pub body: Expr<'ctx>,
 }
 
 #[derive(Debug, Clone)]
-pub enum LetKind<'input, 'ctx> {
-    LetVar(Ident<'input, 'ctx>, Expr<'input, 'ctx>, Expr<'input, 'ctx>),
-    LetRec(FunDef<'input, 'ctx>, Expr<'input, 'ctx>),
-    LetTuple(
-        Vec<Ident<'input, 'ctx>>,
-        Expr<'input, 'ctx>,
-        Expr<'input, 'ctx>,
-    ),
+pub enum LetKind<'ctx> {
+    LetVar(Ident<'ctx>, Expr<'ctx>, Expr<'ctx>),
+    LetRec(FunDef<'ctx>, Expr<'ctx>),
+    LetTuple(Vec<Ident<'ctx>>, Expr<'ctx>, Expr<'ctx>),
 }

@@ -1,25 +1,122 @@
-use std::collections::HashMap;
+use std::num::NonZeroU32;
 
+use rustc_hash::FxHashMap;
 use ty::{context::TypingContext, Ty, TyKind, TyVarId};
 
 #[derive(Debug)]
 pub enum Error<'ctx> {
+    /// Cannot unify these two types.
     UnifyFailed(Ty<'ctx>, Ty<'ctx>),
+    /// The type variable occurs in the type.
     OccurckFailed(TyVarId, Ty<'ctx>),
+    /// Unbound identifier.
+    UnboundIdent(syntax::Ident<'ctx>),
 }
 
-pub fn typeck<'input, 'ctx>(
-    _parsed: syntax::Expr<'ctx>,
+/// The main entry point for type checking.
+///
+/// Originally named `Typing.f`.
+pub fn typeck<'ctx>(
     _ctx: &'ctx TypingContext<'ctx>,
-) -> Result<ir_typed_ast::Expr<'input, 'ctx>, Error<'ctx>> {
+    _parsed: syntax::Expr<'ctx>,
+) -> Result<ir_typed_ast::Expr<'ctx>, Error<'ctx>> {
     todo!()
 }
 
-fn type_of<'input, 'ctx>(
+/// Recursively infer the type of the given expression.
+///
+/// Originally named `Typing.g` (or `typing_g`).
+fn type_of<'ctx>(
+    ctx: &'ctx TypingContext<'ctx>,
+    env: &mut FxHashMap<syntax::Ident<'ctx>, Ty<'ctx>>,
     subst: &mut TyVarSubst<'ctx>,
     expr: syntax::Expr<'ctx>,
-) -> Result<ir_typed_ast::Expr<'input, 'ctx>, Error<'ctx>> {
-    todo!()
+) -> Result<Ty<'ctx>, Error<'ctx>> {
+    match expr.kind() {
+        syntax::ExprKind::Const(lit) => {
+            let ty_kind = match lit {
+                syntax::LitKind::Int(..) => TyKind::Int,
+                syntax::LitKind::Float(..) => TyKind::Float,
+                syntax::LitKind::Bool(..) => TyKind::Bool,
+                syntax::LitKind::Unit => TyKind::Unit,
+            };
+            Ok(ctx.mk_ty_from_kind(ty_kind))
+        }
+        syntax::ExprKind::Unary(un_op, e) => {
+            let ty = type_of(ctx, env, subst, *e)?;
+            match un_op {
+                syntax::UnOp::Neg => {
+                    unify(subst, ty, Ty::mk_int(ctx))?;
+                    Ok(Ty::mk_int(ctx))
+                }
+                syntax::UnOp::FNeg => {
+                    unify(subst, ty, Ty::mk_float(ctx))?;
+                    Ok(Ty::mk_float(ctx))
+                }
+                syntax::UnOp::Not => {
+                    unify(subst, ty, Ty::mk_bool(ctx))?;
+                    Ok(Ty::mk_bool(ctx))
+                }
+            }
+        }
+        syntax::ExprKind::Binary(bin_op, e1, e2) => {
+            let ty1 = type_of(ctx, env, subst, *e1)?;
+            let ty2 = type_of(ctx, env, subst, *e2)?;
+            match bin_op {
+                syntax::BinOp::BBinOp(..) => {
+                    unify(subst, ty1, ty2)?;
+                    Ok(Ty::mk_bool(ctx))
+                }
+                syntax::BinOp::IBinOp(..) => {
+                    unify(subst, ty1, Ty::mk_int(ctx))?;
+                    unify(subst, ty2, Ty::mk_int(ctx))?;
+                    Ok(Ty::mk_int(ctx))
+                }
+                syntax::BinOp::FBinOp(..) => {
+                    unify(subst, ty1, Ty::mk_float(ctx))?;
+                    unify(subst, ty2, Ty::mk_float(ctx))?;
+                    Ok(Ty::mk_float(ctx))
+                }
+            }
+        }
+        syntax::ExprKind::If(e1, e2, e3) => {
+            let ty1 = type_of(ctx, env, subst, *e1)?;
+            let ty2 = type_of(ctx, env, subst, *e2)?;
+            let ty3 = type_of(ctx, env, subst, *e3)?;
+            unify(subst, ty1, Ty::mk_bool(ctx))?;
+            unify(subst, ty2, ty3)?;
+            Ok(ty2)
+        }
+        syntax::ExprKind::Let(let_kind) => match let_kind {
+            syntax::LetKind::LetVar(x, e1, e2) => {
+                let ty1 = type_of(ctx, &mut env.clone(), subst, *e1)?;
+                env.insert(*x, ty1);
+                type_of(ctx, env, subst, *e2)
+            }
+            syntax::LetKind::LetRec(syntax::FunDef { name, args, body }, e2) => {
+                for arg in args {
+                    let arg_ty = Ty::mk_ty_var(ctx);
+                    env.insert(*arg, arg_ty);
+                }
+                let body_ty = type_of(ctx, env, subst, *body)?;
+                let name_ty = Ty::mk_ty_var(ctx);
+                todo!()
+            }
+            syntax::LetKind::LetTuple(_, _, _) => todo!(),
+        },
+        syntax::ExprKind::Then(e1, e2) => {
+            let ty1 = type_of(ctx, env, subst, *e1)?;
+            let ty2 = type_of(ctx, env, subst, *e2)?;
+            unify(subst, ty1, Ty::mk_unit(ctx))?;
+            Ok(ty2)
+        }
+        syntax::ExprKind::Var(_) => todo!(),
+        syntax::ExprKind::App(_, _) => todo!(),
+        syntax::ExprKind::Tuple(_) => todo!(),
+        syntax::ExprKind::ArrayMake(_, _) => todo!(),
+        syntax::ExprKind::Get(_, _) => todo!(),
+        syntax::ExprKind::Set(_, _, _) => todo!(),
+    }
 }
 
 fn unify<'ctx>(
@@ -103,18 +200,10 @@ fn occurck<'ctx>(subst: &TyVarSubst<'ctx>, var: TyVarId, ty: Ty<'ctx>) -> Result
 }
 
 struct TyVarSubst<'ctx> {
-    ctx: &'ctx TypingContext<'ctx>,
-    env: HashMap<TyVarId, Ty<'ctx>>,
+    env: FxHashMap<TyVarId, Ty<'ctx>>,
 }
 
 impl<'ctx> TyVarSubst<'ctx> {
-    fn new(ctx: &'ctx TypingContext<'ctx>) -> Self {
-        Self {
-            ctx,
-            env: Default::default(),
-        }
-    }
-
     fn get(&self, var: TyVarId) -> Option<Ty<'ctx>> {
         self.env.get(&var).copied()
     }
