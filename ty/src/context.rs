@@ -9,21 +9,25 @@ use crate::{Ty, TyKind, TyVarId};
 
 /// The context for type checking.
 ///
-/// `Expr` is just a placeholder for the typed expression type.
-pub struct TypingContext<'ctx, Expr> {
+/// `Ident` and `Expr` are just a placeholder for the type
+/// which defined in a dependent crate.
+pub struct TypingContext<'ctx, Ident, Expr> {
     ty_arena: &'ctx TypedArena<TyKind<'ctx>>,
+    typed_ident_arena: &'ctx TypedArena<Ident>,
     typed_expr_arena: &'ctx TypedArena<Expr>,
     ty_interner: HashSetInterner<&'ctx TyKind<'ctx>>,
     fresh_ty_var_id: AtomicUsize,
 }
 
-impl<'ctx, Expr> TypingContext<'ctx, Expr> {
+impl<'ctx, Ident, Expr> TypingContext<'ctx, Ident, Expr> {
     pub fn new(
         ty_arena: &'ctx TypedArena<TyKind<'ctx>>,
+        typed_ident_arena: &'ctx TypedArena<Ident>,
         typed_expr_arena: &'ctx TypedArena<Expr>,
     ) -> Self {
         Self {
             ty_arena,
+            typed_ident_arena,
             typed_expr_arena,
             ty_interner: Default::default(),
             fresh_ty_var_id: Default::default(),
@@ -35,6 +39,10 @@ impl<'ctx, Expr> TypingContext<'ctx, Expr> {
             self.ty_interner
                 .intern(kind, |kind| self.ty_arena.alloc(kind)),
         ))
+    }
+
+    pub fn new_ident(&self, expr: Ident) -> Box<'ctx, Ident> {
+        self.typed_ident_arena.alloc_boxed(expr)
     }
 
     pub fn new_expr(&self, expr: Expr) -> Box<'ctx, Expr> {
@@ -58,7 +66,7 @@ pub struct CommonTypes<'ctx> {
 }
 
 impl<'ctx> CommonTypes<'ctx> {
-    pub fn new<Expr>(ctx: &TypingContext<'ctx, Expr>) -> Self {
+    pub fn new<Ident, Expr>(ctx: &TypingContext<'ctx, Ident, Expr>) -> Self {
         Self {
             unit: ctx.mk_ty_from_kind(TyKind::Unit),
             bool: ctx.mk_ty_from_kind(TyKind::Bool),

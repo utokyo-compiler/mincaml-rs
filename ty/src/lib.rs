@@ -48,7 +48,7 @@ impl TyVarId {
 }
 
 impl<'ctx> Ty<'ctx> {
-    pub fn new<Expr>(ctx: &TypingContext<'ctx, Expr>, kind: TyKind<'ctx>) -> Self {
+    pub fn new<Ident, Expr>(ctx: &TypingContext<'ctx, Ident, Expr>, kind: TyKind<'ctx>) -> Self {
         ctx.mk_ty_from_kind(kind)
     }
 
@@ -56,43 +56,51 @@ impl<'ctx> Ty<'ctx> {
         self.0 .0
     }
 
+    pub fn is_unit(self) -> bool {
+        matches!(self.kind(), TyKind::Unit)
+    }
+
     #[inline(always)]
-    pub fn mk_unit<Expr>(ctx: &TypingContext<'ctx, Expr>) -> Self {
+    pub fn mk_unit<Ident, Expr>(ctx: &TypingContext<'ctx, Ident, Expr>) -> Self {
         Self::new(ctx, TyKind::Unit)
     }
 
     #[inline(always)]
-    pub fn mk_bool<Expr>(ctx: &TypingContext<'ctx, Expr>) -> Self {
+    pub fn mk_bool<Ident, Expr>(ctx: &TypingContext<'ctx, Ident, Expr>) -> Self {
         Self::new(ctx, TyKind::Bool)
     }
 
     #[inline(always)]
-    pub fn mk_int<Expr>(ctx: &TypingContext<'ctx, Expr>) -> Self {
+    pub fn mk_int<Ident, Expr>(ctx: &TypingContext<'ctx, Ident, Expr>) -> Self {
         Self::new(ctx, TyKind::Int)
     }
 
     #[inline(always)]
-    pub fn mk_float<Expr>(ctx: &TypingContext<'ctx, Expr>) -> Self {
+    pub fn mk_float<Ident, Expr>(ctx: &TypingContext<'ctx, Ident, Expr>) -> Self {
         Self::new(ctx, TyKind::Float)
     }
 
     #[inline(always)]
-    pub fn mk_fun<Expr>(ctx: &TypingContext<'ctx, Expr>, args: Tys<'ctx>, ret: Ty<'ctx>) -> Self {
+    pub fn mk_fun<Ident, Expr>(
+        ctx: &TypingContext<'ctx, Ident, Expr>,
+        args: Tys<'ctx>,
+        ret: Ty<'ctx>,
+    ) -> Self {
         Self::new(ctx, TyKind::Fun(args, ret))
     }
 
     #[inline(always)]
-    pub fn mk_tuple<Expr>(ctx: &TypingContext<'ctx, Expr>, tys: Tys<'ctx>) -> Self {
+    pub fn mk_tuple<Ident, Expr>(ctx: &TypingContext<'ctx, Ident, Expr>, tys: Tys<'ctx>) -> Self {
         Self::new(ctx, TyKind::Tuple(tys))
     }
 
     #[inline(always)]
-    pub fn mk_array<Expr>(ctx: &TypingContext<'ctx, Expr>, ty: Ty<'ctx>) -> Self {
+    pub fn mk_array<Ident, Expr>(ctx: &TypingContext<'ctx, Ident, Expr>, ty: Ty<'ctx>) -> Self {
         Self::new(ctx, TyKind::Array(ty))
     }
 
     #[inline(always)]
-    pub fn mk_ty_var<Expr>(ctx: &TypingContext<'ctx, Expr>) -> Self {
+    pub fn mk_ty_var<Ident, Expr>(ctx: &TypingContext<'ctx, Ident, Expr>) -> Self {
         Self::new(ctx, TyKind::TyVar(ctx.fresh_ty_var()))
     }
 }
@@ -106,5 +114,19 @@ pub struct Typed<'ctx, T> {
 impl<'ctx, T> Typed<'ctx, T> {
     pub fn new(value: T, ty: Ty<'ctx>) -> Self {
         Self { value, ty }
+    }
+}
+
+impl<'ctx, T> std::ops::Deref for Typed<'ctx, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl<'ctx, T> std::ops::DerefMut for Typed<'ctx, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
     }
 }

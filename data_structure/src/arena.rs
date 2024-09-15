@@ -34,7 +34,7 @@ impl<T> Default for TypedArena<T> {
 ///
 /// Does not `drop` the owned inner value when it gets `drop`ped.
 /// This type exists only to provide `Clone` implementation
-/// for arena allocated types.
+/// for arena allocated objects.
 pub struct Box<'arena, T> {
     inner: &'arena mut T,
     arena: &'arena TypedArena<T>,

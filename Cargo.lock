@@ -318,6 +318,11 @@ version = "0.1.0"
 [[package]]
 name = "ir_knorm"
 version = "0.1.0"
+dependencies = [
+ "data_structure",
+ "ir_typed_ast",
+ "ty",
+]
 
 [[package]]
 name = "ir_typed_ast"

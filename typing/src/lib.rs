@@ -4,8 +4,11 @@ use ty::{context::CommonTypes, Ty, TyKind, TyVarId, Typed};
 mod name_res;
 mod ty_var_subst;
 
-pub type TypingContext<'ctx> =
-    ty::context::TypingContext<'ctx, Spanned<ir_typed_ast::ExprKind<'ctx>>>;
+pub type TypingContext<'ctx> = ty::context::TypingContext<
+    'ctx,
+    Typed<'ctx, ir_typed_ast::DisambiguatedIdent<'ctx>>,
+    Typed<'ctx, Spanned<ir_typed_ast::ExprKind<'ctx>>>,
+>;
 
 #[derive(Debug)]
 pub enum Error<'ctx> {
@@ -44,7 +47,7 @@ fn decide_ty<'ctx>(
     expr: syntax::Expr<'ctx>,
 ) -> Result<ir_typed_ast::Expr<'ctx>, Error<'ctx>> {
     let span = expr.span;
-    let (ty, node) = match expr.node.kind() {
+    let (ty, node) = match expr.kind() {
         syntax::ExprKind::Const(lit) => {
             let ty = match lit {
                 syntax::LitKind::Int(..) => common_types.int,
@@ -108,8 +111,8 @@ fn decide_ty<'ctx>(
                 let inner_scope = name_res.begin_scope();
                 for arg in let_binder.args() {
                     let ty = Ty::mk_ty_var(ctx);
-                    let ident = name_res.insert_in(inner_scope, arg, ty);
-                    typed_args.push(ident);
+                    let ident = name_res.define_in(inner_scope, arg, ty);
+                    typed_args.push(ctx.new_ident(ident));
                 }
                 let typed_bound_value =
                     decide_ty(ctx, common_types, name_res, subst, let_binder.value())?;
@@ -121,13 +124,16 @@ fn decide_ty<'ctx>(
             let scope = name_res.begin_scope();
             let typed_place = match let_binder.place() {
                 syntax::Pattern::Var(var) => {
-                    let ident = name_res.insert_in(scope, *var, Ty::mk_ty_var(ctx));
-                    ir_typed_ast::Pattern::Var(ident)
+                    let ident = name_res.define_in(scope, *var, Ty::mk_ty_var(ctx));
+                    ir_typed_ast::Pattern::Var(ctx.new_ident(ident))
                 }
                 syntax::Pattern::Tuple(vars) => {
                     let idents = vars
                         .iter()
-                        .map(|var| name_res.insert_in(scope, *var, Ty::mk_ty_var(ctx)))
+                        .map(|var| {
+                            let ident = name_res.define_in(scope, *var, Ty::mk_ty_var(ctx));
+                            ctx.new_ident(ident)
+                        })
                         .collect();
                     ir_typed_ast::Pattern::Tuple(idents)
                 }
@@ -157,6 +163,7 @@ fn decide_ty<'ctx>(
             let Some(typed_var) = name_res.get(*var) else {
                 return Err(Error::UnboundIdent(*var));
             };
+            let typed_var = ctx.new_ident(typed_var);
             (typed_var.ty, ir_typed_ast::ExprKind::Var(typed_var))
         }
         syntax::ExprKind::App(fun, args) => {
@@ -176,7 +183,7 @@ fn decide_ty<'ctx>(
         syntax::ExprKind::Get(_, _) => todo!(),
         syntax::ExprKind::Set(_, _, _) => todo!(),
     };
-    let e = Typed::new(ctx.new_expr(Spanned { node, span }), ty);
+    let e = ctx.new_expr(Typed::new(Spanned { node, span }, ty));
     Ok(e)
 }
 

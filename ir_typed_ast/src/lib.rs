@@ -1,25 +1,31 @@
 use std::fmt::Debug;
 
 use data_structure::arena::Box;
-use sourcemap::Spanned;
+use sourcemap::{Span, Spanned};
 use ty::{Ty, Typed};
 
+pub use syntax::{BinOp, LitKind, UnOp};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct DisambiguatedIdent<'ctx> {
-    pub name: syntax::Ident<'ctx>,
-    origin: IdentOrigin,
-    disambiguator: u32,
+/// Represents a resolved identifier.
+pub enum DisambiguatedIdent<'ctx> {
+    UserDefined {
+        name: syntax::Ident<'ctx>,
+        span: Span,
+    },
+    CompilerGenerated {
+        name: &'static str,
+        disambiguator: usize,
+    },
 }
 
 impl<'ctx> DisambiguatedIdent<'ctx> {
-    pub fn new_unchecked(
-        name: syntax::Ident<'ctx>,
-        origin: IdentOrigin,
-        disambiguator: u32,
-    ) -> Self {
-        Self {
+    pub fn new_user(name: syntax::Ident<'ctx>, span: Span) -> Self {
+        Self::UserDefined { name, span }
+    }
+    pub fn new_compiler_unchecked(name: &'static str, disambiguator: usize) -> Self {
+        Self::CompilerGenerated {
             name,
-            origin,
             disambiguator,
         }
     }
@@ -31,15 +37,16 @@ pub enum IdentOrigin {
     CompilerGenerated,
 }
 
-pub type Ident<'ctx> = Typed<'ctx, DisambiguatedIdent<'ctx>>;
+pub type Ident<'ctx> = Box<'ctx, Typed<'ctx, DisambiguatedIdent<'ctx>>>;
 
-pub type Expr<'ctx> = Typed<'ctx, Box<'ctx, Spanned<ExprKind<'ctx>>>>;
+pub type Expr<'ctx> = Box<'ctx, Typed<'ctx, Spanned<ExprKind<'ctx>>>>;
+pub type ExprRef<'ctx> = &'ctx Typed<'ctx, Spanned<ExprKind<'ctx>>>;
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum ExprKind<'ctx> {
-    Const(syntax::LitKind),
-    Unary(syntax::UnOp, Expr<'ctx>),
-    Binary(syntax::BinOp, Expr<'ctx>, Expr<'ctx>),
+    Const(LitKind),
+    Unary(UnOp, Expr<'ctx>),
+    Binary(BinOp, Expr<'ctx>, Expr<'ctx>),
     If(Expr<'ctx>, Expr<'ctx>, Expr<'ctx>),
     Let(LetBinder<'ctx>, Expr<'ctx>),
     Then(Expr<'ctx>, Expr<'ctx>),
@@ -55,13 +62,6 @@ impl<'ctx> ExprKind<'ctx> {
     pub fn kind(&self) -> &Self {
         self
     }
-}
-
-#[derive(Debug)]
-pub struct FunDef<'ctx> {
-    pub name: Ident<'ctx>,
-    pub args: Vec<Ident<'ctx>>,
-    pub body: Expr<'ctx>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -111,6 +111,7 @@ macro_rules! declare_visitor {
                         for arg in & $($mutability)? binder.args {
                             self.visit_ident(arg);
                         }
+                        self.visit_expr(& $($mutability)?binder.value);
                         self.visit_expr(e);
                     }
                     ExprKind::Then(e1, e2) => {

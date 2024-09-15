@@ -31,9 +31,12 @@ impl<'input, L: Lexer<'input>> Iterator for LexerWrapper<'input, L> {
     type Item = Result<(Loc, Token<'input>, Loc), LexError<'input>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.lexer
-            .next()
-            .map(|res| res.map(|spanned| (spanned.span.start, spanned.node, spanned.span.end)))
+        self.lexer.next().map(|res| {
+            res.map(|spanned| {
+                let user_defined_span = spanned.span.as_user_defined().unwrap();
+                (user_defined_span.start, spanned.node, user_defined_span.end)
+            })
+        })
     }
 }
 

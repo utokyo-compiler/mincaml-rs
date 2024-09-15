@@ -33,9 +33,25 @@ impl Span {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SpanOrigin {
+    UserDefined(Span),
+    CompilerGenerated,
+}
+
+impl SpanOrigin {
+    pub fn as_user_defined(&self) -> Option<&Span> {
+        if let Self::UserDefined(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Spanned<T> {
     pub node: T,
-    pub span: Span,
+    pub span: SpanOrigin,
 }
 
 impl<T> std::ops::Deref for Spanned<T> {
@@ -56,17 +72,8 @@ impl<T> Spanned<T> {
     pub fn new(node: T, (start, end): (Loc, Loc)) -> Self {
         Self {
             node,
-            span: Span { start, end },
+            span: SpanOrigin::UserDefined(Span { start, end }),
         }
-    }
-}
-
-impl<T> Spanned<T> {
-    pub fn range(&self) -> std::ops::Range<LocSize>
-    where
-        LocSize: std::ops::Add + Copy,
-    {
-        self.span.range()
     }
 }
 

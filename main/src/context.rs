@@ -1,14 +1,15 @@
 use data_structure::arena::TypedArena;
 use parser::context::ParsingContext;
 use sourcemap::Spanned;
-use ty::{context::CommonTypes, TyKind};
+use ty::{context::CommonTypes, TyKind, Typed};
 use typing::TypingContext;
 
 pub struct Arena<'ctx> {
     ident: TypedArena<u8>,
     expr: TypedArena<Spanned<syntax::ExprKind<'ctx>>>,
     type_: TypedArena<TyKind<'ctx>>,
-    typed_expr: TypedArena<Spanned<ir_typed_ast::ExprKind<'ctx>>>,
+    typed_ident: TypedArena<Typed<'ctx, ir_typed_ast::DisambiguatedIdent<'ctx>>>,
+    typed_expr: TypedArena<Typed<'ctx, Spanned<ir_typed_ast::ExprKind<'ctx>>>>,
 }
 
 impl Arena<'_> {
@@ -17,13 +18,13 @@ impl Arena<'_> {
             ident: Default::default(),
             expr: Default::default(),
             type_: Default::default(),
+            typed_ident: Default::default(),
             typed_expr: Default::default(),
         }
     }
 }
 
 pub struct GlobalContext<'ctx> {
-    arena: &'ctx Arena<'ctx>,
     parsing_context: ParsingContext<'ctx>,
     typing_context: TypingContext<'ctx>,
     pub common_types: CommonTypes<'ctx>,
@@ -31,10 +32,10 @@ pub struct GlobalContext<'ctx> {
 
 impl<'ctx> GlobalContext<'ctx> {
     pub fn new(arena: &'ctx Arena<'ctx>) -> Self {
-        let typing_context = TypingContext::new(&arena.type_, &arena.typed_expr);
+        let typing_context =
+            TypingContext::new(&arena.type_, &arena.typed_ident, &arena.typed_expr);
         let parsing_context = ParsingContext::new(&arena.ident, &arena.expr);
         Self {
-            arena,
             common_types: CommonTypes::new(&typing_context),
             parsing_context,
             typing_context,

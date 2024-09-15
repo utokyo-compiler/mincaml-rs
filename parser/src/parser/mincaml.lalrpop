@@ -1,4 +1,4 @@
-use sourcemap::Loc;
+use sourcemap::{Loc, Spanned};
 use syntax::{*, ExprKind::*, LitKind::*, BinOp::*, IBinOpKind::*, BBinOpKind::*, FBinOpKind::*, UnOp::*};
 
 use crate::lexer::{Error as LexError, Token};
@@ -43,6 +43,10 @@ extern {
         "<-" => Token::LessHyphen,
         ";" => Token::Semi,
     }
+}
+
+SpannedIdent: Spanned<Ident<'ctx>> = {
+    <l:@L> <x:Ident> <r:@R> => Spanned::new(alloc.ctx().intern_ident(x), (l, r)),
 }
 
 TermOp: BinOp = {
@@ -154,11 +158,11 @@ BelowIf: Expr<'ctx> = {
 }
 
 LetBinder: LetBinder<'ctx> = {
-    <x:Ident> "=" <val:Expr>
-        => LetBinder::let_var(alloc.ctx().intern_ident(x), val),
+    <x:SpannedIdent> "=" <val:Expr>
+        => LetBinder::let_var(x, val),
 
-    "rec" <x:Ident> <arg:FormalArgs> "=" <val:Expr>
-        => LetBinder::let_rec(alloc.ctx().intern_ident(x), arg, val),
+    "rec" <x:SpannedIdent> <arg:FormalArgs> "=" <val:Expr>
+        => LetBinder::let_rec(x, arg, val),
 
     "(" <p:Pat> ")" "=" <val:Expr>
         => LetBinder::let_tuple(p, val),
@@ -174,12 +178,12 @@ SemiSeq: Expr<'ctx> = {
 
 pub Expr: Expr<'ctx> = SemiSeq;
 
-FormalArgs: Vec<Ident<'ctx>> = {
-    <mut a:FormalArgs> <i:Ident> => {
-        a.push(alloc.ctx().intern_ident(i));
+FormalArgs: Vec<Spanned<Ident<'ctx>>> = {
+    <mut a:FormalArgs> <ident:SpannedIdent> => {
+        a.push(ident);
         a
     },
-    Ident => vec![alloc.ctx().intern_ident(<>)],
+    SpannedIdent => vec![<>],
 }
 
 ActualArgs: Vec<Expr<'ctx>> = {
@@ -198,10 +202,10 @@ Elems: Vec<Expr<'ctx>> = {
     <i1:Expr> "," <i2:Expr> => vec![i1, i2],
 }
 
-Pat: Vec<Ident<'ctx>> = {
-    <mut a:Pat> "," <i:Ident> => {
-        a.push(alloc.ctx().intern_ident(i));
+Pat: Vec<Spanned<Ident<'ctx>>> = {
+    <mut a:Pat> "," <ident:SpannedIdent> => {
+        a.push(ident);
         a
     },
-    Ident => vec![alloc.ctx().intern_ident(<>)],
+    SpannedIdent => vec![<>],
 }

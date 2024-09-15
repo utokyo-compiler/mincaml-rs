@@ -1,4 +1,4 @@
-use std::fmt::Display;
+mod prettify;
 
 use data_structure::interning::Interned;
 use sourcemap::Spanned;
@@ -52,19 +52,6 @@ impl<'ctx> ExprKind<'ctx> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct FunDef<'ctx> {
-    pub name: Ident<'ctx>,
-    pub args: Vec<Ident<'ctx>>,
-    pub body: Expr<'ctx>,
-}
-
-impl<'ctx> FunDef<'ctx> {
-    pub fn new(name: Ident<'ctx>, args: Vec<Ident<'ctx>>, body: Expr<'ctx>) -> Self {
-        Self { name, args, body }
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BBinOpKind {
     Eq,
@@ -91,11 +78,6 @@ pub enum FBinOpKind {
     FDiv,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum FUnOpKind {
-    Fneg,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BinOp {
     BBinOp(BBinOpKind),
@@ -118,26 +100,15 @@ pub enum LitKind {
     Float(u32),
 }
 
-impl Display for LitKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            LitKind::Unit => write!(f, "()"),
-            LitKind::Bool(b) => write!(f, "{b}"),
-            LitKind::Int(i) => write!(f, "{i}"),
-            LitKind::Float(f_bits) => write!(f, "{}", f32::from_bits(*f_bits)),
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct LetBinder<'ctx> {
     place: Pattern<'ctx>,
-    args: Vec<Ident<'ctx>>,
+    args: Vec<Spanned<Ident<'ctx>>>,
     value: Expr<'ctx>,
 }
 
 impl<'ctx> LetBinder<'ctx> {
-    pub fn let_var(place: Ident<'ctx>, value: Expr<'ctx>) -> Self {
+    pub fn let_var(place: Spanned<Ident<'ctx>>, value: Expr<'ctx>) -> Self {
         Self {
             place: Pattern::Var(place),
             args: Vec::new(),
@@ -145,7 +116,11 @@ impl<'ctx> LetBinder<'ctx> {
         }
     }
 
-    pub fn let_rec(name: Ident<'ctx>, args: Vec<Ident<'ctx>>, value: Expr<'ctx>) -> Self {
+    pub fn let_rec(
+        name: Spanned<Ident<'ctx>>,
+        args: Vec<Spanned<Ident<'ctx>>>,
+        value: Expr<'ctx>,
+    ) -> Self {
         Self {
             place: Pattern::Var(name),
             args,
@@ -153,7 +128,7 @@ impl<'ctx> LetBinder<'ctx> {
         }
     }
 
-    pub fn let_tuple(place: Vec<Ident<'ctx>>, value: Expr<'ctx>) -> Self {
+    pub fn let_tuple(place: Vec<Spanned<Ident<'ctx>>>, value: Expr<'ctx>) -> Self {
         Self {
             place: Pattern::Tuple(place),
             args: Vec::new(),
@@ -169,7 +144,7 @@ impl<'ctx> LetBinder<'ctx> {
         !self.args.is_empty()
     }
 
-    pub fn args(&'ctx self) -> impl Iterator<Item = Ident<'ctx>> {
+    pub fn args(&'ctx self) -> impl Iterator<Item = Spanned<Ident<'ctx>>> {
         self.args.iter().copied()
     }
 
@@ -184,6 +159,6 @@ impl<'ctx> LetBinder<'ctx> {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Pattern<'ctx> {
-    Var(Ident<'ctx>),
-    Tuple(Vec<Ident<'ctx>>),
+    Var(Spanned<Ident<'ctx>>),
+    Tuple(Vec<Spanned<Ident<'ctx>>>),
 }

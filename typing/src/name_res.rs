@@ -1,26 +1,27 @@
 //! Name resolution for identifiers.
 //!
-//! The original implementation conducts this (alpha-conversion) after K-normalization.
+//! The original implementation conducts this (alpha-conversion)
+//! after K-normalization.
 
+use ir_typed_ast::DisambiguatedIdent;
 use rustc_hash::{FxHashMap, FxHashSet};
+use sourcemap::{Span, Spanned};
 use ty::{Ty, Typed};
 
 pub struct Env<'ctx> {
-    inner: FxHashMap<syntax::Ident<'ctx>, Candidates<'ctx>>,
+    candidates_map: FxHashMap<syntax::Ident<'ctx>, Candidates<'ctx>>,
     fresh_scope_id: usize,
     ended_scopes: FxHashSet<ScopeId>,
 }
 
 struct Candidates<'ctx> {
     inner: Vec<ScopedIdent<'ctx>>,
-    fresh_disambiguator: u32,
 }
 
 impl<'ctx> Candidates<'ctx> {
     fn new() -> Self {
         Self {
             inner: Default::default(),
-            fresh_disambiguator: 0,
         }
     }
 
@@ -28,23 +29,18 @@ impl<'ctx> Candidates<'ctx> {
         &mut self,
         ident: syntax::Ident<'ctx>,
         ty: Ty<'ctx>,
-        origin: ir_typed_ast::IdentOrigin,
+        span: Span,
         scope_id: ScopeId,
-    ) -> ir_typed_ast::Ident<'ctx> {
-        self.fresh_disambiguator += 1;
-        let ident = Typed::new(
-            ir_typed_ast::DisambiguatedIdent::new_unchecked(
-                ident,
-                origin,
-                self.fresh_disambiguator,
-            ),
-            ty,
-        );
+    ) -> Typed<'ctx, DisambiguatedIdent<'ctx>> {
+        let ident = Typed::new(ir_typed_ast::DisambiguatedIdent::new_user(ident, span), ty);
         self.inner.push(ScopedIdent { ident, scope_id });
         ident
     }
 
-    pub fn find(&mut self, ended_scopes: &FxHashSet<ScopeId>) -> Option<ir_typed_ast::Ident<'ctx>> {
+    pub fn find(
+        &mut self,
+        ended_scopes: &FxHashSet<ScopeId>,
+    ) -> Option<Typed<'ctx, DisambiguatedIdent<'ctx>>> {
         while let Some(tail) = self.inner.last() {
             if ended_scopes.contains(&tail.scope_id) {
                 self.inner.pop();
@@ -66,14 +62,14 @@ impl<'ctx> Default for Candidates<'ctx> {
 pub struct ScopeId(usize);
 
 struct ScopedIdent<'ctx> {
-    ident: ir_typed_ast::Ident<'ctx>,
+    ident: Typed<'ctx, DisambiguatedIdent<'ctx>>,
     scope_id: ScopeId,
 }
 
 impl<'ctx> Env<'ctx> {
     pub fn new() -> Self {
         Self {
-            inner: Default::default(),
+            candidates_map: Default::default(),
             fresh_scope_id: 0,
             ended_scopes: Default::default(),
         }
@@ -89,22 +85,25 @@ impl<'ctx> Env<'ctx> {
         self.ended_scopes.insert(scope_id);
     }
 
-    pub fn insert_in(
+    pub fn define_in(
         &mut self,
         scope_id: ScopeId,
-        ident: syntax::Ident<'ctx>,
+        ident: Spanned<syntax::Ident<'ctx>>,
         ty: Ty<'ctx>,
-    ) -> ir_typed_ast::Ident<'ctx> {
-        self.inner.entry(ident).or_default().push(
-            ident,
+    ) -> Typed<'ctx, DisambiguatedIdent<'ctx>> {
+        self.candidates_map.entry(ident.node).or_default().push(
+            ident.node,
             ty,
-            ir_typed_ast::IdentOrigin::UserDefined,
+            *ident.span.as_user_defined().unwrap(),
             scope_id,
         )
     }
 
-    pub fn get(&mut self, ident: syntax::Ident<'ctx>) -> Option<ir_typed_ast::Ident<'ctx>> {
-        self.inner
+    pub fn get(
+        &mut self,
+        ident: syntax::Ident<'ctx>,
+    ) -> Option<Typed<'ctx, DisambiguatedIdent<'ctx>>> {
+        self.candidates_map
             .get_mut(&ident)
             .and_then(|candidates| candidates.find(&self.ended_scopes))
     }
