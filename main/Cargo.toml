@@ -16,3 +16,4 @@ sourcemap.workspace = true
 syntax.workspace = true
 ty.workspace = true
 typing.workspace = true
+ir_typed_ast.workspace = true

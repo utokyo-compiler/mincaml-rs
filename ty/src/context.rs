@@ -1,22 +1,30 @@
 use std::sync::atomic::AtomicUsize;
 
 use data_structure::{
-    arena::TypedArena,
+    arena::{Box, TypedArena},
     interning::{HashSetInterner, Interned},
 };
 
 use crate::{Ty, TyKind, TyVarId};
 
-pub struct TypingContext<'ctx> {
+/// The context for type checking.
+///
+/// `Expr` is just a placeholder for the typed expression type.
+pub struct TypingContext<'ctx, Expr> {
     ty_arena: &'ctx TypedArena<TyKind<'ctx>>,
+    typed_expr_arena: &'ctx TypedArena<Expr>,
     ty_interner: HashSetInterner<&'ctx TyKind<'ctx>>,
     fresh_ty_var_id: AtomicUsize,
 }
 
-impl<'ctx> TypingContext<'ctx> {
-    pub fn new(ty_arena: &'ctx TypedArena<TyKind<'ctx>>) -> Self {
+impl<'ctx, Expr> TypingContext<'ctx, Expr> {
+    pub fn new(
+        ty_arena: &'ctx TypedArena<TyKind<'ctx>>,
+        typed_expr_arena: &'ctx TypedArena<Expr>,
+    ) -> Self {
         Self {
             ty_arena,
+            typed_expr_arena,
             ty_interner: Default::default(),
             fresh_ty_var_id: Default::default(),
         }
@@ -27,6 +35,10 @@ impl<'ctx> TypingContext<'ctx> {
             self.ty_interner
                 .intern(kind, |kind| self.ty_arena.alloc(kind)),
         ))
+    }
+
+    pub fn new_expr(&self, expr: Expr) -> Box<'ctx, Expr> {
+        self.typed_expr_arena.alloc_boxed(expr)
     }
 
     pub fn fresh_ty_var(&self) -> TyVarId {
@@ -46,7 +58,7 @@ pub struct CommonTypes<'ctx> {
 }
 
 impl<'ctx> CommonTypes<'ctx> {
-    pub fn new(ctx: &TypingContext<'ctx>) -> Self {
+    pub fn new<Expr>(ctx: &TypingContext<'ctx, Expr>) -> Self {
         Self {
             unit: ctx.mk_ty_from_kind(TyKind::Unit),
             bool: ctx.mk_ty_from_kind(TyKind::Bool),

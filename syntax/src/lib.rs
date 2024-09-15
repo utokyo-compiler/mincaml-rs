@@ -5,16 +5,27 @@ use sourcemap::Spanned;
 
 pub type Ident<'ctx> = Interned<'ctx, str>;
 
-pub type Expr<'ctx> = Spanned<Interned<'ctx, ExprKind<'ctx>>>;
+pub type Expr<'ctx> = &'ctx Spanned<ExprKind<'ctx>>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ExprKind<'ctx> {
     Const(LitKind),
     Unary(UnOp, Expr<'ctx>),
     Binary(BinOp, Expr<'ctx>, Expr<'ctx>),
-    If(Expr<'ctx>, Expr<'ctx>, Expr<'ctx>),
-    Let(LetKind<'ctx>),
-    Then(Expr<'ctx>, Expr<'ctx>),
+    If(
+        // if
+        Expr<'ctx>,
+        // then
+        Expr<'ctx>,
+        // else
+        Expr<'ctx>,
+    ),
+    Let(LetBinder<'ctx>, Expr<'ctx>),
+    Then(
+        Expr<'ctx>,
+        // ;
+        Expr<'ctx>,
+    ),
     Var(Ident<'ctx>),
     App(Expr<'ctx>, Vec<Expr<'ctx>>),
     Tuple(Vec<Expr<'ctx>>),
@@ -119,8 +130,60 @@ impl Display for LitKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum LetKind<'ctx> {
-    LetVar(Ident<'ctx>, Expr<'ctx>, Expr<'ctx>),
-    LetRec(FunDef<'ctx>, Expr<'ctx>),
-    LetTuple(Vec<Ident<'ctx>>, Expr<'ctx>, Expr<'ctx>),
+pub struct LetBinder<'ctx> {
+    place: Pattern<'ctx>,
+    args: Vec<Ident<'ctx>>,
+    value: Expr<'ctx>,
+}
+
+impl<'ctx> LetBinder<'ctx> {
+    pub fn let_var(place: Ident<'ctx>, value: Expr<'ctx>) -> Self {
+        Self {
+            place: Pattern::Var(place),
+            args: Vec::new(),
+            value,
+        }
+    }
+
+    pub fn let_rec(name: Ident<'ctx>, args: Vec<Ident<'ctx>>, value: Expr<'ctx>) -> Self {
+        Self {
+            place: Pattern::Var(name),
+            args,
+            value,
+        }
+    }
+
+    pub fn let_tuple(place: Vec<Ident<'ctx>>, value: Expr<'ctx>) -> Self {
+        Self {
+            place: Pattern::Tuple(place),
+            args: Vec::new(),
+            value,
+        }
+    }
+
+    pub fn place(&self) -> &Pattern<'ctx> {
+        &self.place
+    }
+
+    pub fn has_args(&self) -> bool {
+        !self.args.is_empty()
+    }
+
+    pub fn args(&'ctx self) -> impl Iterator<Item = Ident<'ctx>> {
+        self.args.iter().copied()
+    }
+
+    pub fn value(&self) -> Expr<'ctx> {
+        self.value
+    }
+
+    pub fn len_args(&self) -> usize {
+        self.args.len()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Pattern<'ctx> {
+    Var(Ident<'ctx>),
+    Tuple(Vec<Ident<'ctx>>),
 }

@@ -38,11 +38,17 @@ pub struct Spanned<T> {
     pub span: Span,
 }
 
-impl<T: std::ops::Deref> std::ops::Deref for Spanned<T> {
+impl<T> std::ops::Deref for Spanned<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
         &self.node
+    }
+}
+
+impl<T> std::ops::DerefMut for Spanned<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.node
     }
 }
 

@@ -12,7 +12,7 @@ a mincaml port written in Rust
 | type.ml      | ty/src/lib.rs                 |
 | typing.ml    | typing/src/lib.rs             |
 | kNormal.ml   | ir_knorm/src/lib.rs           |
-| alpha.ml     | ir_knorm/src/alpha_convert.rs |
+| alpha.ml     | typing/src/name_res.rs        |
 | beta.ml      | ir_knorm/src/beta_convert.rs  |
 | assoc.ml     | ir_knorm/src/flatten_let.rs   |
 | inline.ml    | ir_knorm/src/inline.rs        |

@@ -75,7 +75,7 @@ impl<'ctx> Allocator<'ctx> {
 
     #[inline(always)]
     pub(crate) fn spanned(self, expr: ExprKind<'ctx>, span: (Loc, Loc)) -> Expr<'ctx> {
-        Spanned::new(self.ctx.intern_expr(expr), span)
+        self.ctx.new_expr(Spanned::new(expr, span))
     }
 
     pub(crate) fn ctx(&self) -> &ParsingContext<'ctx> {
