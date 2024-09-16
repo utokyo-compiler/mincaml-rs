@@ -1,27 +1,18 @@
+pub use rustc_hash::FxHashMap;
+
 use data_structure::arena::TypedArena;
 use parser::context::ParsingContext;
 use sourcemap::Spanned;
 use ty::{context::CommonTypes, TyKind, Typed};
 use typing::TypingContext;
 
+#[derive(Default)]
 pub struct Arena<'ctx> {
     ident: TypedArena<u8>,
     expr: TypedArena<Spanned<syntax::ExprKind<'ctx>>>,
     type_: TypedArena<TyKind<'ctx>>,
     typed_ident: TypedArena<Typed<'ctx, ir_typed_ast::DisambiguatedIdent<'ctx>>>,
     typed_expr: TypedArena<Typed<'ctx, Spanned<ir_typed_ast::ExprKind<'ctx>>>>,
-}
-
-impl Arena<'_> {
-    pub fn new() -> Self {
-        Self {
-            ident: Default::default(),
-            expr: Default::default(),
-            type_: Default::default(),
-            typed_ident: Default::default(),
-            typed_expr: Default::default(),
-        }
-    }
 }
 
 pub struct GlobalContext<'ctx> {

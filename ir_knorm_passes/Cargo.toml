@@ -1,0 +1,9 @@
+[package]
+name = "ir_knorm_passes"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+middleware.workspace = true
+
+ir_knorm.workspace = true

@@ -7,6 +7,5 @@ edition.workspace = true
 
 [dependencies]
 data_structure.workspace = true
-ty.workspace = true
 
 ir_typed_ast.workspace = true

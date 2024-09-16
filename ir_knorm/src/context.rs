@@ -2,8 +2,7 @@ use data_structure::{
     arena::TypedArena,
     interning::{HashSetInterner, Interned},
 };
-use ir_typed_ast::DisambiguatedIdent;
-use ty::Typed;
+use ir_typed_ast::{DisambiguatedIdent, Typed};
 
 use crate::{Expr, ExprKind};
 

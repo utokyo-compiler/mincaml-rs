@@ -5,7 +5,6 @@ use serde::Deserialize;
 use sourcemap::MultipleInputFiles;
 
 mod compiler;
-mod context;
 
 #[derive(Parser, Debug)]
 struct CommandLine {
@@ -65,7 +64,7 @@ fn main() {
     let files = MultipleInputFiles::new(input_contents);
     let input = files.concatenated();
 
-    compiler::run_compiler(input)
+    compiler::run_compiler(input);
 }
 
 fn exit_with(message: &'static str) -> ! {
