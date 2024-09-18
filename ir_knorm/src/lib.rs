@@ -32,9 +32,9 @@ pub fn lowering<'ctx>(
 
             ExprKind::If(e1, e2, e3)
         }
-        ir_typed_ast::ExprKind::Let(binder, follows) => {
-            let binder = LetBinder {
-                place: match &binder.place {
+        ir_typed_ast::ExprKind::Let(binding, follows) => {
+            let binding = LetBinding {
+                place: match &binding.place {
                     ir_typed_ast::Pattern::Var(ident) => {
                         Pattern::Var(ctx.intern_resolved_ident(***ident))
                     }
@@ -45,22 +45,22 @@ pub fn lowering<'ctx>(
                             .collect(),
                     ),
                 },
-                args: binder
+                args: binding
                     .args
                     .iter()
                     .map(|i| ctx.intern_resolved_ident(***i))
                     .collect(),
-                value: lowering(ctx, &binder.value),
+                value: lowering(ctx, &binding.value),
             };
             let follows = lowering(ctx, follows);
 
-            ExprKind::Let(binder, follows)
+            ExprKind::Let(binding, follows)
         }
         ir_typed_ast::ExprKind::Then(e1, e2) => {
             let e1 = lowering(ctx, e1);
             let e2 = lowering(ctx, e2);
 
-            ExprKind::Let(LetBinder::let_discard(e1), e2)
+            ExprKind::Let(LetBinding::let_discard(e1), e2)
         }
         ir_typed_ast::ExprKind::Var(ident) => {
             let ident = ctx.intern_resolved_ident(***ident);
@@ -118,7 +118,7 @@ fn evaluated_ident<'ctx>(
                 expr.ty,
             );
             let ident = ctx.intern_resolved_ident(ident);
-            binders.add_binder(LetBinder::let_var(ident, expr));
+            binders.add_binder(LetBinding::let_var(ident, expr));
             ident
         }
     }
@@ -126,7 +126,7 @@ fn evaluated_ident<'ctx>(
 
 /// A stack of binders. Originally called `insert_let`.
 struct Binders<'ctx> {
-    inner: Vec<LetBinder<'ctx>>,
+    inner: Vec<LetBinding<'ctx>>,
 }
 
 impl<'ctx> Binders<'ctx> {
@@ -134,7 +134,7 @@ impl<'ctx> Binders<'ctx> {
         Self { inner: Vec::new() }
     }
 
-    fn add_binder(&mut self, binder: LetBinder<'ctx>) {
+    fn add_binder(&mut self, binder: LetBinding<'ctx>) {
         self.inner.push(binder);
     }
 

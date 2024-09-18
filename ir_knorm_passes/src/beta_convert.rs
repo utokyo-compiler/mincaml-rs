@@ -1,11 +1,11 @@
-use ir_knorm::{Expr, Ident, LetBinder, MutVisitor};
+use ir_knorm::{Expr, Ident, LetBinding, MutVisitor};
 use middleware::FxHashMap;
 
 use crate::KnormPass;
 
-pub struct BetaConvertPass;
+pub struct BetaConvert;
 
-impl<'ctx> KnormPass<'ctx> for BetaConvertPass {
+impl<'ctx> KnormPass<'ctx> for BetaConvert {
     fn run_pass(&mut self, _ctx: &'ctx middleware::GlobalContext<'ctx>, expr: &mut Expr<'ctx>) {
         struct LookupVisitor<'ctx> {
             env: FxHashMap<Ident<'ctx>, Ident<'ctx>>,
@@ -18,13 +18,13 @@ impl<'ctx> KnormPass<'ctx> for BetaConvertPass {
                 }
             }
 
-            fn visit_binder(&mut self, binder: &mut LetBinder<'ctx>) {
-                let Some(new_ident) = binder.place.as_var() else {
-                    self.super_binder(binder);
+            fn visit_binding(&mut self, binding: &mut LetBinding<'ctx>) {
+                let Some(new_ident) = binding.place.as_var() else {
+                    self.super_binding(binding);
                     return;
                 };
-                let Some(value) = binder.value.as_var() else {
-                    self.super_binder(binder);
+                let Some(value) = binding.value.as_var() else {
+                    self.super_binding(binding);
                     return;
                 };
                 self.env.insert(new_ident, value);

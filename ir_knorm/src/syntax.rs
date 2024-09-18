@@ -12,7 +12,7 @@ pub enum ExprKind<'ctx> {
     Unary(UnOp, Ident<'ctx>),
     Binary(BinOp, Ident<'ctx>, Ident<'ctx>),
     If(Ident<'ctx>, Expr<'ctx>, Expr<'ctx>),
-    Let(LetBinder<'ctx>, Expr<'ctx>),
+    Let(LetBinding<'ctx>, Expr<'ctx>),
     Var(Ident<'ctx>),
     App(Ident<'ctx>, Vec<Ident<'ctx>>),
     Tuple(Vec<Ident<'ctx>>),
@@ -54,13 +54,13 @@ impl<'ctx> ExprKind<'ctx> {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub struct LetBinder<'ctx> {
+pub struct LetBinding<'ctx> {
     pub place: Pattern<'ctx>,
     pub args: Vec<Ident<'ctx>>,
     pub value: Expr<'ctx>,
 }
 
-impl<'ctx> LetBinder<'ctx> {
+impl<'ctx> LetBinding<'ctx> {
     pub fn let_var(place: Ident<'ctx>, value: Expr<'ctx>) -> Self {
         Self {
             place: Pattern::Var(place),

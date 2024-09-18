@@ -144,7 +144,7 @@ fn decide_ty<'ctx>(
             (
                 typed_follows.ty,
                 ir_typed_ast::ExprKind::Let(
-                    ir_typed_ast::LetBinder {
+                    ir_typed_ast::LetBinding {
                         place: typed_place,
                         args: typed_args,
                         value: typed_bound_value,

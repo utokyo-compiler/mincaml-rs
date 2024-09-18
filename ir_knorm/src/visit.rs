@@ -1,4 +1,4 @@
-use crate::syntax::{BinOp, Expr, ExprKind, Ident, LetBinder, LitKind, Pattern, UnOp};
+use crate::syntax::{BinOp, Expr, ExprKind, Ident, LetBinding, LitKind, Pattern, UnOp};
 use ir_typed_ast::Ty;
 
 macro_rules! declare_visitor {
@@ -35,8 +35,8 @@ macro_rules! declare_visitor {
                         self.visit_expr(e2);
                         self.visit_expr(e3);
                     }
-                    ExprKind::Let(binder, e) => {
-                        self.visit_binder(binder);
+                    ExprKind::Let(binding, e) => {
+                        self.visit_binding(binding);
                         self.visit_expr(e);
                     }
                     ExprKind::Var(ident) => self.visit_ident(ident),
@@ -94,12 +94,12 @@ macro_rules! declare_visitor {
                 self.visit_ty(&ident.ty);
             }
 
-            fn visit_binder(&mut self, binder: & $($mutability)? LetBinder<'ctx>) {
-                self.super_binder(binder);
+            fn visit_binding(&mut self, binding: & $($mutability)? LetBinding<'ctx>) {
+                self.super_binding(binding);
             }
 
-            fn super_binder(&mut self, binder: & $($mutability)? LetBinder<'ctx>) {
-                let LetBinder { place, args, value } = binder;
+            fn super_binding(&mut self, binding: & $($mutability)? LetBinding<'ctx>) {
+                let LetBinding { place, args, value } = binding;
                 self.visit_pattern(place);
                 for arg in args {
                     self.visit_ident(arg);
