@@ -38,7 +38,6 @@ pub type Ident<'ctx> = Box<'ctx, TypedIdent<'ctx>>;
 pub type TypedIdent<'ctx> = Typed<'ctx, DisambiguatedIdent<'ctx>>;
 
 pub type Expr<'ctx> = Box<'ctx, TypedExprKind<'ctx>>;
-pub type ExprRef<'ctx> = &'ctx TypedExprKind<'ctx>;
 pub type TypedExprKind<'ctx> = Typed<'ctx, Spanned<ExprKind<'ctx>>>;
 
 #[derive(Debug, PartialEq, Eq, Hash)]

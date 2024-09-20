@@ -17,4 +17,6 @@ syntax.workspace = true
 ty.workspace = true
 typing.workspace = true
 ir_typed_ast.workspace = true
+ir_knorm.workspace = true
+ir_closure.workspace = true
 middleware.workspace = true

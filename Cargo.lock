@@ -434,6 +434,8 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "data_structure",
+ "ir_closure",
+ "ir_knorm",
  "ir_typed_ast",
  "middleware",
  "parser",

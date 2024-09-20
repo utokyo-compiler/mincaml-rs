@@ -5,7 +5,6 @@ pub use ir_typed_ast::{BinOp, DisambiguatedIdent, LitKind, Ty, Typed, UnOp};
 pub type Ident<'ctx> = Interned<'ctx, Typed<'ctx, DisambiguatedIdent<'ctx>>>;
 
 pub type Expr<'ctx> = Box<'ctx, TypedExprKind<'ctx>>;
-pub type ExprRef<'ctx> = &'ctx TypedExprKind<'ctx>;
 pub type TypedExprKind<'ctx> = Typed<'ctx, ExprKind<'ctx>>;
 
 #[derive(Debug, PartialEq, Eq, Hash)]

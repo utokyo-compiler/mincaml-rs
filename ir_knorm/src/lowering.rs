@@ -4,7 +4,14 @@ use crate::{
 
 pub fn lowering<'ctx>(
     ctx: &'ctx Context<'ctx>,
-    typed_expr: ir_typed_ast::ExprRef<'ctx>,
+    typed_expr: ir_typed_ast::Expr<'ctx>,
+) -> Expr<'ctx> {
+    lowering_ref(ctx, &typed_expr)
+}
+
+fn lowering_ref<'ctx>(
+    ctx: &'ctx Context<'ctx>,
+    typed_expr: &ir_typed_ast::Expr<'ctx>,
 ) -> Expr<'ctx> {
     let mut binders = Binders::new();
     let bottom_expr_kind = match typed_expr.kind() {
@@ -22,8 +29,8 @@ pub fn lowering<'ctx>(
         }
         ir_typed_ast::ExprKind::If(e1, e2, e3) => {
             let e1 = insert_let(ctx, &mut binders, e1);
-            let e2 = lowering(ctx, e2);
-            let e3 = lowering(ctx, e3);
+            let e2 = lowering_ref(ctx, e2);
+            let e3 = lowering_ref(ctx, e3);
 
             ExprKind::If(e1, e2, e3)
         }
@@ -45,15 +52,15 @@ pub fn lowering<'ctx>(
                     .iter()
                     .map(|i| ctx.intern_resolved_ident(***i))
                     .collect(),
-                value: lowering(ctx, &binding.value),
+                value: lowering_ref(ctx, &binding.value),
             };
-            let follows = lowering(ctx, follows);
+            let follows = lowering_ref(ctx, follows);
 
             ExprKind::Let(binding, follows)
         }
         ir_typed_ast::ExprKind::Then(e1, e2) => {
-            let e1 = lowering(ctx, e1);
-            let e2 = lowering(ctx, e2);
+            let e1 = lowering_ref(ctx, e1);
+            let e2 = lowering_ref(ctx, e2);
 
             ExprKind::Let(LetBinding::let_discard(e1), e2)
         }
@@ -89,9 +96,9 @@ pub fn lowering<'ctx>(
 fn insert_let<'ctx>(
     ctx: &'ctx Context<'ctx>,
     binders: &mut Binders<'ctx>,
-    typed_expr: ir_typed_ast::ExprRef<'ctx>,
+    typed_expr: &ir_typed_ast::Expr<'ctx>,
 ) -> Ident<'ctx> {
-    let transformed = lowering(ctx, typed_expr);
+    let transformed = lowering_ref(ctx, typed_expr);
     evaluated_ident(ctx, binders, transformed)
 }
 
