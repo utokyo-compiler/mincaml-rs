@@ -10,11 +10,11 @@ pub struct Program<'ctx> {
     pub main: Expr<'ctx>,
 }
 
-/// A function definition. Functions may capture some arguments.
+/// A function definition. Functions may capture variables from the environment.
 pub struct Function<'ctx> {
     pub name: DisambiguatedIdent<'ctx>,
     pub args: Vec<Ident<'ctx>>,
-    pub captured_args: Vec<Ident<'ctx>>,
+    pub args_via_closure: Vec<Ident<'ctx>>,
     pub body: Expr<'ctx>,
 }
 

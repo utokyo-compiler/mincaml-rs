@@ -1,8 +1,8 @@
 use data_structure::{FxHashSet, SetLikeVec};
 
 use crate::{
-    context::Context, ApplyKind, Expr, ExprKind, Function, Ident, LetBinding, Pattern, Program,
-    Typed,
+    context::Context, ApplyKind, Closure, Expr, ExprKind, Function, Ident, LetBinding, Pattern,
+    Program, Typed,
 };
 
 /// The main entrypoint of closure conversion.
@@ -66,22 +66,39 @@ fn lowering_expr<'ctx>(
                     fv_set,
                 } = analyze_let_rec(binding);
 
-                if did_fn_used_as_value || !fv_set.is_empty() {
-                    // decide to make a closure
+                let decide_to_make_closure = did_fn_used_as_value || !fv_set.is_empty();
 
+                if decide_to_make_closure {
                     // DO NOT call `lowering_expr` on `body`
-                    // before `ack_decide_to_make_closure`
+                    // before `ack_decide_to_make_closure`.
                     state.ack_decide_to_make_closure(fn_name);
                 }
+                let fv_set: Vec<_> = fv_set.into_iter().collect();
                 let func = Function {
                     name: fn_name.value,
                     args: args.clone(),
-                    captured_args: fv_set.into_iter().collect(),
+                    args_via_closure: fv_set.clone(),
                     body: lowering_expr(ctx, state, value),
                 };
                 state.functions.push(func);
 
-                todo!()
+                let follows = lowering_expr(ctx, state, follows);
+
+                if state.decided_to_make_closure(&fn_name) {
+                    let value = ctx.new_expr(Typed::new(
+                        ExprKind::ClosureMake(Closure {
+                            fn_name,
+                            captured_args: fv_set,
+                        }),
+                        value.ty,
+                    ));
+                    (value, follows)
+                } else {
+                    // remove the binding. Calling this function is allowed
+                    // only if the `App` has `ApplyKind::Direct`, so we do not
+                    // need to keep the binding.
+                    return follows;
+                }
             };
             ExprKind::Let(LetBinding { place, value }, follows)
         }
