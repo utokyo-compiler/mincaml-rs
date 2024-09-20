@@ -4,7 +4,7 @@ use sourcemap::{Loc, Spanned};
 use syntax::{Expr, ExprKind};
 
 use crate::{
-    context::ParsingContext,
+    context::Context,
     lexer::{self, Lexer, Token},
 };
 
@@ -65,11 +65,11 @@ impl fmt::Display for ExpectedTokens {
 
 #[derive(Clone, Copy)]
 pub(crate) struct Allocator<'ctx> {
-    ctx: &'ctx ParsingContext<'ctx>,
+    ctx: &'ctx Context<'ctx>,
 }
 
 impl<'ctx> Allocator<'ctx> {
-    pub(crate) fn new(ctx: &'ctx ParsingContext<'ctx>) -> Self {
+    pub(crate) fn new(ctx: &'ctx Context<'ctx>) -> Self {
         Self { ctx }
     }
 
@@ -78,7 +78,7 @@ impl<'ctx> Allocator<'ctx> {
         self.ctx.new_expr(Spanned::new(expr, span))
     }
 
-    pub(crate) fn ctx(&self) -> &ParsingContext<'ctx> {
+    pub(crate) fn ctx(&self) -> &Context<'ctx> {
         self.ctx
     }
 }

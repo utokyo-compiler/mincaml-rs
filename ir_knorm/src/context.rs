@@ -2,25 +2,24 @@ use data_structure::{
     arena::TypedArena,
     interning::{HashSetInterner, Interned},
 };
-use ir_typed_ast::{DisambiguatedIdent, Typed};
 
-use crate::{Expr, ExprKind};
+use crate::{DisambiguatedIdent, Expr, ExprKind, Typed};
 
-pub struct KnormContext<'ctx> {
+pub struct Context<'ctx> {
     ident_arena: &'ctx TypedArena<Typed<'ctx, DisambiguatedIdent<'ctx>>>,
     ident_interner: HashSetInterner<&'ctx Typed<'ctx, DisambiguatedIdent<'ctx>>>,
-    knorm_expr_arena: &'ctx TypedArena<Typed<'ctx, ExprKind<'ctx>>>,
+    expr_arena: &'ctx TypedArena<Typed<'ctx, ExprKind<'ctx>>>,
 }
 
-impl<'ctx> KnormContext<'ctx> {
+impl<'ctx> Context<'ctx> {
     pub fn new(
         ident_arena: &'ctx TypedArena<Typed<'ctx, DisambiguatedIdent<'ctx>>>,
-        knorm_expr_arena: &'ctx TypedArena<Typed<'ctx, ExprKind<'ctx>>>,
+        expr_arena: &'ctx TypedArena<Typed<'ctx, ExprKind<'ctx>>>,
     ) -> Self {
         Self {
             ident_arena,
             ident_interner: Default::default(),
-            knorm_expr_arena,
+            expr_arena,
         }
     }
 
@@ -35,6 +34,6 @@ impl<'ctx> KnormContext<'ctx> {
     }
 
     pub fn new_expr(&self, expr: Typed<'ctx, ExprKind<'ctx>>) -> Expr<'ctx> {
-        self.knorm_expr_arena.alloc_boxed(expr)
+        self.expr_arena.alloc_boxed(expr)
     }
 }

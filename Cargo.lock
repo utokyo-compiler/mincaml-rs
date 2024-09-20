@@ -314,6 +314,10 @@ version = "0.1.0"
 [[package]]
 name = "ir_closure"
 version = "0.1.0"
+dependencies = [
+ "data_structure",
+ "ir_knorm",
+]
 
 [[package]]
 name = "ir_knorm"
@@ -452,6 +456,8 @@ name = "middleware"
 version = "0.1.0"
 dependencies = [
  "data_structure",
+ "ir_closure",
+ "ir_knorm",
  "ir_typed_ast",
  "parser",
  "rustc-hash",

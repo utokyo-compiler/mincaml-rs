@@ -1,14 +1,15 @@
-use context::ParsingContext;
 use syntax::Expr;
 
-pub mod context;
+mod context;
 mod lexer;
 mod parser;
+
+pub use context::*;
 
 pub type Error<'input> = parser::Error<'input>;
 
 pub fn lex_and_parse<'input, 'ctx>(
-    ctx: &'ctx ParsingContext<'ctx>,
+    ctx: &'ctx Context<'ctx>,
     input: &'input str,
 ) -> Result<Expr<'ctx>, Error<'input>> {
     use lexer::Lexer;

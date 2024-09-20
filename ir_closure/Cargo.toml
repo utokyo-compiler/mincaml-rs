@@ -6,3 +6,6 @@ edition.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+data_structure.workspace = true
+
+ir_knorm.workspace = true

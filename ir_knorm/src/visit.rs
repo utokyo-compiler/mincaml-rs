@@ -1,4 +1,5 @@
 use crate::syntax::{BinOp, Expr, ExprKind, Ident, LetBinding, LitKind, Pattern, UnOp};
+use data_structure::FxHashSet;
 use ir_typed_ast::Ty;
 
 macro_rules! declare_visitor {
@@ -20,7 +21,15 @@ macro_rules! declare_visitor {
 
             fn super_expr(&mut self, expr: & $($mutability)? Expr<'ctx>) {
                 self.visit_ty(&expr.ty);
-                match & $($mutability)? expr.value {
+                self.visit_expr_kind(& $($mutability)? expr.value);
+            }
+
+            fn visit_expr_kind(&mut self, expr: & $($mutability)? ExprKind<'ctx>) {
+                self.super_expr_kind(expr);
+            }
+
+            fn super_expr_kind(&mut self, expr: & $($mutability)? ExprKind<'ctx>) {
+                match expr {
                     ExprKind::Const(lit) => {
                         self.visit_lit(lit);
                     }
@@ -41,10 +50,7 @@ macro_rules! declare_visitor {
                     }
                     ExprKind::Var(ident) => self.visit_ident(ident),
                     ExprKind::App(e, es) => {
-                        self.visit_ident(e);
-                        for e in es {
-                            self.visit_ident(e);
-                        }
+                        self.visit_app(e, es);
                     }
                     ExprKind::Tuple(es) => {
                         for e in es {
@@ -122,9 +128,68 @@ macro_rules! declare_visitor {
                     }
                 }
             }
+
+            fn visit_app(&mut self, e: & $($mutability)? Ident<'ctx>, es: & $($mutability)? Vec<Ident<'ctx>>) {
+                self.super_app(e, es);
+            }
+
+            fn super_app(&mut self, e: & $($mutability)? Ident<'ctx>, es: & $($mutability)? Vec<Ident<'ctx>>) {
+                self.visit_ident(e);
+                for e in es {
+                    self.visit_ident(e);
+                }
+            }
         }
     };
 }
 
 declare_visitor!(Visitor,);
 declare_visitor!(MutVisitor, mut);
+
+pub trait FvVisitor<'ctx> {
+    fn visit_fv(&mut self, ident: Ident<'ctx>);
+}
+
+/// A reusable fragment of free-variable visitor.
+pub struct FvVisitorHelper<'ctx, F: FvVisitor<'ctx>> {
+    fv_visitor: F,
+    bound_idents: FxHashSet<Ident<'ctx>>,
+}
+
+impl<'ctx, F> FvVisitorHelper<'ctx, F>
+where
+    F: FvVisitor<'ctx>,
+{
+    pub fn new(fv_visitor: F) -> Self {
+        Self {
+            fv_visitor,
+            bound_idents: FxHashSet::default(),
+        }
+    }
+
+    pub fn super_ident(&mut self, ident: &Ident<'ctx>) {
+        if !self.bound_idents.contains(ident) {
+            self.fv_visitor.visit_fv(*ident);
+        }
+    }
+
+    pub fn super_binding_args(&mut self, binding_args: &[Ident<'ctx>]) {
+        for arg in binding_args {
+            self.bound_idents.insert(*arg);
+        }
+    }
+
+    pub fn super_pattern(&mut self, pattern: &Pattern<'ctx>) {
+        match pattern {
+            Pattern::Unit => (),
+            Pattern::Var(ident) => {
+                self.bound_idents.insert(*ident);
+            }
+            Pattern::Tuple(idents) => {
+                for ident in idents {
+                    self.bound_idents.insert(*ident);
+                }
+            }
+        }
+    }
+}

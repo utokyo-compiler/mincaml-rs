@@ -5,13 +5,13 @@ use data_structure::{
 use sourcemap::Spanned;
 use syntax::ExprKind;
 
-pub struct ParsingContext<'ctx> {
+pub struct Context<'ctx> {
     ident_arena: &'ctx TypedArena<u8>,
     ident_interner: HashSetInterner<&'ctx str>,
     expr_arena: &'ctx TypedArena<Spanned<ExprKind<'ctx>>>,
 }
 
-impl<'ctx> ParsingContext<'ctx> {
+impl<'ctx> Context<'ctx> {
     pub fn new(
         ident_arena: &'ctx TypedArena<u8>,
         expr_arena: &'ctx TypedArena<Spanned<ExprKind<'ctx>>>,

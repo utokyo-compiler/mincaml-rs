@@ -4,7 +4,7 @@ use ty::{context::CommonTypes, Ty, TyKind, TyVarId, Typed};
 mod name_res;
 mod ty_var_subst;
 
-pub type TypingContext<'ctx> = ty::context::TypingContext<
+pub type Context<'ctx> = ty::context::TypingContext<
     'ctx,
     Typed<'ctx, ir_typed_ast::DisambiguatedIdent<'ctx>>,
     Typed<'ctx, Spanned<ir_typed_ast::ExprKind<'ctx>>>,
@@ -24,7 +24,7 @@ pub enum Error<'ctx> {
 ///
 /// Originally named `Typing.f`.
 pub fn typeck<'ctx>(
-    ctx: &'ctx TypingContext<'ctx>,
+    ctx: &'ctx Context<'ctx>,
     common_types: &CommonTypes<'ctx>,
     parsed: syntax::Expr<'ctx>,
 ) -> Result<ir_typed_ast::Expr<'ctx>, Error<'ctx>> {
@@ -40,7 +40,7 @@ pub fn typeck<'ctx>(
 ///
 /// Originally named `Typing.g` (or `typing_g`).
 fn decide_ty<'ctx>(
-    ctx: &'ctx TypingContext<'ctx>,
+    ctx: &'ctx Context<'ctx>,
     common_types: &CommonTypes<'ctx>,
     name_res: &mut name_res::Env<'ctx>,
     subst: &mut ty_var_subst::Env<'ctx>,
@@ -188,7 +188,7 @@ fn decide_ty<'ctx>(
 }
 
 fn decide_ty_many<'ctx>(
-    ctx: &'ctx TypingContext<'ctx>,
+    ctx: &'ctx Context<'ctx>,
     common_types: &CommonTypes<'ctx>,
     name_res: &mut name_res::Env<'ctx>,
     subst: &mut ty_var_subst::Env<'ctx>,
