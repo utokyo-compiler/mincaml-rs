@@ -38,19 +38,19 @@ fn lowering_ref<'ctx>(
             let binding = LetBinding {
                 place: match &binding.place {
                     ir_typed_ast::Pattern::Var(ident) => {
-                        Pattern::Var(ctx.intern_resolved_ident(***ident))
+                        Pattern::Var(ctx.intern_resolved_ident(****ident))
                     }
                     ir_typed_ast::Pattern::Tuple(idents) => Pattern::Tuple(
                         idents
                             .iter()
-                            .map(|i| ctx.intern_resolved_ident(***i))
+                            .map(|i| ctx.intern_resolved_ident(****i))
                             .collect(),
                     ),
                 },
                 args: binding
                     .args
                     .iter()
-                    .map(|i| ctx.intern_resolved_ident(***i))
+                    .map(|i| ctx.intern_resolved_ident(****i))
                     .collect(),
                 value: lowering_ref(ctx, &binding.value),
             };
@@ -65,7 +65,7 @@ fn lowering_ref<'ctx>(
             ExprKind::Let(LetBinding::let_discard(e1), e2)
         }
         ir_typed_ast::ExprKind::Var(ident) => {
-            let ident = ctx.intern_resolved_ident(***ident);
+            let ident = ctx.intern_resolved_ident(****ident);
             ExprKind::Var(ident)
         }
         ir_typed_ast::ExprKind::App(fun, args) => {

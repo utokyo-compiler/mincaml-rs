@@ -64,7 +64,7 @@ fn main() {
     let files = MultipleInputFiles::new(input_contents);
     let input = files.concatenated();
 
-    compiler::run_compiler(input);
+    compiler::run(&input);
 }
 
 fn exit_with(message: &'static str) -> ! {

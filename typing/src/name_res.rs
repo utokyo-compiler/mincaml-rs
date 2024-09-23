@@ -3,8 +3,8 @@
 //! The original implementation conducts this (alpha-conversion)
 //! after K-normalization.
 
+use data_structure::{FxHashMap, FxHashSet};
 use ir_typed_ast::DisambiguatedIdent;
-use rustc_hash::{FxHashMap, FxHashSet};
 use sourcemap::{Span, Spanned};
 use ty::{Ty, Typed};
 

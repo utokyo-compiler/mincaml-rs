@@ -10,7 +10,7 @@ use crate::{Ty, TyKind, TyVarId};
 /// The context for type checking.
 ///
 /// `Ident` and `Expr` are just a placeholder for the type
-/// which defined in a dependent crate.
+/// which defined in the dependent crate.
 pub struct TypingContext<'ctx, Ident, Expr> {
     ty_arena: &'ctx TypedArena<TyKind<'ctx>>,
     typed_ident_arena: &'ctx TypedArena<Ident>,
@@ -41,11 +41,11 @@ impl<'ctx, Ident, Expr> TypingContext<'ctx, Ident, Expr> {
         ))
     }
 
-    pub fn new_ident(&self, expr: Ident) -> Box<'ctx, Ident> {
+    pub fn alloc_ident(&self, expr: Ident) -> Box<'ctx, Ident> {
         self.typed_ident_arena.alloc_boxed(expr)
     }
 
-    pub fn new_expr(&self, expr: Expr) -> Box<'ctx, Expr> {
+    pub fn alloc_expr(&self, expr: Expr) -> Box<'ctx, Expr> {
         self.typed_expr_arena.alloc_boxed(expr)
     }
 

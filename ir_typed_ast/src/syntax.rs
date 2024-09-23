@@ -1,7 +1,10 @@
-use data_structure::arena::Box;
+use data_structure::{
+    arena::Box,
+    index::{vec::IndexVec, Indexable},
+};
 use sourcemap::{Span, Spanned};
 pub use syntax::{BinOp, LitKind, UnOp};
-pub use ty::{Ty, Typed};
+pub use ty::{ArgIndex, TupleIndex, Ty, Typed};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 /// Represents a resolved identifier.
@@ -12,6 +15,10 @@ pub enum DisambiguatedIdent<'ctx> {
     },
     CompilerGenerated {
         name: &'static str,
+
+        /// A number to distinguish between the same name.
+        ///
+        /// It is possible to have the same value for different names.
         disambiguator: usize,
     },
 }
@@ -20,7 +27,7 @@ impl<'ctx> DisambiguatedIdent<'ctx> {
     pub fn new_user(name: syntax::Ident<'ctx>, span: Span) -> Self {
         Self::UserDefined { name, span }
     }
-    pub fn new_compiler_unchecked(name: &'static str, disambiguator: usize) -> Self {
+    pub const fn new_compiler_unchecked(name: &'static str, disambiguator: usize) -> Self {
         Self::CompilerGenerated {
             name,
             disambiguator,
@@ -28,16 +35,54 @@ impl<'ctx> DisambiguatedIdent<'ctx> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum IdentOrigin {
-    UserDefined,
-    CompilerGenerated,
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub struct Ident<'ctx>(Box<'ctx, TypedIdent<'ctx>>);
+
+impl<'ctx> Ident<'ctx> {
+    pub fn new(interned: Box<'ctx, TypedIdent<'ctx>>) -> Self {
+        Self(interned)
+    }
 }
 
-pub type Ident<'ctx> = Box<'ctx, TypedIdent<'ctx>>;
+impl<'ctx> std::ops::Deref for Ident<'ctx> {
+    type Target = Box<'ctx, TypedIdent<'ctx>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'ctx> std::ops::DerefMut for Ident<'ctx> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
 pub type TypedIdent<'ctx> = Typed<'ctx, DisambiguatedIdent<'ctx>>;
 
-pub type Expr<'ctx> = Box<'ctx, TypedExprKind<'ctx>>;
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct Expr<'ctx>(Box<'ctx, TypedExprKind<'ctx>>);
+
+impl<'ctx> Expr<'ctx> {
+    pub fn new(interned: Box<'ctx, TypedExprKind<'ctx>>) -> Self {
+        Self(interned)
+    }
+}
+
+impl<'ctx> std::ops::Deref for Expr<'ctx> {
+    type Target = Box<'ctx, TypedExprKind<'ctx>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'ctx> std::ops::DerefMut for Expr<'ctx> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
 pub type TypedExprKind<'ctx> = Typed<'ctx, Spanned<ExprKind<'ctx>>>;
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -49,12 +94,14 @@ pub enum ExprKind<'ctx> {
     Let(LetBinding<'ctx>, Expr<'ctx>),
     Then(Expr<'ctx>, Expr<'ctx>),
     Var(Ident<'ctx>),
-    App(Expr<'ctx>, Vec<Expr<'ctx>>),
-    Tuple(Vec<Expr<'ctx>>),
+    App(Expr<'ctx>, IndexVec<ArgIndex, Expr<'ctx>>),
+    Tuple(IndexVec<TupleIndex, Expr<'ctx>>),
     ArrayMake(Expr<'ctx>, Expr<'ctx>),
     Get(Expr<'ctx>, Expr<'ctx>),
     Set(Expr<'ctx>, Expr<'ctx>, Expr<'ctx>),
 }
+impl Indexable<ArgIndex> for Expr<'_> {}
+impl Indexable<TupleIndex> for Expr<'_> {}
 
 impl<'ctx> ExprKind<'ctx> {
     pub fn kind(&self) -> &Self {
@@ -65,12 +112,14 @@ impl<'ctx> ExprKind<'ctx> {
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct LetBinding<'ctx> {
     pub place: Pattern<'ctx>,
-    pub args: Vec<Ident<'ctx>>,
+    pub args: IndexVec<ArgIndex, Ident<'ctx>>,
     pub value: Expr<'ctx>,
 }
+impl Indexable<ArgIndex> for Ident<'_> {}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Pattern<'ctx> {
     Var(Ident<'ctx>),
-    Tuple(Vec<Ident<'ctx>>),
+    Tuple(IndexVec<TupleIndex, Ident<'ctx>>),
 }
+impl Indexable<TupleIndex> for Ident<'_> {}

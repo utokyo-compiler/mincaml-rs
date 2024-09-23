@@ -1,5 +1,7 @@
-use crate::syntax::{BinOp, Expr, ExprKind, Ident, LetBinding, LitKind, Pattern, UnOp};
-use data_structure::FxHashSet;
+use crate::syntax::{
+    ArgIndex, BinOp, Expr, ExprKind, Ident, LetBinding, LitKind, Pattern, TupleIndex, UnOp,
+};
+use data_structure::{index::vec::IndexVec, FxHashSet};
 use ir_typed_ast::Ty;
 
 macro_rules! declare_visitor {
@@ -53,9 +55,7 @@ macro_rules! declare_visitor {
                         self.visit_app(e, es);
                     }
                     ExprKind::Tuple(es) => {
-                        for e in es {
-                            self.visit_ident(e);
-                        }
+                        self.visit_tuple(es);
                     }
                     ExprKind::ArrayMake(e1, e2) => {
                         self.visit_ident(e1);
@@ -90,6 +90,16 @@ macro_rules! declare_visitor {
             fn super_bin_op(&mut self, _bin_op: BinOp, e1: & $($mutability)? Ident<'ctx>, e2: & $($mutability)? Ident<'ctx>) {
                 self.visit_ident(e1);
                 self.visit_ident(e2);
+            }
+
+            fn visit_tuple(&mut self, es: & $($mutability)? IndexVec<TupleIndex, Ident<'ctx>>) {
+                self.super_tuple(es);
+            }
+
+            fn super_tuple(&mut self, es: & $($mutability)? IndexVec<TupleIndex, Ident<'ctx>>) {
+                for e in es {
+                    self.visit_ident(e);
+                }
             }
 
             fn visit_ident(&mut self, ident: & $($mutability)? Ident<'ctx>) {
@@ -129,11 +139,11 @@ macro_rules! declare_visitor {
                 }
             }
 
-            fn visit_app(&mut self, e: & $($mutability)? Ident<'ctx>, es: & $($mutability)? Vec<Ident<'ctx>>) {
+            fn visit_app(&mut self, e: & $($mutability)? Ident<'ctx>, es: & $($mutability)? IndexVec<ArgIndex, Ident<'ctx>>) {
                 self.super_app(e, es);
             }
 
-            fn super_app(&mut self, e: & $($mutability)? Ident<'ctx>, es: & $($mutability)? Vec<Ident<'ctx>>) {
+            fn super_app(&mut self, e: & $($mutability)? Ident<'ctx>, es: & $($mutability)? IndexVec<ArgIndex, Ident<'ctx>>) {
                 self.visit_ident(e);
                 for e in es {
                     self.visit_ident(e);

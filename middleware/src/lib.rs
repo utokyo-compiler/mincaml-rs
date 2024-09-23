@@ -1,4 +1,4 @@
-pub use rustc_hash::FxHashMap;
+pub use data_structure::FxHashMap;
 
 use data_structure::arena::TypedArena;
 use sourcemap::Spanned;

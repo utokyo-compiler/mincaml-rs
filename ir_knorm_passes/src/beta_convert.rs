@@ -23,11 +23,11 @@ impl<'ctx> KnormPass<'ctx> for BetaConvert {
                     self.super_binding(binding);
                     return;
                 };
-                let Some(value) = binding.value.as_var() else {
+                let Some(old_ident) = binding.value.as_var() else {
                     self.super_binding(binding);
                     return;
                 };
-                self.env.insert(new_ident, value);
+                self.env.insert(new_ident, old_ident);
             }
         }
 

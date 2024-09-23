@@ -3,7 +3,7 @@
 //! The difference from the original is that the original implementation stores
 //! type-variable information in `Type.t`, this implementation manages it via `Env`.
 
-use rustc_hash::FxHashMap;
+use data_structure::FxHashMap;
 use ty::{Ty, TyVarId};
 
 pub struct Env<'ctx> {

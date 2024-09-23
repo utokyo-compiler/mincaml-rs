@@ -1,8 +1,8 @@
-use data_structure::{FxHashSet, SetLikeVec};
+use data_structure::{index::vec::IndexVec, FxHashSet, SetLikeVec};
 
 use crate::{
-    context::Context, ApplyKind, Closure, Expr, ExprKind, Function, Ident, LetBinding, Pattern,
-    Program, Typed,
+    context::Context, ApplyKind, ArgIndex, Closure, Expr, ExprKind, FnName, Function, Ident,
+    LetBinding, Pattern, Program, Typed,
 };
 
 /// The main entrypoint of closure conversion.
@@ -23,17 +23,17 @@ pub fn lowering<'ctx>(ctx: &'ctx Context<'ctx>, knorm_expr: ir_knorm::Expr<'ctx>
 
 #[derive(Default)]
 struct LoweringState<'ctx> {
-    decided_to_make_closure: FxHashSet<Ident<'ctx>>,
+    decided_to_make_closure: FxHashSet<FnName<'ctx>>,
     functions: Vec<Function<'ctx>>,
 }
 
 impl<'ctx> LoweringState<'ctx> {
-    fn decided_to_make_closure(&self, ident: &Ident<'ctx>) -> bool {
-        self.decided_to_make_closure.contains(ident)
+    fn decided_to_make_closure(&self, fn_name: &FnName<'ctx>) -> bool {
+        self.decided_to_make_closure.contains(fn_name)
     }
 
-    fn ack_decide_to_make_closure(&mut self, ident: Ident<'ctx>) {
-        self.decided_to_make_closure.insert(ident);
+    fn ack_decide_to_make_closure(&mut self, fn_name: FnName<'ctx>) {
+        self.decided_to_make_closure.insert(fn_name);
     }
 }
 
@@ -60,7 +60,7 @@ fn lowering_expr<'ctx>(
                 (value, follows)
             } else {
                 // LetRec
-                let fn_name = place.as_var().unwrap();
+                let fn_name = FnName::new_unchecked(place.as_var().unwrap().value);
                 let LetRecAnalysisResult {
                     did_fn_used_as_value,
                     fv_set,
@@ -73,9 +73,9 @@ fn lowering_expr<'ctx>(
                     // before `ack_decide_to_make_closure`.
                     state.ack_decide_to_make_closure(fn_name);
                 }
-                let fv_set: Vec<_> = fv_set.into_iter().collect();
+                let fv_set: IndexVec<_, _> = fv_set.into_iter().collect();
                 let func = Function {
-                    name: fn_name.value,
+                    name: fn_name,
                     args: args.clone(),
                     args_via_closure: fv_set.clone(),
                     body: lowering_expr(ctx, state, value),
@@ -94,24 +94,35 @@ fn lowering_expr<'ctx>(
                     ));
                     (value, follows)
                 } else {
+                    // the function is not used as a value and does not capture any variables
+
                     // remove the binding. Calling this function is allowed
                     // only if the `App` has `ApplyKind::Direct`, so we do not
                     // need to keep the binding.
                     return follows;
                 }
             };
-            ExprKind::Let(LetBinding { place, value }, follows)
+            ExprKind::Let(
+                LetBinding {
+                    pattern: place,
+                    value,
+                },
+                follows,
+            )
         }
         ir_knorm::ExprKind::Var(var) => ExprKind::Var(*var),
-        ir_knorm::ExprKind::App(f, args) => ExprKind::App(
-            if state.decided_to_make_closure(f) {
-                ApplyKind::Closure
-            } else {
-                ApplyKind::Direct
-            },
-            *f,
-            args.clone(),
-        ),
+        ir_knorm::ExprKind::App(f, args) => {
+            let fn_name = FnName::new_unchecked(f.value);
+            ExprKind::App(
+                if state.decided_to_make_closure(&fn_name) {
+                    ApplyKind::Closure
+                } else {
+                    ApplyKind::Direct
+                },
+                fn_name,
+                args.clone(),
+            )
+        }
         ir_knorm::ExprKind::Tuple(es) => ExprKind::Tuple(es.clone()),
         ir_knorm::ExprKind::ArrayMake(_, _) => todo!(),
         ir_knorm::ExprKind::Get(_, _) => todo!(),
@@ -126,13 +137,15 @@ struct LetRecAnalysisResult<'ctx> {
     ///
     /// The function name and the arguments are not included
     /// because they are bound by the binding.
-    /// `!did_fn_used_as_value && fv_set.is_empty()` is equivalent
+    ///
+    /// N.B. `!did_fn_used_as_value && fv_set.is_empty()` is equivalent
     /// to `fv_set.is_empty()` if we do not remove the function name
     /// `fn_name` from `fv_set` at the end of `analyze_let_rec`,
     /// but we remove it to make the process easier to understand.
     ///
-    /// N.B. This is not a free variable set of the `LetRec` expression
-    /// of `KNormal.t` in terms of the original reference.
+    /// This is not a free variable set of the `LetRec`
+    /// expression of `KNormal.t` in terms of the original reference.
+    ///
     /// This variable corresponds to `zts` defined in `Closure.g`.
     fv_set: SetLikeVec<Ident<'ctx>>,
 }
@@ -142,8 +155,8 @@ struct LetRecAnalysisResult<'ctx> {
 /// Original implementation tries closure conversion and reverts
 /// their mutable state if it fails (it is a bad idea in general
 /// to have side effects in computations that can be backtracked).
-/// In this implementation, we know whether closure conversion will fail
-/// by analyzing in advance.
+/// In this implementation, we know whether closure conversion
+/// will fail by analyzing in advance.
 fn analyze_let_rec<'ctx>(binding: &ir_knorm::LetBinding<'ctx>) -> LetRecAnalysisResult<'ctx> {
     let fn_name = binding.place.as_var().unwrap();
     let mut fv_set = SetLikeVec::default();
@@ -175,7 +188,7 @@ fn analyze_let_rec<'ctx>(binding: &ir_knorm::LetBinding<'ctx>) -> LetRecAnalysis
         visitor.visit_binding(binding);
 
         impl<'ctx, F: ir_knorm::FvVisitor<'ctx>> ir_knorm::Visitor<'ctx> for AnalysisVisitor<'ctx, F> {
-            fn visit_app(&mut self, e: &Ident<'ctx>, es: &Vec<Ident<'ctx>>) {
+            fn visit_app(&mut self, e: &Ident<'ctx>, es: &IndexVec<ArgIndex, Ident<'ctx>>) {
                 if *e != self.fn_name {
                     self.visit_ident(e);
                 }
@@ -203,7 +216,7 @@ fn analyze_let_rec<'ctx>(binding: &ir_knorm::LetBinding<'ctx>) -> LetRecAnalysis
     }
 
     LetRecAnalysisResult {
-        did_fn_used_as_value: fv_set.remove(&fn_name),
+        did_fn_used_as_value: fv_set.remove(&fn_name).is_some(),
         fv_set,
     }
 }

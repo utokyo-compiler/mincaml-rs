@@ -1,3 +1,4 @@
+use data_structure::index::vec::IndexVec;
 use sourcemap::Spanned;
 use ty::{context::CommonTypes, Ty, TyKind, TyVarId, Typed};
 
@@ -112,7 +113,7 @@ fn decide_ty<'ctx>(
                 for arg in let_binder.args() {
                     let ty = Ty::mk_ty_var(ctx);
                     let ident = name_res.define_in(inner_scope, arg, ty);
-                    typed_args.push(ctx.new_ident(ident));
+                    typed_args.push(ir_typed_ast::Ident::new(ctx.alloc_ident(ident)));
                 }
                 let typed_bound_value =
                     decide_ty(ctx, common_types, name_res, subst, let_binder.value())?;
@@ -125,14 +126,14 @@ fn decide_ty<'ctx>(
             let typed_place = match let_binder.place() {
                 syntax::Pattern::Var(var) => {
                     let ident = name_res.define_in(scope, *var, Ty::mk_ty_var(ctx));
-                    ir_typed_ast::Pattern::Var(ctx.new_ident(ident))
+                    ir_typed_ast::Pattern::Var(ir_typed_ast::Ident::new(ctx.alloc_ident(ident)))
                 }
                 syntax::Pattern::Tuple(vars) => {
                     let idents = vars
                         .iter()
                         .map(|var| {
                             let ident = name_res.define_in(scope, *var, Ty::mk_ty_var(ctx));
-                            ctx.new_ident(ident)
+                            ir_typed_ast::Ident::new(ctx.alloc_ident(ident))
                         })
                         .collect();
                     ir_typed_ast::Pattern::Tuple(idents)
@@ -146,7 +147,7 @@ fn decide_ty<'ctx>(
                 ir_typed_ast::ExprKind::Let(
                     ir_typed_ast::LetBinding {
                         place: typed_place,
-                        args: typed_args,
+                        args: IndexVec::from_raw_vec(typed_args),
                         value: typed_bound_value,
                     },
                     typed_follows,
@@ -163,7 +164,7 @@ fn decide_ty<'ctx>(
             let Some(typed_var) = name_res.get(*var) else {
                 return Err(Error::UnboundIdent(*var));
             };
-            let typed_var = ctx.new_ident(typed_var);
+            let typed_var = ir_typed_ast::Ident::new(ctx.alloc_ident(typed_var));
             (typed_var.ty, ir_typed_ast::ExprKind::Var(typed_var))
         }
         syntax::ExprKind::App(fun, args) => {
@@ -172,19 +173,25 @@ fn decide_ty<'ctx>(
             let ret_ty = Ty::mk_ty_var(ctx);
             let fun_ty = Ty::mk_fun(ctx, typed_args.iter().map(|e| e.ty).collect(), ret_ty);
             unify(subst, typed_fun.ty, fun_ty)?;
-            (ret_ty, ir_typed_ast::ExprKind::App(typed_fun, typed_args))
+            (
+                ret_ty,
+                ir_typed_ast::ExprKind::App(typed_fun, IndexVec::from_raw_vec(typed_args)),
+            )
         }
         syntax::ExprKind::Tuple(exprs) => {
             let typed_exprs = decide_ty_many(ctx, common_types, name_res, subst, exprs)?;
             let ty = Ty::mk_tuple(ctx, typed_exprs.iter().map(|e| e.ty).collect());
-            (ty, ir_typed_ast::ExprKind::Tuple(typed_exprs))
+            (
+                ty,
+                ir_typed_ast::ExprKind::Tuple(IndexVec::from_raw_vec(typed_exprs)),
+            )
         }
         syntax::ExprKind::ArrayMake(_, _) => todo!(),
         syntax::ExprKind::Get(_, _) => todo!(),
         syntax::ExprKind::Set(_, _, _) => todo!(),
     };
-    let e = ctx.new_expr(Typed::new(Spanned { node, span }, ty));
-    Ok(e)
+    let e = ctx.alloc_expr(Typed::new(Spanned { node, span }, ty));
+    Ok(ir_typed_ast::Expr::new(e))
 }
 
 fn decide_ty_many<'ctx>(
@@ -234,7 +241,7 @@ fn unify<'ctx>(
             if lhs_args.len() != rhs_args.len() {
                 return Err(Error::UnifyFailed(lhs, rhs));
             }
-            for (lhs_arg, rhs_arg) in lhs_args.iter().zip(rhs_args.iter()) {
+            for (lhs_arg, rhs_arg) in lhs_args.iter().zip(rhs_args) {
                 unify(subst, *lhs_arg, *rhs_arg)?;
             }
             unify(subst, *lhs_ret, *rhs_ret)

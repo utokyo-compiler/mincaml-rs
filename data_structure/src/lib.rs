@@ -1,5 +1,6 @@
 #![feature(hash_set_entry)]
 pub mod arena;
+pub mod index;
 pub mod interning;
 pub mod set_like_vec;
 

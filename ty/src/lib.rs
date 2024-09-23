@@ -3,13 +3,44 @@ pub mod context;
 use std::fmt::Debug;
 
 use context::TypingContext;
-use data_structure::interning::Interned;
+use data_structure::{
+    index::{
+        vec::{Idx, IndexVec},
+        Indexable,
+    },
+    interning::Interned,
+};
 
 /// Use this instead of `TyKind` whenever possible.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Ty<'ctx>(pub Interned<'ctx, TyKind<'ctx>>);
 
-type Tys<'ctx> = Vec<Ty<'ctx>>;
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+pub struct ArgIndex(usize);
+impl Idx for ArgIndex {
+    fn new(idx: usize) -> Self {
+        Self(idx)
+    }
+
+    fn index(self) -> usize {
+        self.0
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+pub struct TupleIndex(usize);
+impl Idx for TupleIndex {
+    fn new(idx: usize) -> Self {
+        Self(idx)
+    }
+
+    fn index(self) -> usize {
+        self.0
+    }
+}
+
+impl Indexable<ArgIndex> for Ty<'_> {}
+impl Indexable<TupleIndex> for Ty<'_> {}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TyKind<'ctx> {
@@ -17,8 +48,8 @@ pub enum TyKind<'ctx> {
     Bool,
     Int,
     Float,
-    Fun(Tys<'ctx>, Ty<'ctx>),
-    Tuple(Tys<'ctx>),
+    Fun(IndexVec<ArgIndex, Ty<'ctx>>, Ty<'ctx>),
+    Tuple(IndexVec<TupleIndex, Ty<'ctx>>),
     Array(Ty<'ctx>),
 
     /// A type variable.
@@ -83,15 +114,18 @@ impl<'ctx> Ty<'ctx> {
     #[inline(always)]
     pub fn mk_fun<Ident, Expr>(
         ctx: &TypingContext<'ctx, Ident, Expr>,
-        args: Tys<'ctx>,
+        args: Vec<Ty<'ctx>>,
         ret: Ty<'ctx>,
     ) -> Self {
-        Self::new(ctx, TyKind::Fun(args, ret))
+        Self::new(ctx, TyKind::Fun(IndexVec::from_raw_vec(args), ret))
     }
 
     #[inline(always)]
-    pub fn mk_tuple<Ident, Expr>(ctx: &TypingContext<'ctx, Ident, Expr>, tys: Tys<'ctx>) -> Self {
-        Self::new(ctx, TyKind::Tuple(tys))
+    pub fn mk_tuple<Ident, Expr>(
+        ctx: &TypingContext<'ctx, Ident, Expr>,
+        tys: Vec<Ty<'ctx>>,
+    ) -> Self {
+        Self::new(ctx, TyKind::Tuple(IndexVec::from_raw_vec(tys)))
     }
 
     #[inline(always)]

@@ -310,6 +310,10 @@ dependencies = [
 [[package]]
 name = "ir_asm_virtual"
 version = "0.1.0"
+dependencies = [
+ "data_structure",
+ "ir_closure",
+]
 
 [[package]]
 name = "ir_closure"
@@ -900,8 +904,8 @@ checksum = "42ff0bf0c66b8238c6f3b578df37d0b7848e55df8577b3f74f92a69acceeb825"
 name = "typing"
 version = "0.1.0"
 dependencies = [
+ "data_structure",
  "ir_typed_ast",
- "rustc-hash",
  "sourcemap",
  "syntax",
  "ty",

@@ -6,7 +6,7 @@ edition.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rustc-hash.workspace = true
+data_structure.workspace = true
 
 syntax.workspace = true
 ty.workspace = true

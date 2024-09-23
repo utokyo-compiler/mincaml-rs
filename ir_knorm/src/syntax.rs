@@ -1,8 +1,33 @@
-use data_structure::{arena::Box, interning::Interned};
+use data_structure::{
+    arena::Box,
+    index::{vec::IndexVec, Indexable},
+    interning::Interned,
+};
 
-pub use ir_typed_ast::{BinOp, DisambiguatedIdent, LitKind, Ty, Typed, UnOp};
+pub use ir_typed_ast::{ArgIndex, BinOp, DisambiguatedIdent, LitKind, TupleIndex, Ty, Typed, UnOp};
 
-pub type Ident<'ctx> = Interned<'ctx, Typed<'ctx, DisambiguatedIdent<'ctx>>>;
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+pub struct Ident<'ctx>(Interned<'ctx, Typed<'ctx, DisambiguatedIdent<'ctx>>>);
+
+impl<'ctx> Ident<'ctx> {
+    pub fn new(interned: Interned<'ctx, Typed<'ctx, DisambiguatedIdent<'ctx>>>) -> Self {
+        Self(interned)
+    }
+}
+
+impl<'ctx> std::ops::Deref for Ident<'ctx> {
+    type Target = Interned<'ctx, Typed<'ctx, DisambiguatedIdent<'ctx>>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'ctx> std::ops::DerefMut for Ident<'ctx> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 pub type Expr<'ctx> = Box<'ctx, TypedExprKind<'ctx>>;
 pub type TypedExprKind<'ctx> = Typed<'ctx, ExprKind<'ctx>>;
@@ -15,8 +40,8 @@ pub enum ExprKind<'ctx> {
     If(Ident<'ctx>, Expr<'ctx>, Expr<'ctx>),
     Let(LetBinding<'ctx>, Expr<'ctx>),
     Var(Ident<'ctx>),
-    App(Ident<'ctx>, Vec<Ident<'ctx>>),
-    Tuple(Vec<Ident<'ctx>>),
+    App(Ident<'ctx>, IndexVec<ArgIndex, Ident<'ctx>>),
+    Tuple(IndexVec<TupleIndex, Ident<'ctx>>),
     ArrayMake(Ident<'ctx>, Ident<'ctx>),
     Get(Ident<'ctx>, Ident<'ctx>),
     Set(Ident<'ctx>, Ident<'ctx>, Ident<'ctx>),
@@ -57,7 +82,7 @@ impl<'ctx> ExprKind<'ctx> {
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct LetBinding<'ctx> {
     pub place: Pattern<'ctx>,
-    pub args: Vec<Ident<'ctx>>,
+    pub args: IndexVec<ArgIndex, Ident<'ctx>>,
     pub value: Expr<'ctx>,
 }
 
@@ -65,7 +90,7 @@ impl<'ctx> LetBinding<'ctx> {
     pub fn let_var(place: Ident<'ctx>, value: Expr<'ctx>) -> Self {
         Self {
             place: Pattern::Var(place),
-            args: Vec::new(),
+            args: IndexVec::new(),
             value,
         }
     }
@@ -73,7 +98,7 @@ impl<'ctx> LetBinding<'ctx> {
         debug_assert!(value.ty.is_unit());
         Self {
             place: Pattern::Unit,
-            args: Vec::new(),
+            args: IndexVec::new(),
             value,
         }
     }
@@ -83,8 +108,11 @@ impl<'ctx> LetBinding<'ctx> {
 pub enum Pattern<'ctx> {
     Unit,
     Var(Ident<'ctx>),
-    Tuple(Vec<Ident<'ctx>>),
+    Tuple(IndexVec<TupleIndex, Ident<'ctx>>),
 }
+
+impl Indexable<ArgIndex> for Ident<'_> {}
+impl Indexable<TupleIndex> for Ident<'_> {}
 
 impl<'ctx> Pattern<'ctx> {
     pub fn as_var(&self) -> Option<Ident<'ctx>> {
