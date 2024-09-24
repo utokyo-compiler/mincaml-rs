@@ -1,44 +1,92 @@
-use data_structure::index::vec::{Idx, IndexVec};
+use core::range::Range;
+
+use data_structure::index::vec::IndexVec;
 
 use crate::{
-    builder, AbsCallingConv, ArgIndex, BasicBlock, BasicBlockData, Closure, Context,
-    DisambiguatedIdent, ExprKind, FnName, Ident, LitKind, Local, Place, ProjectionKind, StmtIndex,
-    StmtKind, TerminatorKind, Ty, Typed,
+    builder, AbsCallingConv, ArgIndex, BasicBlock, Branch, Closure, Context, DisambiguatedIdent,
+    ExprKind, FnName, LitKind, Local, MutVisitor, Place, ProjectionKind, StmtKind, TerminatorKind,
+    Ty, Typed,
 };
-
-use super::Lowering;
 
 #[derive(Default)]
 /// The state of the lowering process.
-pub(crate) struct State<'ctx> {
-    binders: Vec<Binder<'ctx>>,
+pub(crate) struct State {
+    binders: Vec<Binder>,
 }
 
-impl<'ctx> State<'ctx> {
-    fn with_one_binder(binder: Binder<'ctx>) -> Self {
+impl State {
+    pub fn with_return() -> Self {
+        Self::with_one_binder(Binder::FnReturn)
+    }
+
+    fn with_one_binder(binder: Binder) -> Self {
         Self {
             binders: vec![binder],
         }
     }
 
-    fn pop_innermost_binder(&mut self) -> Option<Binder<'ctx>> {
-        self.binders.pop()
+    fn pop_innermost_binder(&mut self) -> Binder {
+        self.binders.pop().expect("found an orphan bindee")
     }
 
-    fn push_binder(&mut self, binder: Binder<'ctx>) {
+    fn push_binder(&mut self, binder: Binder) {
         self.binders.push(binder);
     }
 }
 
-enum Binder<'ctx> {
-    LetBinding(ir_closure::Pattern<'ctx>),
+#[derive(Clone, Copy)]
+enum BindingPlace {
+    Discard,
+    Local(Local),
+}
+
+impl BindingPlace {
+    fn into_place(self) -> Place {
+        match self {
+            Self::Discard => Place::Discard,
+            Self::Local(local) => Place::Local(local),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+/// Generalized binding agent.
+enum Binder {
+    LetBinding {
+        /// The place to bind the expression to.
+        place: BindingPlace,
+    },
+
+    /// Bind the expression to the return value of the function.
     FnReturn,
+
+    /// Branch to the target basic block.
+    ///
+    /// The target block has only one argument at this point.
     Branch {
         /// The target basic block.
         target: BasicBlock,
     },
 }
 
+impl Binder {
+    fn to_if_arms_binder(self, bb_after_if: BasicBlock) -> Self {
+        match self {
+            Self::LetBinding { .. } => Self::Branch {
+                target: bb_after_if,
+            },
+            Self::FnReturn => Self::FnReturn,
+            Self::Branch { target } => {
+                // `If` expression in another `If` expression.
+                // In this case, we do not need to create a new block
+                // which confluences the inner two branches.
+                Self::Branch { target }
+            }
+        }
+    }
+}
+
+/// Generalized expression to be bound.
 enum Bindee<'ctx> {
     Expr {
         expr: ExprKind<'ctx>,
@@ -48,71 +96,101 @@ enum Bindee<'ctx> {
         calling_conv: AbsCallingConv,
         fn_name: FnName<'ctx>,
         args: IndexVec<ArgIndex, Local>,
+
+        /// return type of the function.
+        ty: Ty<'ctx>,
     },
 }
 
-impl<'ctx> Binder<'ctx> {
+impl Binder {
     /// Bind the given expression to the current binding.
-    ///
-    /// ### Returns
-    ///
-    /// If the binding is a `FnReturn` or `Branch`, the function returns
-    /// the created basic block. Otherwise, it returns `None`.
-    fn bind(
+    fn bind<'ctx>(
         self,
         ctx: &'ctx Context<'ctx>,
         builder: &mut builder::FunctionBuilder<'ctx>,
         bindee: Bindee<'ctx>,
-    ) -> Option<BasicBlock> {
+    ) {
         match self {
-            Binder::LetBinding(pattern) => {
-                match pattern {
-                    ir_closure::Pattern::Unit => {
+            Binder::LetBinding { place } => {
+                match bindee {
+                    Bindee::Expr { expr, ty } => {
                         builder.push_stmt(StmtKind::Assign {
-                            place: Place::Discard,
+                            place: place.into_place(),
                             value: ctx.new_expr(Typed::new(expr, ty)),
                         });
                     }
-                    ir_closure::Pattern::Var(var) => {
-                        let local = builder.get_local(var);
-                        builder.push_stmt(StmtKind::Assign {
-                            place: Place::Local(local),
-                            value: ctx.new_expr(Typed::new(expr, ty)),
+                    Bindee::Call {
+                        calling_conv,
+                        fn_name,
+                        args,
+                        ..
+                    } => {
+                        let target = builder.next_basic_block();
+                        builder.finish_block(TerminatorKind::Call {
+                            calling_conv,
+                            fn_name,
+                            args,
+                            branch: Branch {
+                                target,
+                                args: match place {
+                                    BindingPlace::Discard => IndexVec::new(),
+                                    BindingPlace::Local(local) => {
+                                        IndexVec::from_raw_vec(vec![local])
+                                    }
+                                },
+                            },
                         });
-                    }
-                    ir_closure::Pattern::Tuple(vars) => {
-                        let tuple_assign_rhs =
-                            evaluated_local(ctx, builder, "tuple_assign_rhs", expr, ty);
-                        for (tuple_index, var) in vars.into_iter_enumerated() {
-                            let local = builder.get_local(var);
-                            builder.push_stmt(StmtKind::Assign {
-                                place: Place::Local(local),
-                                value: ctx.new_expr(Typed::new(
-                                    ExprKind::Read(Place::Projection {
-                                        base: tuple_assign_rhs,
-                                        projection_kind: ProjectionKind::TupleIndex(tuple_index),
-                                    }),
-                                    ty,
-                                )),
-                            });
-                        }
                     }
                 };
-                None
             }
             Binder::FnReturn => {
+                let return_value = match bindee {
+                    Bindee::Expr { expr, ty } => ctx.new_expr(Typed::new(expr, ty)),
+                    Bindee::Call {
+                        calling_conv,
+                        fn_name,
+                        args,
+                        ty,
+                    } => {
+                        let call_result = new_local(ctx, builder, "call_result", ty);
+                        let target = builder.next_basic_block();
+                        builder.finish_block(TerminatorKind::Call {
+                            calling_conv,
+                            fn_name,
+                            args,
+                            branch: Branch::no_args(target),
+                        });
+                        builder.set_args(IndexVec::from_raw_vec(vec![call_result]));
+                        ctx.new_expr(Typed::new(ExprKind::Read(Place::Local(call_result)), ty))
+                    }
+                };
                 builder.push_stmt(StmtKind::Assign {
                     place: Place::Local(Local::RETURN_LOCAL),
-                    value: ctx.new_expr(Typed::new(expr, ty)),
+                    value: return_value,
                 });
-                Some(builder.finish_block(TerminatorKind::Return))
+                builder.finish_block(TerminatorKind::Return);
             }
-            Binder::Branch { target } => {
-                let branch_arg = evaluated_local(ctx, builder, "branch_arg", expr, ty);
-                let mut args = IndexVec::new();
-                args.push(branch_arg);
-                Some(builder.finish_block(TerminatorKind::Branch { target, args }))
-            }
+            Binder::Branch { target } => match bindee {
+                Bindee::Expr { expr, ty } => {
+                    let branch_arg = evaluated_local(ctx, builder, "branch_arg", expr, ty);
+                    let mut args = IndexVec::new();
+                    args.push(branch_arg);
+                    builder.finish_block(TerminatorKind::Branch(Branch { target, args }));
+                }
+                Bindee::Call {
+                    calling_conv,
+                    fn_name,
+                    args,
+                    ..
+                } => {
+                    builder.finish_block(TerminatorKind::Call {
+                        calling_conv,
+                        fn_name,
+                        args,
+                        branch: Branch::no_args(target),
+                    });
+                }
+            },
         }
     }
 }
@@ -158,18 +236,23 @@ fn evaluated_local<'ctx>(
     }
 }
 
-impl<'ctx> Lowering<'ctx> for ir_closure::Expr<'ctx> {
-    type Output = Option<BasicBlock>;
-    type State = State<'ctx>;
-
-    fn lower(
-        &self,
-        ctx: &'ctx Context<'ctx>,
-        builder: &mut builder::FunctionBuilder<'ctx>,
-        state: &mut Self::State,
-    ) -> Self::Output {
-        let ty = self.ty;
-        let expr = match self.kind() {
+/// Lower the given expression. The expression is lowered and bound to the current binding.
+///
+/// ### Returns
+///
+/// This function returns **the first basic block** terminated by this call.
+/// if exists. If this call does not terminate a block, it returns `None`.
+///
+/// The return value is used in the lowering of the `If` expression.
+pub fn lower_expr<'ctx>(
+    expr: &ir_closure::Expr<'ctx>,
+    ctx: &'ctx Context<'ctx>,
+    builder: &mut builder::FunctionBuilder<'ctx>,
+    state: &mut State,
+) {
+    let ty = expr.ty;
+    let bindee = 'bindee: {
+        let expr = match expr.kind() {
             // trivial cases
             ir_closure::ExprKind::Const(lit_kind) => ExprKind::Const(*lit_kind),
             ir_closure::ExprKind::Unary(un_op, e1) => {
@@ -214,13 +297,47 @@ impl<'ctx> Lowering<'ctx> for ir_closure::Expr<'ctx> {
 
             // stmt creation
             ir_closure::ExprKind::Let(ir_closure::LetBinding { pattern, value }, follows) => {
-                state.push_binder(Binder::LetBinding(pattern.clone()));
-                value.lower(ctx, builder, state);
+                match pattern {
+                    ir_closure::Pattern::Unit => {
+                        state.push_binder(Binder::LetBinding {
+                            place: BindingPlace::Discard,
+                        });
+                        lower_expr(value, ctx, builder, state);
+                    }
+                    ir_closure::Pattern::Var(var) => {
+                        let local = builder.get_local(*var);
+                        state.push_binder(Binder::LetBinding {
+                            place: BindingPlace::Local(local),
+                        });
+                        lower_expr(value, ctx, builder, state);
+                    }
+                    ir_closure::Pattern::Tuple(vars) => {
+                        let tuple_assign_rhs = new_local(ctx, builder, "tuple_assign_rhs", ty);
+                        state.push_binder(Binder::LetBinding {
+                            place: BindingPlace::Local(tuple_assign_rhs),
+                        });
+                        lower_expr(value, ctx, builder, state);
+                        for (tuple_index, var) in vars.iter_enumerated() {
+                            let local = builder.get_local(*var);
+                            builder.push_stmt(StmtKind::Assign {
+                                place: Place::Local(local),
+                                value: ctx.new_expr(Typed::new(
+                                    ExprKind::Read(Place::Projection {
+                                        base: tuple_assign_rhs,
+                                        projection_kind: ProjectionKind::TupleIndex(tuple_index),
+                                    }),
+                                    ty,
+                                )),
+                            });
+                        }
+                    }
+                }
                 // At this point, the value has been bound to the pattern.
 
                 // Continue lowering the following expression.
                 // Nested `Let` structures are fully handled by this recursive call.
-                return follows.lower(ctx, builder, state);
+                lower_expr(follows, ctx, builder, state);
+                return;
             }
             ir_closure::ExprKind::Set(base, displacement, value) => {
                 let ty = value.ty;
@@ -240,64 +357,76 @@ impl<'ctx> Lowering<'ctx> for ir_closure::Expr<'ctx> {
             }
 
             // basic-block creation
-            ir_closure::ExprKind::If(e1, e2, e3) => {
-                let bb_dummy = BasicBlock::ENTRY_BLOCK;
-                let condition = builder.get_local(*e1);
-                let bb_before_if = builder.finish_block(TerminatorKind::ConditionalBranch {
-                    condition,
-                    targets: [bb_dummy, bb_dummy],
-                });
-                let innermost_binder = state.pop_innermost_binder().unwrap();
-                let bb_true_block = e2
-                    .lower(
-                        ctx,
-                        builder,
-                        &mut State::with_one_binder(Binder::Branch { target: bb_dummy }),
-                    )
-                    .unwrap();
-                let bb_false_block = e3
-                    .lower(
-                        ctx,
-                        builder,
-                        &mut State::with_one_binder(Binder::Branch { target: bb_dummy }),
-                    )
-                    .unwrap();
-                // Remove the dummy.
-                *builder.basic_blocks_mut()[bb_before_if]
-                    .terminator
-                    .as_mut_conditional_branch_targets()
-                    .unwrap() = [bb_true_block, bb_false_block];
-                let bb_after_if = builder.next_basic_block();
-                *builder.basic_blocks_mut()[bb_true_block]
-                    .terminator
-                    .as_mut_branch_target()
-                    .unwrap() = bb_after_if;
-                *builder.basic_blocks_mut()[bb_false_block]
-                    .terminator
-                    .as_mut_branch_target()
-                    .unwrap() = bb_after_if;
-                return None;
-            }
             ir_closure::ExprKind::App(apply_kind, fn_name, args) => {
                 let args = args
                     .iter()
                     .map(|arg| builder.get_local(*arg))
                     .collect::<IndexVec<_, _>>();
-                let innermost_binder = state.pop_innermost_binder().unwrap();
-                return innermost_binder.bind(
-                    ctx,
-                    builder,
-                    Bindee::Call {
-                        calling_conv: *apply_kind,
-                        fn_name: *fn_name,
-                        args,
-                    },
+                break 'bindee Bindee::Call {
+                    calling_conv: *apply_kind,
+                    fn_name: *fn_name,
+                    args,
+                    ty,
+                };
+            }
+            ir_closure::ExprKind::If(e1, e2, e3) => {
+                // In general, it's not a good idea to type invalid
+                // values, but it makes it easier to see the flow here.
+                let bb_dummy = BasicBlock::ENTRY_BLOCK;
+
+                let condition = builder.get_local(*e1);
+                let bb_before_if = builder.finish_block(TerminatorKind::ConditionalBranch {
+                    condition,
+                    targets: [bb_dummy, bb_dummy],
+                });
+                let binder_of_if = state.pop_innermost_binder();
+                let new_binder = binder_of_if.to_if_arms_binder(bb_dummy);
+
+                let bb_true_block = builder.next_basic_block();
+                lower_expr(e2, ctx, builder, &mut State::with_one_binder(new_binder));
+
+                let bb_false_block = builder.next_basic_block();
+                lower_expr(e3, ctx, builder, &mut State::with_one_binder(new_binder));
+
+                let bb_after_if = builder.next_basic_block();
+                if let Binder::LetBinding {
+                    place: BindingPlace::Local(local),
+                } = binder_of_if
+                {
+                    builder.set_args(IndexVec::from_raw_vec(vec![local]));
+                }
+
+                // Remove the dummy.
+                *builder.basic_blocks_mut()[bb_before_if]
+                    .terminator
+                    .as_mut_conditional_branch_targets()
+                    .unwrap() = [bb_true_block, bb_false_block];
+                struct RemoveDummy {
+                    bb_dummy: BasicBlock,
+                    target: BasicBlock,
+                }
+                impl MutVisitor<'_> for RemoveDummy {
+                    fn visit_basic_block(&mut self, basic_block: &mut BasicBlock) {
+                        if basic_block == &self.bb_dummy {
+                            *basic_block = self.target;
+                        }
+                    }
+                }
+                RemoveDummy {
+                    bb_dummy,
+                    target: bb_after_if,
+                }
+                .super_ranged_block_data(
+                    builder.basic_blocks_mut(),
+                    Range::from(bb_true_block..bb_after_if),
                 );
+                return;
             }
         };
-        // We have reached the block tail expression.
-        // Simply bind it to the current binding.
-        let innermost_binder = state.pop_innermost_binder().unwrap();
-        innermost_binder.bind(ctx, builder, Bindee::Expr { expr, ty })
-    }
+        Bindee::Expr { expr, ty }
+    };
+    // We have reached the block tail expression or a call.
+    // Simply bind it to the current binding.
+    let innermost_binder = state.pop_innermost_binder();
+    innermost_binder.bind(ctx, builder, bindee)
 }

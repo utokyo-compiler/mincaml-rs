@@ -1,3 +1,4 @@
+use core::range::Range;
 use std::ops::{Index, IndexMut};
 
 use super::Indexable;
@@ -85,6 +86,13 @@ impl<I: Idx, T: Indexable<I>> IndexVec<I, T> {
             .enumerate()
             .map(|(idx, value)| (I::new(idx), value))
     }
+
+    pub fn iter_enumerated(&self) -> impl DoubleEndedIterator<Item = (I, &'_ T)> {
+        self.data
+            .iter()
+            .enumerate()
+            .map(|(idx, value)| (I::new(idx), value))
+    }
 }
 
 impl<I: Idx, T: Indexable<I>> Default for IndexVec<I, T> {
@@ -101,9 +109,23 @@ impl<I: Idx, T: Indexable<I>> Index<I> for IndexVec<I, T> {
     }
 }
 
+impl<I: Idx, T: Indexable<I>> Index<Range<I>> for IndexVec<I, T> {
+    type Output = [T];
+
+    fn index(&self, index: Range<I>) -> &Self::Output {
+        &self.data[index.start.index()..index.end.index()]
+    }
+}
+
 impl<I: Idx, T: Indexable<I>> IndexMut<I> for IndexVec<I, T> {
     fn index_mut(&mut self, index: I) -> &mut Self::Output {
         &mut self.data[index.index()]
+    }
+}
+
+impl<I: Idx, T: Indexable<I>> IndexMut<Range<I>> for IndexVec<I, T> {
+    fn index_mut(&mut self, index: Range<I>) -> &mut Self::Output {
+        &mut self.data[index.start.index()..index.end.index()]
     }
 }
 

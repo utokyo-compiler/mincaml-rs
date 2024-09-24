@@ -55,6 +55,7 @@ pub struct Function<'ctx> {
     /// are required to evaluate the function body.
     pub args_via_closure: Range<Local>,
 
+    /// The body of the function as a control-flow graph.
     pub basic_blocks: IndexVec<BasicBlock, BasicBlockData<'ctx>>,
 }
 
@@ -127,6 +128,7 @@ impl Indexable<StmtIndex> for StmtKind<'_> {}
 pub enum StmtKind<'ctx> {
     /// No operation. Useful for removing statements.
     Nop,
+
     /// Assign a value to a place.
     Assign { place: Place, value: Expr<'ctx> },
 }
@@ -158,11 +160,8 @@ pub enum TerminatorKind<'ctx> {
     ///
     /// DO NOT forget to count `args` as a use of the operands of the source block.
     ///
-    /// See also: https://mlir.llvm.org/docs/Dialects/ControlFlowDialect/#cfcond_br-cfcondbranchop
-    Branch {
-        target: BasicBlock,
-        args: IndexVec<ArgIndex, Local>,
-    },
+    /// See also: https://mlir.llvm.org/docs/Dialects/ControlFlowDialect/#cfbr-cfbranchop
+    Branch(Branch),
 
     /// Conditional branch.
     ///
@@ -182,16 +181,32 @@ pub enum TerminatorKind<'ctx> {
         calling_conv: AbsCallingConv,
         fn_name: FnName<'ctx>,
         args: IndexVec<ArgIndex, Local>,
-        destination: Place,
-        /// The block to branch to after the call.
-        target: BasicBlock,
+        /// The block to branch to after the call and
+        /// the destination place for the return value.
+        branch: Branch,
     },
 }
 
+#[derive(Debug, PartialEq, Eq, Hash)]
+/// See [TerminatorKind::Branch].
+pub struct Branch {
+    pub target: BasicBlock,
+    pub args: IndexVec<ArgIndex, Local>,
+}
+
+impl Branch {
+    pub fn no_args(target: BasicBlock) -> Self {
+        Self {
+            target,
+            args: IndexVec::new(),
+        }
+    }
+}
+
 impl<'ctx> TerminatorKind<'ctx> {
-    pub fn as_mut_branch_target(&mut self) -> Option<&mut BasicBlock> {
+    pub fn as_mut_branch(&mut self) -> Option<&mut Branch> {
         match self {
-            Self::Branch { target, .. } => Some(target),
+            Self::Branch(target) => Some(target),
             _ => None,
         }
     }

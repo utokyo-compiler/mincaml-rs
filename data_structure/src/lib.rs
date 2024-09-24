@@ -1,4 +1,5 @@
 #![feature(hash_set_entry)]
+#![feature(new_range_api)]
 pub mod arena;
 pub mod index;
 pub mod interning;

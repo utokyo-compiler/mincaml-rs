@@ -51,7 +51,7 @@ impl<'ctx> FunctionBuilder<'ctx> {
         name: FnName<'ctx>,
         args: impl Iterator<Item = Ident<'ctx>>,
         args_via_closure: impl Iterator<Item = Ident<'ctx>>,
-        ty: Ty<'ctx>,
+        return_ty: Ty<'ctx>,
     ) -> Self {
         let mut local_decls = IndexVec::default();
         let mut seen_idents = SetLikeVec::default();
@@ -64,7 +64,7 @@ impl<'ctx> FunctionBuilder<'ctx> {
                     "return_place",
                     COMPILER_GENERATED_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
                 ),
-                ty,
+                return_ty,
             )),
         });
 
@@ -104,6 +104,9 @@ impl<'ctx> FunctionBuilder<'ctx> {
         }
     }
 
+    /// Finish current basic block and start a new one.
+    ///
+    /// Returns the finished block.
     pub fn finish_block(&mut self, terminator: TerminatorKind<'ctx>) -> BasicBlock {
         let basic_block_data =
             std::mem::take(&mut self.basic_block_builder).finish_block(terminator);
@@ -114,8 +117,20 @@ impl<'ctx> FunctionBuilder<'ctx> {
         self.basic_blocks.push(data)
     }
 
+    /// Get a local variable by its identifier.
+    ///
+    /// If the identifier is not seen before, it will be added
+    /// to the local declarations.
     pub fn get_local(&mut self, ident: Ident<'ctx>) -> Local {
-        get_local(&mut self.seen_idents, &mut self.local_decls, ident)
+        if let Some(index) = self.seen_idents.get(&ident) {
+            return Local::new(index);
+        }
+        self.seen_idents.insert(ident);
+        self.local_decls.push(LocalDecl { ident })
+    }
+
+    pub fn set_args(&mut self, args: IndexVec<ArgIndex, Local>) {
+        self.basic_block_builder.set_args(args)
     }
 
     pub fn push_stmt(&mut self, value: StmtKind<'ctx>) -> StmtIndex {
@@ -129,16 +144,4 @@ impl<'ctx> FunctionBuilder<'ctx> {
     pub fn basic_blocks_mut(&mut self) -> &mut IndexVec<BasicBlock, BasicBlockData<'ctx>> {
         &mut self.basic_blocks
     }
-}
-
-fn get_local<'ctx>(
-    seen_idents: &mut SetLikeVec<Ident<'ctx>>,
-    local_decls: &mut IndexVec<Local, LocalDecl<'ctx>>,
-    ident: Ident<'ctx>,
-) -> Local {
-    if let Some(index) = seen_idents.get(&ident) {
-        return Local::new(index);
-    }
-    seen_idents.insert(ident);
-    local_decls.push(LocalDecl { ident })
 }
