@@ -29,6 +29,9 @@ impl State {
         self.binders.pop().expect("found an orphan bindee")
     }
 
+    /// Add a new binder to the current binding.
+    ///
+    /// Nested `Let` structures are fully handled by this stack structure.
     fn push_binder(&mut self, binder: Binder) {
         self.binders.push(binder);
     }
@@ -330,7 +333,6 @@ pub fn lower_expr<'ctx>(
                 // At this point, the value has been bound to the pattern.
 
                 // Continue lowering the following expression.
-                // Nested `Let` structures are fully handled by this recursive call.
                 lower_expr(follows, ctx, builder, state);
                 return;
             }
