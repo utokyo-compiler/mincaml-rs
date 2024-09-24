@@ -15,10 +15,15 @@ pub type Context<'ctx> = ty::context::TypingContext<
 pub enum Error<'ctx> {
     /// Cannot unify these two types.
     UnifyFailed(Ty<'ctx>, Ty<'ctx>),
+
     /// The type variable occurs in the type.
     OccurckFailed(TyVarId, Ty<'ctx>),
+
     /// Unbound identifier.
     UnboundIdent(syntax::Ident<'ctx>),
+
+    /// Invalid syntax.
+    InvalidSyntax(sourcemap::Span),
 }
 
 /// The main entry point for type checking.
@@ -186,9 +191,33 @@ fn decide_ty<'ctx>(
                 ir_typed_ast::ExprKind::Tuple(IndexVec::from_raw_vec(typed_exprs)),
             )
         }
-        syntax::ExprKind::ArrayMake(_, _) => todo!(),
-        syntax::ExprKind::Get(_, _) => todo!(),
-        syntax::ExprKind::Set(_, _, _) => todo!(),
+        syntax::ExprKind::ArrayMake(e1, e2) => {
+            let e1 = decide_ty(ctx, common_types, name_res, subst, e1)?;
+            let e2 = decide_ty(ctx, common_types, name_res, subst, e2)?;
+            unify(subst, e1.ty, common_types.int)?;
+            let ty = Ty::mk_array(ctx, e2.ty);
+            (ty, ir_typed_ast::ExprKind::ArrayMake(e1, e2))
+        }
+        syntax::ExprKind::Get(e1, e2) => {
+            let e1 = decide_ty(ctx, common_types, name_res, subst, e1)?;
+            let e2 = decide_ty(ctx, common_types, name_res, subst, e2)?;
+            let ty = Ty::mk_ty_var(ctx);
+            unify(subst, e1.ty, Ty::mk_array(ctx, ty))?;
+            unify(subst, e2.ty, common_types.int)?;
+            (ty, ir_typed_ast::ExprKind::Get(e1, e2))
+        }
+        syntax::ExprKind::Set(e1, e3) => {
+            // We restrict the form of `e1` to be `Get(e1, e2)` here.
+            let syntax::ExprKind::Get(e1, e2) = &e1.node else {
+                return Err(Error::InvalidSyntax(*e1.span.as_user_defined().unwrap()));
+            };
+            let e1 = decide_ty(ctx, common_types, name_res, subst, e1)?;
+            let e2 = decide_ty(ctx, common_types, name_res, subst, e2)?;
+            let e3 = decide_ty(ctx, common_types, name_res, subst, e3)?;
+            unify(subst, e1.ty, Ty::mk_array(ctx, e3.ty))?;
+            unify(subst, e2.ty, common_types.int)?;
+            (common_types.unit, ir_typed_ast::ExprKind::Set(e1, e2, e3))
+        }
     };
     let e = ctx.alloc_expr(Typed::new(Spanned { node, span }, ty));
     Ok(ir_typed_ast::Expr::new(e))

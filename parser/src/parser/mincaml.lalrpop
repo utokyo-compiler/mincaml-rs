@@ -88,7 +88,7 @@ SimpleExpr: Expr<'ctx> = {
     <l:@L> <s:SimpleExpr> "." "(" <x:Expr> ")" <r:@R> => alloc.spanned(Get(s, x), (l, r)),
 }
 
-AboveIf: Expr<'ctx> = {
+pub Expr: Expr<'ctx> = {
     #[precedence(level="0")]
     SimpleExpr,
 
@@ -96,65 +96,60 @@ AboveIf: Expr<'ctx> = {
     #[precedence(level="1")]
     <l:@L> <e1:SimpleExpr> <e2:ActualArgs> <r:@R>
         => alloc.spanned(App(e1, e2), (l, r)),
-    <l:@L> "Array.make" <e1:SimpleExpr> <e2:AboveIf> <r:@R>
+    <l:@L> "Array.make" <e1:SimpleExpr> <e2:Expr> <r:@R>
         => alloc.spanned(ArrayMake(e1, e2), (l, r)),
     <l:@L> "not" <e1:SimpleExpr> <r:@R>
         => alloc.spanned(Unary(Not, e1), (l, r)),
 
     // -
     #[precedence(level="2")]
-    <l:@L> "-" <e1:AboveIf> <r:@R>
+    <l:@L> "-" <e1:Expr> <r:@R>
         => alloc.spanned(Unary(Neg, e1), (l, r)),
 
     // -.
-    <l:@L> "-." <e1:AboveIf> <r:@R>
+    <l:@L> "-." <e1:Expr> <r:@R>
         => alloc.spanned(Unary(FNeg, e1), (l, r)),
 
     // * *. /.
     #[precedence(level="3")]
     #[assoc(side="left")]
-    <l:@L> <e1:AboveIf> <op:FactorOp> <e2:AboveIf> <r:@R>
+    <l:@L> <e1:Expr> <op:FactorOp> <e2:Expr> <r:@R>
         => alloc.spanned(Binary(op, e1, e2), (l, r)),
 
     // + - +. -.
     #[precedence(level="4")]
     #[assoc(side="left")]
-    <l:@L> <e1:AboveIf> <op:TermOp> <e2:AboveIf> <r:@R>
+    <l:@L> <e1:Expr> <op:TermOp> <e2:Expr> <r:@R>
         => alloc.spanned(Binary(op, e1, e2), (l, r)),
 
     // = <> < > <= >=
     #[precedence(level="5")]
     #[assoc(side="left")]
-    <l:@L> <e1:AboveIf> <op:BooleanBinOp> <e2:AboveIf> <r:@R>
+    <l:@L> <e1:Expr> <op:BooleanBinOp> <e2:Expr> <r:@R>
         => alloc.spanned(Binary(op, e1, e2), (l, r)),
 
     // .() <-
     #[precedence(level="6")]
-    <l:@L> <e1:SimpleExpr> "." "(" <e2:Expr> ")" "<-" <e3:If> <r:@R>
-        => alloc.spanned(Set(e1, e2, e3), (l, r)),
-}
+    <l:@L> <e1:SimpleExpr> "<-" <e2:Expr> <r:@R>
+        => alloc.spanned(Set(e1, e2), (l, r)),
 
-If: Expr<'ctx> = {
-    AboveIf,
-    // if (restricted)
-    <l:@L> "if" <e1:Expr> "then" <e2:Expr> "else" <e3:If> <r:@R>
+    // if
+    #[precedence(level="7")]
+    <l:@L> "if" <e1:Expr> "then" <e2:Expr> "else" <e3:Expr> <r:@R>
         => alloc.spanned(If(e1, e2, e3), (l, r)),
-}
 
-// trick, 'let ...' has lowest prec but begins with the keyword "let"
-// which distinguishs them from Expr -> Expr ';' Expr
-BelowIf: Expr<'ctx> = {
-    If,
+    // semicolon
+    #[precedence(level="8")]
+    #[assoc(side="right")]
+    <l:@L> <e1:Expr> ";" <e2:Expr> <r:@R> => alloc.spanned(
+        Then(e1, e2),
+        (l, r)
+    ),
+
+    // let
+    #[precedence(level="9")]
     <l:@L> "let" <binder:LetBinder> "in" <e:Expr> <r:@R>
         => alloc.spanned(Let(binder, e), (l, r)),
-    // if (complement)
-    <l1:@L> "if" <e1:Expr> "then" <e2:Expr> "else"
-        <l2:@L> "let" <binder:LetBinder> "in" <e3:Expr> <r:@R>
-        => alloc.spanned(If(
-            e1,
-            e2,
-            alloc.spanned(Let(binder, e3), (l2, r))
-        ), (l1, r)),
 }
 
 LetBinder: LetBinder<'ctx> = {
@@ -164,19 +159,9 @@ LetBinder: LetBinder<'ctx> = {
     "rec" <x:SpannedIdent> <arg:FormalArgs> "=" <val:Expr>
         => LetBinder::let_rec(x, arg, val),
 
-    "(" <p:Pat> ")" "=" <val:Expr>
+    <p:Pat> "=" <val:Expr>
         => LetBinder::let_tuple(p, val),
 }
-
-SemiSeq: Expr<'ctx> = {
-    BelowIf,
-    <l:@L> <e1:If> ";" <e2:SemiSeq> <r:@R> => alloc.spanned(
-        Then(e1, e2),
-        (l, r)
-    ),
-}
-
-pub Expr: Expr<'ctx> = SemiSeq;
 
 FormalArgs: Vec<Spanned<Ident<'ctx>>> = {
     <mut a:FormalArgs> <ident:SpannedIdent> => {
@@ -202,10 +187,15 @@ Elems: Vec<Expr<'ctx>> = {
     <i1:Expr> "," <i2:Expr> => vec![i1, i2],
 }
 
-Pat: Vec<Spanned<Ident<'ctx>>> = {
-    <mut a:Pat> "," <ident:SpannedIdent> => {
+PatRaw: Vec<Spanned<Ident<'ctx>>> = {
+    <mut a:PatRaw> "," <ident:SpannedIdent> => {
         a.push(ident);
         a
     },
-    SpannedIdent => vec![<>],
+    <ident1:SpannedIdent> "," <ident2:SpannedIdent> => vec![ident1, ident2],
+}
+
+Pat: Vec<Spanned<Ident<'ctx>>> = {
+    PatRaw,
+    "(" <p:PatRaw> ")" => p,
 }

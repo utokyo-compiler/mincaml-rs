@@ -38,9 +38,7 @@ pub enum ExprKind<'ctx> {
     ),
     Set(
         Expr<'ctx>,
-        // .( ,
-        Expr<'ctx>,
-        // ) <- ,
+        // <- ,
         Expr<'ctx>,
     ),
 }
