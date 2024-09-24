@@ -438,6 +438,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "data_structure",
+ "ir_asm_virtual",
  "ir_closure",
  "ir_knorm",
  "ir_typed_ast",
@@ -462,6 +463,7 @@ name = "middleware"
 version = "0.1.0"
 dependencies = [
  "data_structure",
+ "ir_asm_virtual",
  "ir_closure",
  "ir_knorm",
  "ir_typed_ast",

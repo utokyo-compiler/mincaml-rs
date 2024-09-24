@@ -12,5 +12,7 @@ pub fn run(input: &str) {
     )
     .unwrap();
     let knorm_tree = ir_knorm::lowering(global_ctxt.knorm_context(), typed_tree);
-    let _closure_tree = ir_closure::lowering(global_ctxt.closure_context(), knorm_tree);
+    let closure_prog = ir_closure::lowering(global_ctxt.closure_context(), knorm_tree);
+    let _asm_virtual_prog =
+        ir_asm_virtual::lowering(global_ctxt.asm_virtual_context(), closure_prog);
 }

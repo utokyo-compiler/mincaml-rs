@@ -14,7 +14,7 @@ use crate::{
 /// 3. 2. is a problem that should be handled by an optimization pass
 pub fn lowering<'ctx>(ctx: &'ctx Context<'ctx>, knorm_expr: ir_knorm::Expr<'ctx>) -> Program<'ctx> {
     let mut state = LoweringState::default();
-    let main = lowering_expr(ctx, &mut state, &knorm_expr);
+    let main = lower_expr(ctx, &mut state, &knorm_expr);
     Program {
         functions: state.functions,
         main,
@@ -37,7 +37,7 @@ impl<'ctx> LoweringState<'ctx> {
     }
 }
 
-fn lowering_expr<'ctx>(
+fn lower_expr<'ctx>(
     ctx: &'ctx Context<'ctx>,
     state: &mut LoweringState<'ctx>,
     knorm_expr: &ir_knorm::Expr<'ctx>,
@@ -48,8 +48,8 @@ fn lowering_expr<'ctx>(
         ir_knorm::ExprKind::Binary(bin_op, e1, e2) => ExprKind::Binary(*bin_op, *e1, *e2),
         ir_knorm::ExprKind::If(interned, e1, e2) => ExprKind::If(
             *interned,
-            lowering_expr(ctx, state, e1),
-            lowering_expr(ctx, state, e2),
+            lower_expr(ctx, state, e1),
+            lower_expr(ctx, state, e2),
         ),
         ir_knorm::ExprKind::Let(
             binding @ ir_knorm::LetBinding {
@@ -62,8 +62,8 @@ fn lowering_expr<'ctx>(
             let pattern = pattern.clone();
             let (value, follows) = if args.is_empty() {
                 // Let or LetTuple
-                let value = lowering_expr(ctx, state, value);
-                let follows = lowering_expr(ctx, state, follows);
+                let value = lower_expr(ctx, state, value);
+                let follows = lower_expr(ctx, state, follows);
                 (value, follows)
             } else {
                 // LetRec
@@ -76,7 +76,7 @@ fn lowering_expr<'ctx>(
                 let decide_to_make_closure = did_fn_used_as_value || !fv_set.is_empty();
 
                 if decide_to_make_closure {
-                    // DO NOT call `lowering_expr` on `body`
+                    // DO NOT call `lower_expr` on `body`
                     // before `ack_decide_to_make_closure`.
                     state.ack_decide_to_make_closure(fn_name);
                 }
@@ -85,11 +85,11 @@ fn lowering_expr<'ctx>(
                     name: fn_name,
                     args: args.clone(),
                     args_via_closure: fv_set.clone(),
-                    body: lowering_expr(ctx, state, value),
+                    body: lower_expr(ctx, state, value),
                 };
                 state.functions.push(func);
 
-                let follows = lowering_expr(ctx, state, follows);
+                let follows = lower_expr(ctx, state, follows);
 
                 if state.decided_to_make_closure(&fn_name) {
                     let value = ctx.new_expr(Typed::new(

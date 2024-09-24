@@ -19,4 +19,5 @@ typing.workspace = true
 ir_typed_ast.workspace = true
 ir_knorm.workspace = true
 ir_closure.workspace = true
+ir_asm_virtual.workspace = true
 middleware.workspace = true

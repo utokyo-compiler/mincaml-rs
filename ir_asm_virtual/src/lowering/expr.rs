@@ -236,14 +236,9 @@ fn evaluated_local<'ctx>(
     }
 }
 
-/// Lower the given expression. The expression is lowered and bound to the current binding.
+/// Lower the given expression.
 ///
-/// ### Returns
-///
-/// This function returns **the first basic block** terminated by this call.
-/// if exists. If this call does not terminate a block, it returns `None`.
-///
-/// The return value is used in the lowering of the `If` expression.
+/// The expression is lowered and bound to the current binding.
 pub fn lower_expr<'ctx>(
     expr: &ir_closure::Expr<'ctx>,
     ctx: &'ctx Context<'ctx>,

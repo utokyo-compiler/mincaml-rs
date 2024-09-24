@@ -13,6 +13,7 @@ pub struct Arena<'ctx> {
     typed_expr: TypedArena<ir_typed_ast::TypedExprKind<'ctx>>,
     knorm_expr: TypedArena<ir_knorm::TypedExprKind<'ctx>>,
     closure_expr: TypedArena<ir_closure::TypedExprKind<'ctx>>,
+    asm_virtual_expr: TypedArena<ir_asm_virtual::TypedExprKind<'ctx>>,
 }
 
 pub struct GlobalContext<'ctx> {
@@ -20,6 +21,7 @@ pub struct GlobalContext<'ctx> {
     typing_context: typing::Context<'ctx>,
     knorm_context: ir_knorm::Context<'ctx>,
     closure_context: ir_closure::Context<'ctx>,
+    asm_virtual_context: ir_asm_virtual::Context<'ctx>,
     pub common_types: CommonTypes<'ctx>,
 }
 
@@ -30,12 +32,15 @@ impl<'ctx> GlobalContext<'ctx> {
             typing::Context::new(&arena.type_, &arena.typed_ident, &arena.typed_expr);
         let knorm_context = ir_knorm::Context::new(&arena.typed_ident, &arena.knorm_expr);
         let closure_context = ir_closure::Context::new(&arena.closure_expr);
+        let asm_virtual_context =
+            ir_asm_virtual::Context::new(&arena.typed_ident, &arena.asm_virtual_expr);
         Self {
             common_types: CommonTypes::new(&typing_context),
             parsing_context,
             typing_context,
             knorm_context,
             closure_context,
+            asm_virtual_context,
         }
     }
 
@@ -53,5 +58,9 @@ impl<'ctx> GlobalContext<'ctx> {
 
     pub fn closure_context(&self) -> &ir_closure::Context<'ctx> {
         &self.closure_context
+    }
+
+    pub fn asm_virtual_context(&self) -> &ir_asm_virtual::Context<'ctx> {
+        &self.asm_virtual_context
     }
 }

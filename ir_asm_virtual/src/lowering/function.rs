@@ -2,6 +2,7 @@ use crate::{builder::FunctionBuilder, Context, Function};
 
 use super::expr::{lower_expr, State};
 
+/// Lower the given function.
 pub fn lower_function<'ctx>(
     ir_closure::Function {
         name,
