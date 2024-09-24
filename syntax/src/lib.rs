@@ -100,15 +100,15 @@ pub enum LitKind {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct LetBinder<'ctx> {
-    place: Pattern<'ctx>,
+    pattern: Pattern<'ctx>,
     args: Vec<Spanned<Ident<'ctx>>>,
     value: Expr<'ctx>,
 }
 
 impl<'ctx> LetBinder<'ctx> {
-    pub fn let_var(place: Spanned<Ident<'ctx>>, value: Expr<'ctx>) -> Self {
+    pub fn let_var(pattern: Spanned<Ident<'ctx>>, value: Expr<'ctx>) -> Self {
         Self {
-            place: Pattern::Var(place),
+            pattern: Pattern::Var(pattern),
             args: Vec::new(),
             value,
         }
@@ -120,22 +120,22 @@ impl<'ctx> LetBinder<'ctx> {
         value: Expr<'ctx>,
     ) -> Self {
         Self {
-            place: Pattern::Var(name),
+            pattern: Pattern::Var(name),
             args,
             value,
         }
     }
 
-    pub fn let_tuple(place: Vec<Spanned<Ident<'ctx>>>, value: Expr<'ctx>) -> Self {
+    pub fn let_tuple(pattern: Vec<Spanned<Ident<'ctx>>>, value: Expr<'ctx>) -> Self {
         Self {
-            place: Pattern::Tuple(place),
+            pattern: Pattern::Tuple(pattern),
             args: Vec::new(),
             value,
         }
     }
 
-    pub fn place(&self) -> &Pattern<'ctx> {
-        &self.place
+    pub fn pattern(&self) -> &Pattern<'ctx> {
+        &self.pattern
     }
 
     pub fn has_args(&self) -> bool {

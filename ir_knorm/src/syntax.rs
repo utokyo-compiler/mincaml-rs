@@ -81,15 +81,15 @@ impl<'ctx> ExprKind<'ctx> {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct LetBinding<'ctx> {
-    pub place: Pattern<'ctx>,
+    pub pattern: Pattern<'ctx>,
     pub args: IndexVec<ArgIndex, Ident<'ctx>>,
     pub value: Expr<'ctx>,
 }
 
 impl<'ctx> LetBinding<'ctx> {
-    pub fn let_var(place: Ident<'ctx>, value: Expr<'ctx>) -> Self {
+    pub fn let_var(pattern: Ident<'ctx>, value: Expr<'ctx>) -> Self {
         Self {
-            place: Pattern::Var(place),
+            pattern: Pattern::Var(pattern),
             args: IndexVec::new(),
             value,
         }
@@ -97,7 +97,7 @@ impl<'ctx> LetBinding<'ctx> {
     pub fn let_discard(value: Expr<'ctx>) -> Self {
         debug_assert!(value.ty.is_unit());
         Self {
-            place: Pattern::Unit,
+            pattern: Pattern::Unit,
             args: IndexVec::new(),
             value,
         }

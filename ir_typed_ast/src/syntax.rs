@@ -111,7 +111,7 @@ impl<'ctx> ExprKind<'ctx> {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct LetBinding<'ctx> {
-    pub place: Pattern<'ctx>,
+    pub pattern: Pattern<'ctx>,
     pub args: IndexVec<ArgIndex, Ident<'ctx>>,
     pub value: Expr<'ctx>,
 }

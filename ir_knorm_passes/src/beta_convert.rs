@@ -19,7 +19,7 @@ impl<'ctx> KnormPass<'ctx> for BetaConvert {
             }
 
             fn visit_binding(&mut self, binding: &mut LetBinding<'ctx>) {
-                let Some(new_ident) = binding.place.as_var() else {
+                let Some(new_ident) = binding.pattern.as_var() else {
                     self.super_binding(binding);
                     return;
                 };

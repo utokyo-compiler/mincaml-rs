@@ -128,7 +128,7 @@ fn decide_ty<'ctx>(
                 decide_ty(ctx, common_types, name_res, subst, let_binder.value())?
             };
             let scope = name_res.begin_scope();
-            let typed_place = match let_binder.place() {
+            let typed_pattern = match let_binder.pattern() {
                 syntax::Pattern::Var(var) => {
                     let ident = name_res.define_in(scope, *var, Ty::mk_ty_var(ctx));
                     ir_typed_ast::Pattern::Var(ir_typed_ast::Ident::new(ctx.alloc_ident(ident)))
@@ -151,7 +151,7 @@ fn decide_ty<'ctx>(
                 typed_follows.ty,
                 ir_typed_ast::ExprKind::Let(
                     ir_typed_ast::LetBinding {
-                        place: typed_place,
+                        pattern: typed_pattern,
                         args: IndexVec::from_raw_vec(typed_args),
                         value: typed_bound_value,
                     },

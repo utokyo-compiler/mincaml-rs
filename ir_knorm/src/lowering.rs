@@ -36,7 +36,7 @@ fn lowering_ref<'ctx>(
         }
         ir_typed_ast::ExprKind::Let(binding, follows) => {
             let binding = LetBinding {
-                place: match &binding.place {
+                pattern: match &binding.pattern {
                     ir_typed_ast::Pattern::Var(ident) => {
                         Pattern::Var(ctx.intern_resolved_ident(****ident))
                     }

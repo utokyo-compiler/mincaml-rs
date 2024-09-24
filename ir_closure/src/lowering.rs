@@ -51,8 +51,15 @@ fn lowering_expr<'ctx>(
             lowering_expr(ctx, state, e1),
             lowering_expr(ctx, state, e2),
         ),
-        ir_knorm::ExprKind::Let(binding @ ir_knorm::LetBinding { place, args, value }, follows) => {
-            let place = place.clone();
+        ir_knorm::ExprKind::Let(
+            binding @ ir_knorm::LetBinding {
+                pattern,
+                args,
+                value,
+            },
+            follows,
+        ) => {
+            let pattern = pattern.clone();
             let (value, follows) = if args.is_empty() {
                 // Let or LetTuple
                 let value = lowering_expr(ctx, state, value);
@@ -60,7 +67,7 @@ fn lowering_expr<'ctx>(
                 (value, follows)
             } else {
                 // LetRec
-                let fn_name = FnName::new_unchecked(place.as_var().unwrap().value);
+                let fn_name = FnName::new_unchecked(pattern.as_var().unwrap().value);
                 let LetRecAnalysisResult {
                     did_fn_used_as_value,
                     fv_set,
@@ -102,13 +109,7 @@ fn lowering_expr<'ctx>(
                     return follows;
                 }
             };
-            ExprKind::Let(
-                LetBinding {
-                    pattern: place,
-                    value,
-                },
-                follows,
-            )
+            ExprKind::Let(LetBinding { pattern, value }, follows)
         }
         ir_knorm::ExprKind::Var(var) => ExprKind::Var(*var),
         ir_knorm::ExprKind::App(f, args) => {
@@ -158,7 +159,7 @@ struct LetRecAnalysisResult<'ctx> {
 /// In this implementation, we know whether closure conversion
 /// will fail by analyzing in advance.
 fn analyze_let_rec<'ctx>(binding: &ir_knorm::LetBinding<'ctx>) -> LetRecAnalysisResult<'ctx> {
-    let fn_name = binding.place.as_var().unwrap();
+    let fn_name = binding.pattern.as_var().unwrap();
     let mut fv_set = SetLikeVec::default();
     let visitor_helper = ir_knorm::FvVisitorHelper::new({
         struct CollectFvVisitor<'a, 'ctx> {
@@ -200,7 +201,7 @@ fn analyze_let_rec<'ctx>(binding: &ir_knorm::LetBinding<'ctx>) -> LetRecAnalysis
                 self.visitor_helper.super_ident(ident);
             }
             fn visit_binding(&mut self, binding: &ir_knorm::LetBinding<'ctx>) {
-                self.visit_pattern(&binding.place);
+                self.visit_pattern(&binding.pattern);
                 self.visitor_helper.super_binding_args(&binding.args);
                 self.visit_expr(&binding.value);
             }

@@ -31,7 +31,7 @@ macro_rules! declare_visitor {
                         self.visit_expr(e3);
                     }
                     ExprKind::Let(binder, e) => {
-                        self.visit_pattern(& $($mutability)? binder.place);
+                        self.visit_pattern(& $($mutability)? binder.pattern);
                         for arg in & $($mutability)? binder.args {
                             self.visit_ident(arg);
                         }

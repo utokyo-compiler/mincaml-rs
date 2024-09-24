@@ -115,8 +115,8 @@ macro_rules! declare_visitor {
             }
 
             fn super_binding(&mut self, binding: & $($mutability)? LetBinding<'ctx>) {
-                let LetBinding { place, args, value } = binding;
-                self.visit_pattern(place);
+                let LetBinding { pattern, args, value } = binding;
+                self.visit_pattern(pattern);
                 for arg in args {
                     self.visit_ident(arg);
                 }
