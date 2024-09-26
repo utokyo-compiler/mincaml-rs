@@ -20,7 +20,7 @@ pub struct Program<'ctx> {
     pub main: Function<'ctx>,
 }
 
-/// A function definition.
+/// Function definition.
 ///
 /// A function may be defined as a closure
 /// so it may capture variables from the environment.
@@ -48,11 +48,13 @@ impl<'ctx> Function<'ctx> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 /// Name of a function (or a closure).
 ///
-/// This type is different from `Ident`, but `ExprKind` can have their values as `Ident`.
+/// This type is different from `Ident`, but `ExprKind` can have
+/// their value as an `Ident`.
 pub struct FnName<'ctx>(Ident<'ctx>);
 
 impl<'ctx> FnName<'ctx> {
-    /// Create a new function name without checking this is a valid function name.
+    /// Create a new function name without checking
+    /// whether this is a valid function name.
     pub fn new_unchecked(ctx: &'ctx Context<'ctx>, ident: TypedIdent<'ctx>) -> Self {
         Self(ctx.new_ident(ident))
     }
@@ -81,7 +83,7 @@ pub enum ExprKind<'ctx> {
 
     /// Create a closure which captures the given arguments.
     ///
-    /// `make_closure` is splitted into this and `Let`.
+    /// The original `make_closure` has been splitted into this and `Let`.
     ClosureMake(Closure<'ctx>),
 
     App(ApplyKind, FnName<'ctx>, IndexVec<ArgIndex, Ident<'ctx>>),

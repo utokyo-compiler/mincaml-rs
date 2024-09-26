@@ -2,6 +2,15 @@ use crate::*;
 use core::range::Range;
 use data_structure::index::vec::IndexVec;
 
+macro_rules! overload_mut {
+    ($receiver:ident, [terminator],) => {
+        $receiver.terminator()
+    };
+    ($receiver:ident, [terminator], mut) => {
+        $receiver.terminator_mut()
+    };
+}
+
 macro_rules! declare_visitor {
     ($name:ident, $($mutability:ident)?) => {
         pub trait $name<'ctx> {
@@ -51,7 +60,7 @@ macro_rules! declare_visitor {
                 for stmt in & $($mutability)? block.stmts {
                     self.visit_stmt(stmt);
                 }
-                self.visit_terminator(& $($mutability)? block.terminator);
+                self.visit_terminator(overload_mut!(block, [terminator], $($mutability)?));
             }
 
             fn visit_stmt(&mut self, stmt: & $($mutability)? StmtKind<'ctx>) {

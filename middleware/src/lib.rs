@@ -1,4 +1,4 @@
-pub use data_structure::FxHashMap;
+pub use data_structure::{FxHashMap, FxHashSet};
 
 use data_structure::arena::TypedArena;
 use sourcemap::Spanned;

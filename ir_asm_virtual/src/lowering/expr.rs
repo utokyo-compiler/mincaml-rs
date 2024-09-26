@@ -1,41 +1,12 @@
-use core::range::Range;
+mod label;
 
 use data_structure::index::vec::IndexVec;
+use label::{Label, LabelResolution, ResolveHandler, TerminatorCtor};
 
 use crate::{
     builder, AbsCallingConv, ArgIndex, BasicBlock, Branch, Closure, Context, DisambiguatedIdent,
-    ExprKind, FnName, LitKind, Local, MutVisitor, Place, ProjectionKind, StmtKind, TerminatorKind,
-    Ty, Typed,
+    ExprKind, FnName, LitKind, Local, Place, ProjectionKind, StmtKind, TerminatorKind, Ty, Typed,
 };
-
-#[derive(Default)]
-/// The state of the lowering process.
-pub(crate) struct State {
-    binders: Vec<Binder>,
-}
-
-impl State {
-    pub fn with_return() -> Self {
-        Self::with_one_binder(Binder::FnReturn)
-    }
-
-    fn with_one_binder(binder: Binder) -> Self {
-        Self {
-            binders: vec![binder],
-        }
-    }
-
-    fn pop_innermost_binder(&mut self) -> Binder {
-        self.binders.pop().expect("found an orphan bindee")
-    }
-
-    /// Add a new binder to the current binding.
-    ///
-    /// Nested `Let` structures are fully handled by this stack structure.
-    fn push_binder(&mut self, binder: Binder) {
-        self.binders.push(binder);
-    }
-}
 
 #[derive(Clone, Copy)]
 enum BindingPlace {
@@ -53,8 +24,20 @@ impl BindingPlace {
 }
 
 #[derive(Clone, Copy)]
-/// Generalized binding agent.
-enum Binder {
+/// Generalized binding agent. You can think of it as a defunctionalized
+/// version of the following trait:
+///
+/// ```no_run
+/// trait PlaceBinder<'ctx> {
+///     fn bind(
+///         self,
+///         ctx: &'ctx Context<'ctx>,
+///         builder: &mut builder::FunctionBuilder<'ctx>,
+///         bindee: impl PlaceBindee<'ctx>,
+///     );
+/// }
+/// ```
+enum PlaceBinder {
     LetBinding {
         /// The place to bind the expression to.
         place: BindingPlace,
@@ -68,16 +51,16 @@ enum Binder {
     /// The target block has only one argument at this point.
     Branch {
         /// The target basic block.
-        target: BasicBlock,
+        target: Label,
     },
 }
 
-impl Binder {
-    fn to_if_arms_binder(self, bb_after_if: BasicBlock) -> Self {
+impl PlaceBinder {
+    fn to_if_arms_binder(self, label_after_if: Label) -> Self {
         match self {
             // `Binder::Branch` is created here first.
             Self::LetBinding { .. } => Self::Branch {
-                target: bb_after_if,
+                target: label_after_if,
             },
             Self::FnReturn => Self::FnReturn,
             Self::Branch { target } => {
@@ -91,7 +74,7 @@ impl Binder {
 }
 
 /// Generalized expression to be bound.
-enum Bindee<'ctx> {
+enum PlaceBindee<'ctx> {
     Expr {
         expr: ExprKind<'ctx>,
         ty: Ty<'ctx>,
@@ -106,31 +89,31 @@ enum Bindee<'ctx> {
     },
 }
 
-impl Binder {
+impl PlaceBinder {
     /// Bind the given expression to the current binding.
     fn bind<'ctx>(
         self,
         ctx: &'ctx Context<'ctx>,
-        builder: &mut builder::FunctionBuilder<'ctx>,
-        bindee: Bindee<'ctx>,
+        state: &mut State<'_, 'ctx>,
+        bindee: PlaceBindee<'ctx>,
     ) {
         match self {
-            Binder::LetBinding { place } => {
+            PlaceBinder::LetBinding { place } => {
                 match bindee {
-                    Bindee::Expr { expr, ty } => {
-                        builder.push_stmt(StmtKind::Assign {
+                    PlaceBindee::Expr { expr, ty } => {
+                        state.builder.push_stmt_to_current(StmtKind::Assign {
                             place: place.into_place(),
                             value: ctx.new_expr(Typed::new(expr, ty)),
                         });
                     }
-                    Bindee::Call {
+                    PlaceBindee::Call {
                         calling_conv,
                         fn_name,
                         args,
                         ..
                     } => {
-                        let target = builder.next_basic_block();
-                        builder.finish_block(TerminatorKind::Call {
+                        let target = state.builder.next_basic_block();
+                        state.builder.terminate_block(TerminatorKind::Call {
                             calling_conv,
                             fn_name,
                             args,
@@ -147,52 +130,63 @@ impl Binder {
                     }
                 };
             }
-            Binder::FnReturn => {
+            PlaceBinder::FnReturn => {
                 let return_value = match bindee {
-                    Bindee::Expr { expr, ty } => ctx.new_expr(Typed::new(expr, ty)),
-                    Bindee::Call {
+                    PlaceBindee::Expr { expr, ty } => ctx.new_expr(Typed::new(expr, ty)),
+                    PlaceBindee::Call {
                         calling_conv,
                         fn_name,
                         args,
                         ty,
                     } => {
-                        let call_result = new_local(ctx, builder, "call_result", ty);
-                        let target = builder.next_basic_block();
-                        builder.finish_block(TerminatorKind::Call {
+                        let call_result = new_local(ctx, state, "call_result", ty);
+                        let target = state.builder.next_basic_block();
+                        state.builder.terminate_block(TerminatorKind::Call {
                             calling_conv,
                             fn_name,
                             args,
                             branch: Branch::no_args(target),
                         });
-                        builder.set_args(IndexVec::from_raw_vec(vec![call_result]));
+                        state
+                            .builder
+                            .set_args_to_current(IndexVec::from_raw_vec(vec![call_result]));
                         ctx.new_expr(Typed::new(ExprKind::Read(Place::Local(call_result)), ty))
                     }
                 };
-                builder.push_stmt(StmtKind::Assign {
+                state.builder.push_stmt_to_current(StmtKind::Assign {
                     place: Place::Local(Local::RETURN_LOCAL),
                     value: return_value,
                 });
-                builder.finish_block(TerminatorKind::Return);
+                state.builder.terminate_block(TerminatorKind::Return);
             }
-            Binder::Branch { target } => match bindee {
-                Bindee::Expr { expr, ty } => {
-                    let branch_arg = evaluated_local(ctx, builder, "branch_arg", expr, ty);
-                    let mut args = IndexVec::new();
-                    args.push(branch_arg);
-                    builder.finish_block(TerminatorKind::Branch(Branch { target, args }));
+            PlaceBinder::Branch { target } => match bindee {
+                PlaceBindee::Expr { expr, ty } => {
+                    let branch_arg = evaluated_local(ctx, state, "branch_arg", expr, ty);
+                    state.defer_terminate_block(
+                        TerminatorCtor::Branch {
+                            target,
+                            args: IndexVec::from_raw_vec(vec![branch_arg]),
+                        },
+                        target,
+                    );
                 }
-                Bindee::Call {
+                PlaceBindee::Call {
                     calling_conv,
                     fn_name,
                     args,
-                    ..
+                    ty,
                 } => {
-                    builder.finish_block(TerminatorKind::Call {
-                        calling_conv,
-                        fn_name,
-                        args,
-                        branch: Branch::no_args(target),
-                    });
+                    let call_result = new_local(ctx, state, "call_result", ty);
+                    state.defer_terminate_block(
+                        TerminatorCtor::Call {
+                            calling_conv,
+                            fn_name,
+                            args,
+                            branch_target: target,
+                            branch_args: IndexVec::from_raw_vec(vec![call_result]),
+                        },
+                        target,
+                    );
                 }
             },
         }
@@ -201,7 +195,7 @@ impl Binder {
 
 fn new_local<'ctx>(
     ctx: &'ctx Context<'ctx>,
-    builder: &mut builder::FunctionBuilder<'ctx>,
+    state: &mut State<'_, 'ctx>,
     name: &'static str,
     ty: Ty<'ctx>,
 ) -> Local {
@@ -214,12 +208,12 @@ fn new_local<'ctx>(
         ),
         ty,
     ));
-    builder.get_local(ident)
+    state.builder.get_local(ident)
 }
 
 fn evaluated_local<'ctx>(
     ctx: &'ctx Context<'ctx>,
-    builder: &mut builder::FunctionBuilder<'ctx>,
+    state: &mut State<'_, 'ctx>,
     name: &'static str,
     expr: ExprKind<'ctx>,
     ty: Ty<'ctx>,
@@ -230,8 +224,8 @@ fn evaluated_local<'ctx>(
             ident
         }
         expr => {
-            let local = new_local(ctx, builder, name, ty);
-            builder.push_stmt(StmtKind::Assign {
+            let local = new_local(ctx, state, name, ty);
+            state.builder.push_stmt_to_current(StmtKind::Assign {
                 place: Place::Local(local),
                 value: ctx.new_expr(Typed::new(expr, ty)),
             });
@@ -240,14 +234,69 @@ fn evaluated_local<'ctx>(
     }
 }
 
+/// The state of the lowering process.
+pub struct State<'builder, 'ctx> {
+    binders: Vec<PlaceBinder>,
+    builder: &'builder mut builder::FunctionBuilder<'ctx>,
+    label_resolution: LabelResolution<'builder, 'ctx>,
+}
+
+impl<'builder, 'ctx> State<'builder, 'ctx> {
+    /// The only way to create a new `State` outside of this module.
+    /// This means that lowering expressions should be capsuled in this module.
+    pub fn new(builder: &'builder mut builder::FunctionBuilder<'ctx>) -> Self {
+        Self {
+            binders: vec![PlaceBinder::FnReturn],
+            builder,
+            label_resolution: LabelResolution::default(),
+        }
+    }
+
+    /// Pop the innermost binder. This is a safe operation because
+    /// all expressions must be bound to a binder.
+    fn pop_innermost_binder(&mut self) -> PlaceBinder {
+        self.binders.pop().expect("found an orphan bindee")
+    }
+
+    /// Add a new binder to the current binding.
+    ///
+    /// Nested `Let` structures are fully handled by this stack structure.
+    fn push_binder(&mut self, binder: PlaceBinder) {
+        self.binders.push(binder);
+    }
+
+    /// Resolve the label and run the handlers if any.
+    fn resolve_label(&mut self, label: Label, basic_block: BasicBlock) {
+        if let Some(handlers) = self.label_resolution.insert(label, basic_block) {
+            for handler in handlers {
+                handler.run(self);
+            }
+        }
+    }
+
+    /// Defer the creation of a terminator until the label is resolved.
+    ///
+    /// This call suspends the current block creation and moves to the next block.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctor` - The constructor of the terminator.
+    /// * `until_resolve` - The label of the latest created basic block.
+    fn defer_terminate_block(&mut self, ctor: TerminatorCtor<'ctx>, until_resolve: Label) {
+        let deferred = self.builder.defer_terminate_block();
+        self.label_resolution
+            .register(until_resolve, ResolveHandler::new(deferred, ctor));
+    }
+}
+
 /// Lower the given expression.
 ///
-/// The expression is lowered and bound to the current binding.
+/// The expression is lowered and bound to the current binding. The
+/// binder is then popped.
 pub fn lower_expr<'ctx>(
     expr: &ir_closure::Expr<'ctx>,
     ctx: &'ctx Context<'ctx>,
-    builder: &mut builder::FunctionBuilder<'ctx>,
-    state: &mut State,
+    state: &mut State<'_, 'ctx>,
 ) {
     let ty = expr.ty;
     let bindee = 'bindee: {
@@ -255,12 +304,12 @@ pub fn lower_expr<'ctx>(
             // trivial cases
             ir_closure::ExprKind::Const(lit_kind) => ExprKind::Const(*lit_kind),
             ir_closure::ExprKind::Unary(un_op, e1) => {
-                let e1 = builder.get_local(*e1);
+                let e1 = state.builder.get_local(*e1);
                 ExprKind::Unary(*un_op, e1)
             }
             ir_closure::ExprKind::Binary(bin_op, e1, e2) => {
-                let e1 = builder.get_local(*e1);
-                let e2 = builder.get_local(*e2);
+                let e1 = state.builder.get_local(*e1);
+                let e2 = state.builder.get_local(*e2);
                 ExprKind::Binary(*bin_op, e1, e2)
             }
             ir_closure::ExprKind::ClosureMake(closure) => ExprKind::ClosureMake(Closure {
@@ -268,26 +317,26 @@ pub fn lower_expr<'ctx>(
                 captured_args: closure
                     .captured_args
                     .iter()
-                    .map(|arg| builder.get_local(*arg))
+                    .map(|arg| state.builder.get_local(*arg))
                     .collect(),
             }),
             ir_closure::ExprKind::Tuple(vec) => ExprKind::Tuple(
                 vec.iter()
-                    .map(|var| builder.get_local(*var))
+                    .map(|var| state.builder.get_local(*var))
                     .collect::<IndexVec<_, _>>(),
             ),
             ir_closure::ExprKind::ArrayMake(e1, e2) => {
-                let e1 = builder.get_local(*e1);
-                let e2 = builder.get_local(*e2);
+                let e1 = state.builder.get_local(*e1);
+                let e2 = state.builder.get_local(*e2);
                 ExprKind::ArrayMake(e1, e2)
             }
             ir_closure::ExprKind::Var(e) => {
-                let e = builder.get_local(*e);
+                let e = state.builder.get_local(*e);
                 ExprKind::Read(Place::Local(e))
             }
             ir_closure::ExprKind::Get(e1, e2) => {
-                let e1 = builder.get_local(*e1);
-                let e2 = builder.get_local(*e2);
+                let e1 = state.builder.get_local(*e1);
+                let e2 = state.builder.get_local(*e2);
                 ExprKind::Read(Place::Projection {
                     base: e1,
                     projection_kind: ProjectionKind::ArrayElem(e2),
@@ -298,27 +347,27 @@ pub fn lower_expr<'ctx>(
             ir_closure::ExprKind::Let(ir_closure::LetBinding { pattern, value }, follows) => {
                 match pattern {
                     ir_closure::Pattern::Unit => {
-                        state.push_binder(Binder::LetBinding {
+                        state.push_binder(PlaceBinder::LetBinding {
                             place: BindingPlace::Discard,
                         });
-                        lower_expr(value, ctx, builder, state);
+                        lower_expr(value, ctx, state);
                     }
                     ir_closure::Pattern::Var(var) => {
-                        let local = builder.get_local(*var);
-                        state.push_binder(Binder::LetBinding {
+                        let local = state.builder.get_local(*var);
+                        state.push_binder(PlaceBinder::LetBinding {
                             place: BindingPlace::Local(local),
                         });
-                        lower_expr(value, ctx, builder, state);
+                        lower_expr(value, ctx, state);
                     }
                     ir_closure::Pattern::Tuple(vars) => {
-                        let tuple_assign_rhs = new_local(ctx, builder, "tuple_assign_rhs", ty);
-                        state.push_binder(Binder::LetBinding {
+                        let tuple_assign_rhs = new_local(ctx, state, "tuple_assign_rhs", ty);
+                        state.push_binder(PlaceBinder::LetBinding {
                             place: BindingPlace::Local(tuple_assign_rhs),
                         });
-                        lower_expr(value, ctx, builder, state);
+                        lower_expr(value, ctx, state);
                         for (tuple_index, var) in vars.iter_enumerated() {
-                            let local = builder.get_local(*var);
-                            builder.push_stmt(StmtKind::Assign {
+                            let local = state.builder.get_local(*var);
+                            state.builder.push_stmt_to_current(StmtKind::Assign {
                                 place: Place::Local(local),
                                 value: ctx.new_expr(Typed::new(
                                     ExprKind::Read(Place::Projection {
@@ -334,15 +383,15 @@ pub fn lower_expr<'ctx>(
                 // At this point, the value has been bound to the pattern.
 
                 // Continue lowering the following expression.
-                lower_expr(follows, ctx, builder, state);
+                lower_expr(follows, ctx, state);
                 return;
             }
             ir_closure::ExprKind::Set(base, displacement, value) => {
                 let ty = value.ty;
-                let base = builder.get_local(*base);
-                let displacement = builder.get_local(*displacement);
-                let value = builder.get_local(*value);
-                builder.push_stmt(StmtKind::Assign {
+                let base = state.builder.get_local(*base);
+                let displacement = state.builder.get_local(*displacement);
+                let value = state.builder.get_local(*value);
+                state.builder.push_stmt_to_current(StmtKind::Assign {
                     place: Place::Projection {
                         base,
                         projection_kind: ProjectionKind::ArrayElem(displacement),
@@ -358,9 +407,9 @@ pub fn lower_expr<'ctx>(
             ir_closure::ExprKind::App(apply_kind, fn_name, args) => {
                 let args = args
                     .iter()
-                    .map(|arg| builder.get_local(*arg))
+                    .map(|arg| state.builder.get_local(*arg))
                     .collect::<IndexVec<_, _>>();
-                break 'bindee Bindee::Call {
+                break 'bindee PlaceBindee::Call {
                     calling_conv: *apply_kind,
                     fn_name: *fn_name,
                     args,
@@ -368,63 +417,59 @@ pub fn lower_expr<'ctx>(
                 };
             }
             ir_closure::ExprKind::If(e1, e2, e3) => {
-                // In general, it's not a good idea to type invalid
-                // values, but it makes it easier to see the flow here.
-                let bb_dummy = BasicBlock::ENTRY_BLOCK;
+                let condition = state.builder.get_local(*e1);
 
-                let condition = builder.get_local(*e1);
-                let bb_before_if = builder.finish_block(TerminatorKind::ConditionalBranch {
-                    condition,
-                    targets: [bb_dummy, bb_dummy],
-                });
+                let label_true_block = Label::new();
+                let label_false_block = Label::new();
+                let label_after_if = Label::new();
+
+                // This basic block has a terminator which depends on the
+                // basic blocks created by the branches. We need to defer
+                // its creation.
+                state.defer_terminate_block(
+                    TerminatorCtor::ConditionalBranch {
+                        condition,
+                        targets: [label_true_block, label_false_block],
+                    },
+                    label_false_block,
+                );
+
                 let binder_of_if = state.pop_innermost_binder();
-                let new_binder = binder_of_if.to_if_arms_binder(bb_dummy);
+                let new_binder = binder_of_if.to_if_arms_binder(label_after_if);
 
-                let bb_true_block = builder.next_basic_block();
-                lower_expr(e2, ctx, builder, &mut State::with_one_binder(new_binder));
+                let bb_true_block = state.builder.next_basic_block();
+                state.resolve_label(label_true_block, bb_true_block);
 
-                let bb_false_block = builder.next_basic_block();
-                lower_expr(e3, ctx, builder, &mut State::with_one_binder(new_binder));
+                state.push_binder(new_binder);
+                lower_expr(e2, ctx, state);
 
-                let bb_after_if = builder.next_basic_block();
-                if let Binder::LetBinding {
+                let bb_false_block = state.builder.next_basic_block();
+                // This call will fire the deferred terminator creation.
+                state.resolve_label(label_false_block, bb_false_block);
+
+                state.push_binder(new_binder);
+                lower_expr(e3, ctx, state);
+
+                let bb_after_if = state.builder.next_basic_block();
+                // This call will also fire the deferred terminator creation.
+                state.resolve_label(label_after_if, bb_after_if);
+
+                if let PlaceBinder::LetBinding {
                     place: BindingPlace::Local(local),
                 } = binder_of_if
                 {
-                    builder.set_args(IndexVec::from_raw_vec(vec![local]));
+                    state
+                        .builder
+                        .set_args_to_current(IndexVec::from_raw_vec(vec![local]));
                 }
 
-                // Remove the dummy.
-                *builder.basic_blocks_mut()[bb_before_if]
-                    .terminator
-                    .as_mut_conditional_branch_targets()
-                    .unwrap() = [bb_true_block, bb_false_block];
-                struct RemoveDummy {
-                    bb_dummy: BasicBlock,
-                    target: BasicBlock,
-                }
-                impl MutVisitor<'_> for RemoveDummy {
-                    fn visit_basic_block(&mut self, basic_block: &mut BasicBlock) {
-                        if basic_block == &self.bb_dummy {
-                            *basic_block = self.target;
-                        }
-                    }
-                }
-                RemoveDummy {
-                    bb_dummy,
-                    target: bb_after_if,
-                }
-                .super_ranged_block_data(
-                    builder.basic_blocks_mut(),
-                    Range::from(bb_true_block..bb_after_if),
-                );
                 return;
             }
         };
-        Bindee::Expr { expr, ty }
+        PlaceBindee::Expr { expr, ty }
     };
     // We have reached the block tail expression or a call.
     // Simply bind it to the current binding.
     let innermost_binder = state.pop_innermost_binder();
-    innermost_binder.bind(ctx, builder, bindee)
+    innermost_binder.bind(ctx, state, bindee)
 }

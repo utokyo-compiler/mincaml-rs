@@ -104,9 +104,28 @@ pub struct BasicBlockData<'ctx> {
     pub args: IndexVec<ArgIndex, Local>,
 
     pub stmts: IndexVec<StmtIndex, StmtKind<'ctx>>,
-    pub terminator: TerminatorKind<'ctx>,
+
+    /// Terminator instruction for this block.
+    ///
+    /// This field should only be `None` during construction.
+    /// Allowing `None` in construction is beneficial for the
+    /// construction of the control-flow graph because it can
+    /// eliminate dependency on the order of the construction,
+    /// which decides the `BasicBlock` of `BasicBlockData`.
+    pub(crate) terminator: Option<TerminatorKind<'ctx>>,
 }
+// `BasicBlock` is just an index to `BasicBlockData`.
 impl Indexable<BasicBlock> for BasicBlockData<'_> {}
+
+impl<'ctx> BasicBlockData<'ctx> {
+    pub fn terminator(&self) -> &TerminatorKind<'ctx> {
+        self.terminator.as_ref().expect("terminator must be set")
+    }
+
+    pub fn terminator_mut(&mut self) -> &mut TerminatorKind<'ctx> {
+        self.terminator.as_mut().expect("terminator must be set")
+    }
+}
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct StmtIndex(usize);
