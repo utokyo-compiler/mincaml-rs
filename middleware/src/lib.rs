@@ -31,7 +31,7 @@ impl<'ctx> GlobalContext<'ctx> {
         let typing_context =
             typing::Context::new(&arena.type_, &arena.typed_ident, &arena.typed_expr);
         let knorm_context = ir_knorm::Context::new(&arena.typed_ident, &arena.knorm_expr);
-        let closure_context = ir_closure::Context::new(&arena.closure_expr);
+        let closure_context = ir_closure::Context::new(&arena.typed_ident, &arena.closure_expr);
         let asm_virtual_context =
             ir_asm_virtual::Context::new(&arena.typed_ident, &arena.asm_virtual_expr);
         Self {

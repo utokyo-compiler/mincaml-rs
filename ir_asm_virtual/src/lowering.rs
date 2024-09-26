@@ -1,10 +1,9 @@
 mod expr;
 mod function;
 
-use data_structure::index::vec::IndexVec;
 use function::lower_function;
 
-use crate::{context::Context, Program, MAIN_FN_NAME};
+use crate::{context::Context, Program};
 
 pub fn lowering<'ctx>(
     ctx: &'ctx Context<'ctx>,
@@ -13,18 +12,10 @@ pub fn lowering<'ctx>(
     let functions = closure_program
         .functions
         .into_iter()
-        .map(|function| lower_function(function, ctx))
+        .map(|function| lower_function(ctx, function))
         .collect();
     Program {
         functions,
-        main: lower_function(
-            ir_closure::Function {
-                name: MAIN_FN_NAME,
-                args: IndexVec::new(),
-                args_via_closure: IndexVec::new(),
-                body: closure_program.main,
-            },
-            ctx,
-        ),
+        main: lower_function(ctx, closure_program.main),
     }
 }

@@ -28,10 +28,6 @@ pub struct Program<'ctx> {
     pub main: Function<'ctx>,
 }
 
-pub const MAIN_FN_NAME: FnName<'static> =
-    // safety: "main" does not get referenced in the program.
-    FnName::new_unchecked(DisambiguatedIdent::new_compiler_unchecked("main", 0));
-
 /// A function definition.
 ///
 /// A function may be defined as a closure
@@ -41,12 +37,12 @@ pub struct Function<'ctx> {
 
     /// Local variables of the function.
     ///
-    /// This includes arguments and also variables captured as a thunk.
+    /// This includes arguments and also variables captured by the closure.
     pub local_decls: IndexVec<Local, LocalDecl<'ctx>>,
 
     /// Arguments passed to the function.
     ///
-    /// (meta): Actual value of the arguments are allocated to `local_decls`.
+    /// (meta): Actual value of the arguments are allocated in `local_decls`.
     pub args: Range<Local>,
 
     /// Arguments captured by the closure.
@@ -103,7 +99,10 @@ pub struct BasicBlockData<'ctx> {
     /// Arguments passed to the block.
     ///
     /// This is required to support the functionality of phi nodes.
+    ///
+    /// DO NOT forget to count `args` as a definition.
     pub args: IndexVec<ArgIndex, Local>,
+
     pub stmts: IndexVec<StmtIndex, StmtKind<'ctx>>,
     pub terminator: TerminatorKind<'ctx>,
 }

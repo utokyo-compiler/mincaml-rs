@@ -75,6 +75,7 @@ enum Binder {
 impl Binder {
     fn to_if_arms_binder(self, bb_after_if: BasicBlock) -> Self {
         match self {
+            // `Binder::Branch` is created here first.
             Self::LetBinding { .. } => Self::Branch {
                 target: bb_after_if,
             },

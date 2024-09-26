@@ -4,7 +4,9 @@ use data_structure::{
     interning::Interned,
 };
 
-pub use ir_typed_ast::{ArgIndex, BinOp, DisambiguatedIdent, LitKind, TupleIndex, Ty, Typed, UnOp};
+pub use ir_typed_ast::{
+    ArgIndex, BinOp, DisambiguatedIdent, LitKind, TupleIndex, Ty, Typed, TypedIdent, UnOp,
+};
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct Ident<'ctx>(Interned<'ctx, Typed<'ctx, DisambiguatedIdent<'ctx>>>);

@@ -1,20 +1,23 @@
 //! Syntax tree after the closure conversion.
 //!
 //! You are encouraged to implement several optimization passes
-//! on this IR, or merge this IR into an upper-level IR by adding
-//! `ClosureMake` to the `ExprKind` of that IR.
+//! on this IR, or merge this IR into upper-level one by adding
+//! `ClosureMake`, `Function`, `Program` to it.
 use data_structure::{arena::Box, index::vec::IndexVec};
 
 pub use ir_knorm::{
-    ArgIndex, BinOp, DisambiguatedIdent, Ident, LitKind, Pattern, TupleIndex, Ty, Typed, UnOp,
+    ArgIndex, BinOp, DisambiguatedIdent, Ident, LitKind, Pattern, TupleIndex, Ty, Typed,
+    TypedIdent, UnOp,
 };
+
+use crate::Context;
 
 pub type Expr<'ctx> = Box<'ctx, TypedExprKind<'ctx>>;
 pub type TypedExprKind<'ctx> = Typed<'ctx, ExprKind<'ctx>>;
 
 pub struct Program<'ctx> {
     pub functions: Vec<Function<'ctx>>,
-    pub main: Expr<'ctx>,
+    pub main: Function<'ctx>,
 }
 
 /// A function definition.
@@ -46,12 +49,24 @@ impl<'ctx> Function<'ctx> {
 /// Name of a function (or a closure).
 ///
 /// This type is different from `Ident`, but `ExprKind` can have their values as `Ident`.
-pub struct FnName<'ctx>(DisambiguatedIdent<'ctx>);
+pub struct FnName<'ctx>(Ident<'ctx>);
 
 impl<'ctx> FnName<'ctx> {
     /// Create a new function name without checking this is a valid function name.
-    pub const fn new_unchecked(ident: DisambiguatedIdent<'ctx>) -> Self {
+    pub fn new_unchecked(ctx: &'ctx Context<'ctx>, ident: TypedIdent<'ctx>) -> Self {
+        Self(ctx.new_ident(ident))
+    }
+
+    pub fn new(ident: Ident<'ctx>) -> Self {
         Self(ident)
+    }
+
+    pub fn main_fn_name(ctx: &'ctx Context<'ctx>, ty: Ty<'ctx>) -> Self {
+        // safety: "main" does not get referenced in the program.
+        Self::new_unchecked(
+            ctx,
+            Typed::new(DisambiguatedIdent::new_compiler_unchecked("main", 0), ty),
+        )
     }
 }
 

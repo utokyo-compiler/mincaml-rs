@@ -14,7 +14,12 @@ use crate::{
 /// 3. 2. is a problem that should be handled by an optimization pass
 pub fn lowering<'ctx>(ctx: &'ctx Context<'ctx>, knorm_expr: ir_knorm::Expr<'ctx>) -> Program<'ctx> {
     let mut state = LoweringState::default();
-    let main = lower_expr(ctx, &mut state, &knorm_expr);
+    let main = Function {
+        name: FnName::main_fn_name(ctx, knorm_expr.ty),
+        args: IndexVec::new(),
+        args_via_closure: IndexVec::new(),
+        body: lower_expr(ctx, &mut state, &knorm_expr),
+    };
     Program {
         functions: state.functions,
         main,
@@ -67,7 +72,7 @@ fn lower_expr<'ctx>(
                 (value, follows)
             } else {
                 // LetRec
-                let fn_name = FnName::new_unchecked(pattern.as_var().unwrap().value);
+                let fn_name = FnName::new(pattern.as_var().unwrap());
                 let LetRecAnalysisResult {
                     did_fn_used_as_value,
                     fv_set,
@@ -113,7 +118,7 @@ fn lower_expr<'ctx>(
         }
         ir_knorm::ExprKind::Var(var) => ExprKind::Var(*var),
         ir_knorm::ExprKind::App(f, args) => {
-            let fn_name = FnName::new_unchecked(f.value);
+            let fn_name = FnName::new(*f);
             ExprKind::App(
                 if state.decided_to_make_closure(&fn_name) {
                     ApplyKind::Closure

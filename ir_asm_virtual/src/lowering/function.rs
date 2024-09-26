@@ -4,13 +4,13 @@ use super::expr::{lower_expr, State};
 
 /// Lower the given function.
 pub fn lower_function<'ctx>(
+    ctx: &'ctx Context<'ctx>,
     ir_closure::Function {
         name,
         args,
         args_via_closure,
         body,
     }: ir_closure::Function<'ctx>,
-    ctx: &'ctx Context<'ctx>,
 ) -> Function<'ctx> {
     let mut builder = FunctionBuilder::new(
         ctx,
