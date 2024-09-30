@@ -19,6 +19,6 @@ pub fn lower_function<'ctx>(
         args_via_closure.into_iter(),
         body.ty,
     );
-    lower_expr(&body, ctx, &mut builder, &mut State::with_return());
+    lower_expr(&body, ctx, &mut State::new(&mut builder));
     builder.finish_function()
 }

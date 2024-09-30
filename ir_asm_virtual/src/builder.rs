@@ -25,7 +25,7 @@ impl<'ctx> BasicBlockBuilder<'ctx> {
     }
 
     /// Terminates the current block and wraps up into a `BasicBlockData`.
-    pub fn finish_block(self, terminator: TerminatorKind<'ctx>) -> BasicBlockData<'ctx> {
+    pub fn terminate_block(self, terminator: Option<TerminatorKind<'ctx>>) -> BasicBlockData<'ctx> {
         BasicBlockData {
             args: self.args,
             stmts: self.stmts,
@@ -43,6 +43,9 @@ pub struct FunctionBuilder<'ctx> {
 
     seen_idents: SetLikeVec<Ident<'ctx>>,
     basic_block_builder: BasicBlockBuilder<'ctx>,
+
+    #[cfg(debug_assertions)]
+    unterminated_blocks: data_structure::FxHashSet<BasicBlock>,
 }
 
 impl<'ctx> FunctionBuilder<'ctx> {
@@ -92,6 +95,9 @@ impl<'ctx> FunctionBuilder<'ctx> {
             basic_blocks: IndexVec::default(),
             seen_idents,
             basic_block_builder: BasicBlockBuilder::default(),
+
+            #[cfg(debug_assertions)]
+            unterminated_blocks: data_structure::FxHashSet::default(),
         }
     }
     pub fn finish_function(self) -> Function<'ctx> {
@@ -102,19 +108,6 @@ impl<'ctx> FunctionBuilder<'ctx> {
             args_via_closure: self.args_via_closure,
             basic_blocks: self.basic_blocks,
         }
-    }
-
-    /// Finish current basic block and start a new one.
-    ///
-    /// Returns the finished block.
-    pub fn finish_block(&mut self, terminator: TerminatorKind<'ctx>) -> BasicBlock {
-        let basic_block_data =
-            std::mem::take(&mut self.basic_block_builder).finish_block(terminator);
-        self.push_basic_block(basic_block_data)
-    }
-
-    fn push_basic_block(&mut self, data: BasicBlockData<'ctx>) -> BasicBlock {
-        self.basic_blocks.push(data)
     }
 
     /// Get a local variable by its identifier.
@@ -129,19 +122,61 @@ impl<'ctx> FunctionBuilder<'ctx> {
         self.local_decls.push(LocalDecl { ident })
     }
 
-    pub fn set_args(&mut self, args: IndexVec<ArgIndex, Local>) {
+    /// Set the arguments of the current basic block.
+    pub fn set_args_to_current(&mut self, args: IndexVec<ArgIndex, Local>) {
         self.basic_block_builder.set_args(args)
     }
 
-    pub fn push_stmt(&mut self, value: StmtKind<'ctx>) -> StmtIndex {
+    /// Push a statement to the current basic block.
+    pub fn push_stmt_to_current(&mut self, value: StmtKind<'ctx>) -> StmtIndex {
         self.basic_block_builder.push_stmt(value)
     }
 
+    /// Obtain the next basic block. The result is always an invalid block at
+    /// the time of this call, but is useful if we are going to start a new block.
     pub fn next_basic_block(&self) -> BasicBlock {
         BasicBlock::new(self.basic_blocks.len())
     }
+}
 
-    pub fn basic_blocks_mut(&mut self) -> &mut IndexVec<BasicBlock, BasicBlockData<'ctx>> {
-        &mut self.basic_blocks
+/// Represents a basic block that is not terminated but created.
+///
+/// Do not pub their fields to prevent double-terminating the block.
+pub struct DeferredBasicBlock(BasicBlock);
+
+impl<'ctx> FunctionBuilder<'ctx> {
+    /// Finish current basic block and start a new one.
+    ///
+    /// Returns the finished block.
+    pub fn terminate_block(&mut self, terminator: TerminatorKind<'ctx>) -> BasicBlock {
+        let basic_block_data =
+            std::mem::take(&mut self.basic_block_builder).terminate_block(Some(terminator));
+        self.push_basic_block(basic_block_data)
+    }
+
+    /// Deferred version of `terminate_block`.
+    pub fn terminate_block_deferred(
+        &mut self,
+        basic_block: DeferredBasicBlock,
+        terminator: TerminatorKind<'ctx>,
+    ) {
+        #[cfg(debug_assertions)]
+        assert!(self.unterminated_blocks.remove(&basic_block.0));
+        self.basic_blocks[basic_block.0].terminator = Some(terminator);
+    }
+
+    /// Defer creating a terminator for the current block but finish it.
+    pub fn defer_terminate_block(&mut self) -> DeferredBasicBlock {
+        let basic_block_data = std::mem::take(&mut self.basic_block_builder).terminate_block(None);
+        let basic_block = self.push_basic_block(basic_block_data);
+
+        #[cfg(debug_assertions)]
+        assert!(self.unterminated_blocks.insert(basic_block));
+
+        DeferredBasicBlock(basic_block)
+    }
+
+    fn push_basic_block(&mut self, data: BasicBlockData<'ctx>) -> BasicBlock {
+        self.basic_blocks.push(data)
     }
 }
