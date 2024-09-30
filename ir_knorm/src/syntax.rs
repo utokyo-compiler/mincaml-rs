@@ -34,7 +34,7 @@ impl<'ctx> std::ops::DerefMut for Ident<'ctx> {
 pub type Expr<'ctx> = Box<'ctx, TypedExprKind<'ctx>>;
 pub type TypedExprKind<'ctx> = Typed<'ctx, ExprKind<'ctx>>;
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ExprKind<'ctx> {
     Const(LitKind),
     Unary(UnOp, Ident<'ctx>),
@@ -81,7 +81,7 @@ impl<'ctx> ExprKind<'ctx> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct LetBinding<'ctx> {
     pub pattern: Pattern<'ctx>,
     pub args: IndexVec<ArgIndex, Ident<'ctx>>,
