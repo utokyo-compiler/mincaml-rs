@@ -48,6 +48,17 @@ impl<'ctx> FunctionDef<'ctx> {
 /// Name of a function (or a closure).
 pub struct FnName<'ctx>(Option<Ident<'ctx>>);
 
+impl Indexable<FnIndex> for FnName<'_> {}
+
+impl std::fmt::Display for FnName<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.0 {
+            Some(ident) => write!(f, "{}", ident.value),
+            None => write!(f, "main"),
+        }
+    }
+}
+
 impl<'ctx> FnName<'ctx> {
     pub fn new(ident: Ident<'ctx>) -> Self {
         Self(Some(ident))

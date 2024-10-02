@@ -11,7 +11,7 @@ use data_structure::{
 };
 
 pub use ir_closure::{
-    ArgIndex, BinOp, DisambiguatedIdent, FnIndex, FnName, Ident, LitKind, Pattern, TupleIndex, Ty,
+    ArgIndex, BinOp, DisambiguatedIdent, FnIndex, FnName, Ident, LitKind, Pattern, TupleIndex, Ty, TyKind,
     Typed, UnOp,
 };
 
