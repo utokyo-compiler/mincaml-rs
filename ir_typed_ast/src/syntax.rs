@@ -3,7 +3,7 @@ use data_structure::{
     index::{vec::IndexVec, Indexable},
 };
 use sourcemap::{Span, Spanned};
-pub use syntax::{BinOp, LitKind, UnOp};
+pub use syntax::{BinOp, LitKind, UnOp, BBinOpKind, FBinOpKind, IBinOpKind};
 pub use ty::{ArgIndex, TupleIndex, Ty, Typed};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

@@ -5,7 +5,7 @@ use data_structure::{
 };
 
 pub use ir_typed_ast::{
-    ArgIndex, BinOp, DisambiguatedIdent, LitKind, TupleIndex, Ty, Typed, TypedIdent, UnOp,
+    ArgIndex, BinOp, DisambiguatedIdent, LitKind, TupleIndex, Ty, Typed, TypedIdent, UnOp, BBinOpKind, FBinOpKind, IBinOpKind,
 };
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
