@@ -74,7 +74,7 @@ impl<'ctx, T: ?Sized> Interned<'ctx, T> {
 
 impl<T> Deref for Interned<'_, T> {
     type Target = T;
-
+    
     fn deref(&self) -> &Self::Target {
         self.0
     }
@@ -90,37 +90,35 @@ impl<K: Hash + Eq + Copy> HashSetInterner<K> {
             set: Default::default(),
         }
     }
-
+    
     #[inline]
     pub fn intern_ref<Q>(&self, value: &Q, new: impl FnOnce() -> K) -> K
     where
-        K: Borrow<Q>,
-        Q: ?Sized + Hash + Eq,
+    K: Borrow<Q>,
+    Q: ?Sized + Hash + Eq,
     {
-        match self.set.lock().unwrap().get(value) {
-            Some(x) => *x,
-            None => {
-                let value = new();
-                self.set.lock().unwrap().insert(value);
-                value
-            }
+        if let Some(x) = self.set.lock().unwrap().get(&value) {
+            return *x
         }
+        
+        let value = new();
+        self.set.lock().unwrap().insert(value);
+        value
     }
-
+    
     #[inline]
     pub fn intern<Q>(&self, value: Q, new: impl FnOnce(Q) -> K) -> K
     where
-        K: Borrow<Q>,
-        Q: Hash + Eq,
+    K: Borrow<Q>,
+    Q: Hash + Eq,
     {
-        match self.set.lock().unwrap().get(&value) {
-            Some(x) => *x,
-            None => {
-                let value = new(value);
-                self.set.lock().unwrap().insert(value);
-                value
-            }
+        if let Some(x) = self.set.lock().unwrap().get(&value) {
+            return *x
         }
+        
+        let value = new(value);
+        self.set.lock().unwrap().insert(value);
+        value
     }
 }
 
