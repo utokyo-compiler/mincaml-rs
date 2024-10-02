@@ -20,27 +20,25 @@ macro_rules! declare_visitor {
 
             fn super_program(&mut self, program: & $($mutability)? Program<'ctx>) {
                 for function in & $($mutability)? program.functions {
-                    self.visit_function(function);
+                    self.visit_function_def(function);
                 }
-                self.visit_function(& $($mutability)? program.main);
             }
 
-            fn visit_function(&mut self, function: & $($mutability)? Function<'ctx>) {
-                self.super_function(function);
+            fn visit_function_def(&mut self, function: & $($mutability)? FunctionDef<'ctx>) {
+                self.super_function_def(function);
             }
 
-            fn super_function(&mut self, function: & $($mutability)? Function<'ctx>) {
-                self.visit_fn_name(& $($mutability)? function.name);
+            fn super_function_def(&mut self, function: & $($mutability)? FunctionDef<'ctx>) {
                 for block in & $($mutability)? function.basic_blocks {
                     self.visit_block_data(block);
                 }
             }
 
-            fn visit_fn_name(&mut self, fn_name: & $($mutability)? FnName<'ctx>) {
-                self.super_fn_name(fn_name);
+            fn visit_function(&mut self, function: & $($mutability)? FnIndex) {
+                self.super_function(function);
             }
 
-            fn super_fn_name(&mut self, _fn_name: & $($mutability)? FnName<'ctx>) {}
+            fn super_function(&mut self, _function: & $($mutability)? FnIndex) {}
 
             fn visit_block_data(&mut self, block: & $($mutability)? BasicBlockData<'ctx>) {
                 self.super_block_data(block);
@@ -108,11 +106,11 @@ macro_rules! declare_visitor {
                 self.visit_local(base, context);
             }
 
-            fn visit_expr(&mut self, expr: & $($mutability)? ExprKind<'ctx>) {
+            fn visit_expr(&mut self, expr: & $($mutability)? ExprKind) {
                 self.super_expr(expr);
             }
 
-            fn super_expr(&mut self, expr: & $($mutability)? ExprKind<'ctx>) {
+            fn super_expr(&mut self, expr: & $($mutability)? ExprKind) {
                 match expr {
                     ExprKind::Const(_) => (),
                     ExprKind::Unary(_, e) => self.visit_local(e, LocalVisitContext::Use),
@@ -138,22 +136,22 @@ macro_rules! declare_visitor {
                 }
             }
 
-            fn visit_closure_make(&mut self, closure: & $($mutability)? Closure<'ctx>) {
+            fn visit_closure_make(&mut self, closure: & $($mutability)? Closure) {
                 self.super_closure_make(closure);
             }
 
-            fn super_closure_make(&mut self, closure: & $($mutability)? Closure<'ctx>) {
-                self.visit_fn_name(& $($mutability)? closure.fn_name);
+            fn super_closure_make(&mut self, closure: & $($mutability)? Closure) {
+                self.visit_function(& $($mutability)? closure.function);
                 for captured_arg in & $($mutability)? closure.captured_args {
                     self.visit_local(captured_arg, LocalVisitContext::Use);
                 }
             }
 
-            fn visit_terminator(&mut self, terminator: & $($mutability)? TerminatorKind<'ctx>) {
+            fn visit_terminator(&mut self, terminator: & $($mutability)? TerminatorKind) {
                 self.super_terminator(terminator);
             }
 
-            fn super_terminator(&mut self, terminator: & $($mutability)? TerminatorKind<'ctx>) {
+            fn super_terminator(&mut self, terminator: & $($mutability)? TerminatorKind) {
                 match terminator {
                     TerminatorKind::Return => (),
                     TerminatorKind::Branch(branch) => {
@@ -166,12 +164,11 @@ macro_rules! declare_visitor {
                         }
                     }
                     TerminatorKind::Call {
-                        calling_conv: _,
-                        fn_name,
+                        calling_conv,
                         args,
                         branch,
                     } => {
-                        self.visit_fn_name(fn_name);
+                        self.visit_calling_conv(calling_conv);
                         for arg in args {
                             self.visit_local(arg, LocalVisitContext::Use);
                         }
@@ -196,6 +193,12 @@ macro_rules! declare_visitor {
             }
 
             fn super_basic_block(&mut self, _basic_block: & $($mutability)? BasicBlock) {}
+
+            fn visit_calling_conv(&mut self, calling_conv: & $($mutability)? AbsCallingConv) {
+                self.super_calling_conv(calling_conv);
+            }
+
+            fn super_calling_conv(&mut self, _calling_conv: & $($mutability)? AbsCallingConv) {}
         }
     };
 }

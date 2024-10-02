@@ -6,7 +6,7 @@ use data_structure::{
 };
 
 use crate::{
-    ArgIndex, BasicBlock, BasicBlockData, Context, DisambiguatedIdent, FnName, Function, Ident,
+    ArgIndex, BasicBlock, BasicBlockData, Context, DisambiguatedIdent, FnName, FunctionDef, Ident,
     Local, LocalDecl, StmtIndex, StmtKind, TerminatorKind, Ty, Typed,
 };
 
@@ -18,6 +18,9 @@ pub struct BasicBlockBuilder<'ctx> {
 
 impl<'ctx> BasicBlockBuilder<'ctx> {
     pub fn set_args(&mut self, args: IndexVec<ArgIndex, Local>) {
+        #[cfg(debug_assertions)]
+        assert!(self.args.is_empty());
+
         self.args = args;
     }
     pub fn push_stmt(&mut self, value: StmtKind<'ctx>) -> StmtIndex {
@@ -25,7 +28,7 @@ impl<'ctx> BasicBlockBuilder<'ctx> {
     }
 
     /// Terminates the current block and wraps up into a `BasicBlockData`.
-    pub fn terminate_block(self, terminator: Option<TerminatorKind<'ctx>>) -> BasicBlockData<'ctx> {
+    pub fn terminate_block(self, terminator: Option<TerminatorKind>) -> BasicBlockData<'ctx> {
         BasicBlockData {
             args: self.args,
             stmts: self.stmts,
@@ -100,8 +103,8 @@ impl<'ctx> FunctionBuilder<'ctx> {
             unterminated_blocks: data_structure::FxHashSet::default(),
         }
     }
-    pub fn finish_function(self) -> Function<'ctx> {
-        Function {
+    pub fn finish_function(self) -> FunctionDef<'ctx> {
+        FunctionDef {
             name: self.name,
             local_decls: self.local_decls,
             args: self.args,
@@ -148,7 +151,7 @@ impl<'ctx> FunctionBuilder<'ctx> {
     /// Finish current basic block and start a new one.
     ///
     /// Returns the finished block.
-    pub fn terminate_block(&mut self, terminator: TerminatorKind<'ctx>) -> BasicBlock {
+    pub fn terminate_block(&mut self, terminator: TerminatorKind) -> BasicBlock {
         let basic_block_data =
             std::mem::take(&mut self.basic_block_builder).terminate_block(Some(terminator));
         self.push_basic_block(basic_block_data)
@@ -158,7 +161,7 @@ impl<'ctx> FunctionBuilder<'ctx> {
     pub fn terminate_block_deferred(
         &mut self,
         basic_block: DeferredBasicBlock,
-        terminator: TerminatorKind<'ctx>,
+        terminator: TerminatorKind,
     ) {
         #[cfg(debug_assertions)]
         assert!(self.unterminated_blocks.remove(&basic_block.0));

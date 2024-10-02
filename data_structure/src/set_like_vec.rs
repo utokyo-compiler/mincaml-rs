@@ -43,6 +43,16 @@ where
         }
     }
 
+    pub fn push(&mut self, value: T) {
+        self.insert(value);
+    }
+
+    pub fn pop(&mut self) -> Option<T> {
+        self.vec.pop().inspect(|value| {
+            self.map.remove(value);
+        })
+    }
+
     pub fn get<Q>(&self, value: &Q) -> Option<usize>
     where
         T: std::borrow::Borrow<Q>,

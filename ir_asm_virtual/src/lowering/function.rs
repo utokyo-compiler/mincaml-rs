@@ -1,17 +1,17 @@
-use crate::{builder::FunctionBuilder, Context, Function};
+use crate::{builder::FunctionBuilder, Context, FunctionDef};
 
 use super::expr::{lower_expr, State};
 
 /// Lower the given function.
 pub fn lower_function<'ctx>(
     ctx: &'ctx Context<'ctx>,
-    ir_closure::Function {
+    ir_closure::FunctionDef {
         name,
         args,
         args_via_closure,
         body,
-    }: ir_closure::Function<'ctx>,
-) -> Function<'ctx> {
+    }: ir_closure::FunctionDef<'ctx>,
+) -> FunctionDef<'ctx> {
     let mut builder = FunctionBuilder::new(
         ctx,
         name,

@@ -14,8 +14,5 @@ pub fn lowering<'ctx>(
         .into_iter()
         .map(|function| lower_function(ctx, function))
         .collect();
-    Program {
-        functions,
-        main: lower_function(ctx, closure_program.main),
-    }
+    Program { functions }
 }

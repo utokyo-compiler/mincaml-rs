@@ -1,9 +1,4 @@
-//! Architecture-agnostic intermediate representation
-//! based on Control-Flow Graph and Basic Blocks.
-//!
-//! Various optimizations can be performed on this IR.
-//! You can lower it into a more specific IR, assembly, machine code,
-//! or even a well-known IR like LLVM IR or MLIR.
+//! Syntax of this IR.
 
 use core::range::Range;
 
@@ -16,23 +11,24 @@ use data_structure::{
 };
 
 pub use ir_closure::{
-    ArgIndex, BinOp, DisambiguatedIdent, FnName, Ident, LitKind, Pattern, TupleIndex, Ty, Typed,
-    UnOp,
+    ArgIndex, BinOp, DisambiguatedIdent, FnIndex, FnName, Ident, LitKind, Pattern, TupleIndex, Ty,
+    Typed, UnOp,
 };
 
 pub type Expr<'ctx> = Box<'ctx, TypedExprKind<'ctx>>;
-pub type TypedExprKind<'ctx> = Typed<'ctx, ExprKind<'ctx>>;
+pub type TypedExprKind<'ctx> = Typed<'ctx, ExprKind>;
 
 pub struct Program<'ctx> {
-    pub functions: Vec<Function<'ctx>>,
-    pub main: Function<'ctx>,
+    pub functions: IndexVec<FnIndex, FunctionDef<'ctx>>,
 }
+
+impl Indexable<FnIndex> for FunctionDef<'_> {}
 
 /// A function definition.
 ///
 /// A function may be defined as a closure
 /// so it may capture variables from the environment.
-pub struct Function<'ctx> {
+pub struct FunctionDef<'ctx> {
     pub name: FnName<'ctx>,
 
     /// Local variables of the function.
@@ -98,7 +94,9 @@ impl BasicBlock {
 pub struct BasicBlockData<'ctx> {
     /// Arguments passed to the block.
     ///
-    /// This is required to support the functionality of phi nodes.
+    /// This is required to support the functionality of phi nodes,
+    /// which is enough expressive to represent `if` expressions
+    /// in SSA form.
     ///
     /// DO NOT forget to count `args` as a definition.
     pub args: IndexVec<ArgIndex, Local>,
@@ -108,21 +106,21 @@ pub struct BasicBlockData<'ctx> {
     /// Terminator instruction for this block.
     ///
     /// This field should only be `None` during construction.
-    /// Allowing `None` in construction is beneficial for the
-    /// construction of the control-flow graph because it can
-    /// eliminate dependency on the order of the construction,
+    /// Allowing `None` is beneficial for the construction of
+    /// the control-flow graph because it can eliminate
+    /// dependency on the order of the construction,
     /// which decides the `BasicBlock` of `BasicBlockData`.
-    pub(crate) terminator: Option<TerminatorKind<'ctx>>,
+    pub(crate) terminator: Option<TerminatorKind>,
 }
 // `BasicBlock` is just an index to `BasicBlockData`.
 impl Indexable<BasicBlock> for BasicBlockData<'_> {}
 
 impl<'ctx> BasicBlockData<'ctx> {
-    pub fn terminator(&self) -> &TerminatorKind<'ctx> {
+    pub fn terminator(&self) -> &TerminatorKind {
         self.terminator.as_ref().expect("terminator must be set")
     }
 
-    pub fn terminator_mut(&mut self) -> &mut TerminatorKind<'ctx> {
+    pub fn terminator_mut(&mut self) -> &mut TerminatorKind {
         self.terminator.as_mut().expect("terminator must be set")
     }
 }
@@ -151,6 +149,13 @@ pub enum StmtKind<'ctx> {
     Assign { place: Place, value: Expr<'ctx> },
 }
 
+impl<'ctx> StmtKind<'ctx> {
+    /// Remove the statement without changing the `StmtIndex`.
+    pub fn make_nop(&mut self) {
+        *self = Self::Nop;
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum Place {
     Discard,
@@ -168,7 +173,7 @@ pub enum ProjectionKind {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub enum TerminatorKind<'ctx> {
+pub enum TerminatorKind {
     /// Return from the function.
     Return,
 
@@ -184,9 +189,10 @@ pub enum TerminatorKind<'ctx> {
     /// Conditional branch.
     ///
     /// You might want to have instructions with more branch targets
-    /// to support switch-like if expressions.
+    /// to support `switch`-like `if` expressions.
     ConditionalBranch {
         condition: Local,
+
         /// Branch to the first target if the condition is true.
         ///
         /// Note that we have not decided how `true` and
@@ -196,9 +202,11 @@ pub enum TerminatorKind<'ctx> {
 
     /// Call a function.
     Call {
+        /// The calling convention of the function.
         calling_conv: AbsCallingConv,
-        fn_name: FnName<'ctx>,
+
         args: IndexVec<ArgIndex, Local>,
+
         /// The block to branch to after the call and
         /// the destination place for the return value.
         branch: Branch,
@@ -221,43 +229,54 @@ impl Branch {
     }
 }
 
-impl<'ctx> TerminatorKind<'ctx> {
-    pub fn as_mut_branch(&mut self) -> Option<&mut Branch> {
+impl TerminatorKind {
+    pub fn successors(&self) -> impl DoubleEndedIterator<Item = BasicBlock> + '_ {
         match self {
-            Self::Branch(target) => Some(target),
-            _ => None,
-        }
-    }
-    pub fn as_mut_conditional_branch_targets(&mut self) -> Option<&mut [BasicBlock; 2]> {
-        match self {
-            Self::ConditionalBranch { targets, .. } => Some(targets),
-            _ => None,
+            Self::Return => [].iter().copied().chain(None),
+            Self::Branch(branch) | Self::Call { branch, .. } => {
+                [].iter().copied().chain(Some(branch.target))
+            }
+            Self::ConditionalBranch { targets, .. } => targets.iter().copied().chain(None),
         }
     }
 }
 
-/// Abstract calling convention.
-pub type AbsCallingConv = ir_closure::ApplyKind;
+#[derive(Debug, PartialEq, Eq, Hash)]
+/// Abstract calling convention. A concrete calling convention must separate
+/// these two cases.
+pub enum AbsCallingConv {
+    /// Direct call.
+    Direct {
+        /// The function to call.
+        fn_index: FnIndex,
+    },
+
+    /// Call a closure.
+    Closure {
+        /// The closure to call.
+        local: Local,
+    },
+}
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub enum ExprKind<'ctx> {
+pub enum ExprKind {
     Const(LitKind),
     Unary(UnOp, Local),
     Binary(BinOp, Local, Local),
-    ClosureMake(Closure<'ctx>),
+    ClosureMake(Closure),
     Tuple(IndexVec<TupleIndex, Local>),
     ArrayMake(Local, Local),
     Read(Place),
 }
 
-impl<'ctx> ExprKind<'ctx> {
+impl ExprKind {
     pub fn kind(&self) -> &Self {
         self
     }
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub struct Closure<'ctx> {
-    pub fn_name: FnName<'ctx>,
+pub struct Closure {
+    pub function: FnIndex,
     pub captured_args: IndexVec<ArgIndex, Local>,
 }

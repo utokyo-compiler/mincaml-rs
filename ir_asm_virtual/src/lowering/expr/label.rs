@@ -5,7 +5,7 @@
 use data_structure::{index::vec::IndexVec, FxHashMap};
 
 use crate::{
-    builder::DeferredBasicBlock, AbsCallingConv, ArgIndex, BasicBlock, Branch, FnName, Local,
+    builder::DeferredBasicBlock, AbsCallingConv, ArgIndex, BasicBlock, Branch, Local,
     TerminatorKind,
 };
 
@@ -35,14 +35,13 @@ impl Label {
 ///
 /// Instead of using this, you can make `TerminatorKind` (and `Branch`) generic over
 /// `Target = BasicBlock` so that it can be instantiated also with `Label`.
-pub enum TerminatorCtor<'ctx> {
+pub enum TerminatorCtor {
     Branch {
         target: Label,
         args: IndexVec<ArgIndex, Local>,
     },
     Call {
         calling_conv: AbsCallingConv,
-        fn_name: FnName<'ctx>,
         args: IndexVec<ArgIndex, Local>,
         branch_target: Label,
         branch_args: IndexVec<ArgIndex, Local>,
@@ -53,8 +52,8 @@ pub enum TerminatorCtor<'ctx> {
     },
 }
 
-impl<'ctx> TerminatorCtor<'ctx> {
-    fn construct<'builder>(self, state: &mut State<'builder, 'ctx>) -> TerminatorKind<'ctx> {
+impl TerminatorCtor {
+    fn construct(self, state: &mut State<'_, '_>) -> TerminatorKind {
         match self {
             TerminatorCtor::Branch { target, args } => TerminatorKind::Branch(Branch {
                 target: state.resolved_block(target),
@@ -62,13 +61,11 @@ impl<'ctx> TerminatorCtor<'ctx> {
             }),
             TerminatorCtor::Call {
                 calling_conv,
-                fn_name,
                 args,
                 branch_target,
                 branch_args,
             } => TerminatorKind::Call {
                 calling_conv,
-                fn_name,
                 args,
                 branch: Branch {
                     target: state.resolved_block(branch_target),
@@ -88,14 +85,14 @@ impl<'ctx> TerminatorCtor<'ctx> {
     }
 }
 
-pub struct ResolveHandler<'builder, 'ctx> {
+pub struct ResolveHandler<'builder> {
     deferred_basic_block: DeferredBasicBlock,
-    ctor: TerminatorCtor<'ctx>,
+    ctor: TerminatorCtor,
     _marker: std::marker::PhantomData<&'builder ()>,
 }
 
-impl<'builder, 'ctx> ResolveHandler<'builder, 'ctx> {
-    pub fn new(deferred_basic_block: DeferredBasicBlock, ctor: TerminatorCtor<'ctx>) -> Self {
+impl<'builder> ResolveHandler<'builder> {
+    pub fn new(deferred_basic_block: DeferredBasicBlock, ctor: TerminatorCtor) -> Self {
         Self {
             deferred_basic_block,
             ctor,
@@ -104,7 +101,7 @@ impl<'builder, 'ctx> ResolveHandler<'builder, 'ctx> {
     }
 
     /// This call does not create a new basic block.
-    pub fn run(self, state: &mut State<'builder, 'ctx>) {
+    pub fn run<'ctx>(self, state: &mut State<'builder, 'ctx>) {
         let Self {
             deferred_basic_block,
             ctor,
@@ -118,31 +115,31 @@ impl<'builder, 'ctx> ResolveHandler<'builder, 'ctx> {
 }
 
 #[derive(Default)]
-struct HandlerMap<'builder, 'ctx>(FxHashMap<Label, Vec<ResolveHandler<'builder, 'ctx>>>);
+struct HandlerMap<'builder>(FxHashMap<Label, Vec<ResolveHandler<'builder>>>);
 
-impl<'builder, 'ctx> HandlerMap<'builder, 'ctx> {
-    pub fn register(&mut self, label: Label, handler: ResolveHandler<'builder, 'ctx>) {
+impl<'builder> HandlerMap<'builder> {
+    pub fn register(&mut self, label: Label, handler: ResolveHandler<'builder>) {
         self.0.entry(label).or_default().push(handler);
     }
 
-    fn remove(&mut self, label: Label) -> Option<Vec<ResolveHandler<'builder, 'ctx>>> {
+    fn remove(&mut self, label: Label) -> Option<Vec<ResolveHandler<'builder>>> {
         self.0.remove(&label)
     }
 }
 
 #[derive(Default)]
-pub struct LabelResolution<'builder, 'ctx> {
+pub struct LabelResolution<'builder> {
     map: FxHashMap<Label, BasicBlock>,
-    handlers: HandlerMap<'builder, 'ctx>,
+    handlers: HandlerMap<'builder>,
 }
 
-impl<'builder, 'ctx> LabelResolution<'builder, 'ctx> {
+impl<'builder> LabelResolution<'builder> {
     #[must_use]
     pub fn insert(
         &mut self,
         label: Label,
         basic_block: BasicBlock,
-    ) -> Option<Vec<ResolveHandler<'builder, 'ctx>>> {
+    ) -> Option<Vec<ResolveHandler<'builder>>> {
         self.map.insert(label, basic_block);
         self.handlers.remove(label)
     }
@@ -152,7 +149,7 @@ impl<'builder, 'ctx> LabelResolution<'builder, 'ctx> {
     }
 
     #[inline]
-    pub fn register(&mut self, label: Label, handler: ResolveHandler<'builder, 'ctx>) {
+    pub fn register(&mut self, label: Label, handler: ResolveHandler<'builder>) {
         self.handlers.register(label, handler)
     }
 }

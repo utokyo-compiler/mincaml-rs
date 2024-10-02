@@ -51,7 +51,7 @@ impl<'ctx> ExprKind<'ctx> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum BBinOpKind {
+pub enum BooleanBinOpKind {
     Eq,
     Le,
     Ge,
@@ -61,7 +61,7 @@ pub enum BBinOpKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum IBinOpKind {
+pub enum IntBinOpKind {
     Add,
     Sub,
     Mul,
@@ -69,7 +69,7 @@ pub enum IBinOpKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum FBinOpKind {
+pub enum FloatBinOpKind {
     FAdd,
     FSub,
     FMul,
@@ -78,9 +78,9 @@ pub enum FBinOpKind {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BinOp {
-    BBinOp(BBinOpKind),
-    IBinOp(IBinOpKind),
-    FBinOp(FBinOpKind),
+    Boolean(BooleanBinOpKind),
+    Int(IntBinOpKind),
+    Float(FloatBinOpKind),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

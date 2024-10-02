@@ -143,3 +143,10 @@ impl Idx for usize {
         self
     }
 }
+
+#[macro_export]
+macro_rules! index_vec {
+    ($($tt:tt)*) => {
+        IndexVec::from_raw_vec(vec!($($tt)*))
+    };
+}
