@@ -236,24 +236,49 @@ pub fn codegen<'ctx>(
             let local_init = function_state.get_local(*init).expect_single()?;
             let wasm_ty = function_state.get_local_decl(local_init).wasm_ty;
 
-            let loop_counter = function_state.new_local(WasmPrimitiveTy::I32);
-
             // return the address of the array
             function_state.push_raw(Instruction::GlobalGet(HEAP_PTR));
-            function_state.push_raw(Instruction::Loop(wasm_encoder::BlockType::Empty));
-            {
-                function_state.push_raw(Instruction::LocalGet(loop_counter.unwrap_idx()));
-                function_state.push_raw(Instruction::LocalGet(local_len.unwrap_idx()));
-                // if loop_counter < len, continue
-                function_state.push_raw(Instruction::I32LtS);
-                function_state.push_raw(Instruction::BrIf(0));
-            }
-            function_state.push_raw(Instruction::LocalGet(loop_counter.unwrap_idx()));
-            function_state.push_raw(Instruction::I32Const(wasm_ty.size_of() as i32));
 
-            function_state.push_raw(Instruction::LocalGet(local_len.unwrap_idx()));
-            function_state.push_raw(Instruction::LocalGet(loop_counter.unwrap_idx()));
-            todo!()
+            function_state.push_raw(Instruction::Block(wasm_encoder::BlockType::Empty));
+            {
+                function_state.push_raw(Instruction::LocalGet(local_len.unwrap_idx()));
+                function_state.push_raw(Instruction::I32Eqz);
+                function_state.push_raw(Instruction::BrIf(0));
+
+                // initial value is always zero
+                let loop_counter = function_state.new_local(WasmPrimitiveTy::I32);
+
+                function_state.push_raw(Instruction::Loop(wasm_encoder::BlockType::Empty));
+                {
+                    function_state.push_raw(Instruction::LocalGet(loop_counter.unwrap_idx()));
+                    function_state.push_raw(Instruction::I32Const(1));
+                    function_state.push_raw(Instruction::I32Add);
+                    function_state.push_raw(Instruction::LocalSet(loop_counter.unwrap_idx()));
+
+                    function_state.push_raw(Instruction::GlobalGet(HEAP_PTR));
+                    function_state.push_raw(Instruction::LocalGet(local_init.unwrap_idx()));
+                    match wasm_ty {
+                        WasmPrimitiveTy::I32 => {
+                            function_state.push_raw(Instruction::I32Store(MEM_ARG));
+                        }
+                        WasmPrimitiveTy::F32 => {
+                            function_state.push_raw(Instruction::F32Store(MEM_ARG));
+                        }
+                        WasmPrimitiveTy::RefFn => unreachable!(),
+                    }
+                    grow_heap(function_state, wasm_ty.size_of() as i32);
+
+                    // if `loop_counter` <= `len`, continue
+                    function_state.push_raw(Instruction::LocalGet(loop_counter.unwrap_idx()));
+                    function_state.push_raw(Instruction::LocalGet(local_len.unwrap_idx()));
+                    function_state.push_raw(Instruction::I32GeS);
+                    function_state.push_raw(Instruction::BrIf(0));
+
+                    function_state.push_raw(Instruction::End);
+                }
+
+                function_state.push_raw(Instruction::End);
+            }
         }
         ir_closure::ExprKind::Get(base, index) => {
             let local_base = function_state.get_local(*base).expect_single()?;

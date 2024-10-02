@@ -16,20 +16,8 @@ pub fn codegen(asm_virtual_prog: ir_closure::Program<'_>) -> Result<Vec<u8>> {
     let signarute_arena = TypedArena::new();
 
     let program = {
-        let mut signature_interner = SignatureInterner::new(&signarute_arena);
-        use WasmPrimitiveTy::*;
-        let import_fns = vec![
-            ImportFn {
-                module: "mincaml_runtime",
-                field: "Array_make$i32",
-                sig: signature_interner.intern(FnTypeSignature::new([I32, I32], [I32])),
-            },
-            ImportFn {
-                module: "mincaml_runtime",
-                field: "Array_make$f32",
-                sig: signature_interner.intern(FnTypeSignature::new([I32, F32], [I32])),
-            },
-        ];
+        let signature_interner = SignatureInterner::new(&signarute_arena);
+        let import_fns = Vec::new();
 
         let mut state = State {
             import_fns_len: import_fns.len(),
@@ -154,6 +142,7 @@ pub struct FnTypeSignature {
 }
 
 impl FnTypeSignature {
+    #[allow(dead_code)]
     #[inline]
     pub fn new(
         params: impl IntoIterator<Item = WasmPrimitiveTy>,
