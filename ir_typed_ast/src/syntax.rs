@@ -33,6 +33,13 @@ impl<'ctx> DisambiguatedIdent<'ctx> {
             disambiguator,
         }
     }
+
+    pub fn name(&self) -> &'ctx str {
+        match self {
+            Self::UserDefined { name, .. } => name.0,
+            Self::CompilerGenerated { name, .. } => name,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]

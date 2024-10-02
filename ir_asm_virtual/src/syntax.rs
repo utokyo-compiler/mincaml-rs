@@ -11,12 +11,12 @@ use data_structure::{
 };
 
 pub use ir_closure::{
-    ArgIndex, BinOp, DisambiguatedIdent, FnIndex, FnName, Ident, LitKind, Pattern, TupleIndex, Ty,
-    Typed, UnOp,
+    ArgIndex, BinOp, DisambiguatedIdent, FnIndex, FnName, FunctionInstance, Ident, LitKind,
+    Pattern, TupleIndex, Ty, Typed, UnOp,
 };
 
 pub type Expr<'ctx> = Box<'ctx, TypedExprKind<'ctx>>;
-pub type TypedExprKind<'ctx> = Typed<'ctx, ExprKind>;
+pub type TypedExprKind<'ctx> = Typed<'ctx, ExprKind<'ctx>>;
 
 pub struct Program<'ctx> {
     pub functions: IndexVec<FnIndex, FunctionDef<'ctx>>,
@@ -110,17 +110,17 @@ pub struct BasicBlockData<'ctx> {
     /// the control-flow graph because it can eliminate
     /// dependency on the order of the construction,
     /// which decides the `BasicBlock` of `BasicBlockData`.
-    pub(crate) terminator: Option<TerminatorKind>,
+    pub(crate) terminator: Option<TerminatorKind<'ctx>>,
 }
 // `BasicBlock` is just an index to `BasicBlockData`.
 impl Indexable<BasicBlock> for BasicBlockData<'_> {}
 
 impl<'ctx> BasicBlockData<'ctx> {
-    pub fn terminator(&self) -> &TerminatorKind {
+    pub fn terminator(&self) -> &TerminatorKind<'ctx> {
         self.terminator.as_ref().expect("terminator must be set")
     }
 
-    pub fn terminator_mut(&mut self) -> &mut TerminatorKind {
+    pub fn terminator_mut(&mut self) -> &mut TerminatorKind<'ctx> {
         self.terminator.as_mut().expect("terminator must be set")
     }
 }
@@ -173,7 +173,7 @@ pub enum ProjectionKind {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub enum TerminatorKind {
+pub enum TerminatorKind<'ctx> {
     /// Return from the function.
     Return,
 
@@ -203,7 +203,7 @@ pub enum TerminatorKind {
     /// Call a function.
     Call {
         /// The calling convention of the function.
-        calling_conv: AbsCallingConv,
+        calling_conv: AbsCallingConv<'ctx>,
 
         args: IndexVec<ArgIndex, Local>,
 
@@ -229,7 +229,7 @@ impl Branch {
     }
 }
 
-impl TerminatorKind {
+impl TerminatorKind<'_> {
     pub fn successors(&self) -> impl DoubleEndedIterator<Item = BasicBlock> + '_ {
         match self {
             Self::Return => [].iter().copied().chain(None),
@@ -244,11 +244,11 @@ impl TerminatorKind {
 #[derive(Debug, PartialEq, Eq, Hash)]
 /// Abstract calling convention. A concrete calling convention must separate
 /// these two cases.
-pub enum AbsCallingConv {
+pub enum AbsCallingConv<'ctx> {
     /// Direct call.
     Direct {
         /// The function to call.
-        fn_index: FnIndex,
+        function: FunctionInstance<'ctx>,
     },
 
     /// Call a closure.
@@ -259,24 +259,24 @@ pub enum AbsCallingConv {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub enum ExprKind {
+pub enum ExprKind<'ctx> {
     Const(LitKind),
     Unary(UnOp, Local),
     Binary(BinOp, Local, Local),
-    ClosureMake(Closure),
+    ClosureMake(Closure<'ctx>),
     Tuple(IndexVec<TupleIndex, Local>),
     ArrayMake(Local, Local),
     Read(Place),
 }
 
-impl ExprKind {
+impl ExprKind<'_> {
     pub fn kind(&self) -> &Self {
         self
     }
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub struct Closure {
-    pub function: FnIndex,
+pub struct Closure<'ctx> {
+    pub function: FunctionInstance<'ctx>,
     pub captured_args: IndexVec<ArgIndex, Local>,
 }

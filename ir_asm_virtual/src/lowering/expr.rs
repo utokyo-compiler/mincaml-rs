@@ -76,11 +76,11 @@ impl PlaceBinder {
 /// Generalized expression to be bound.
 enum PlaceBindee<'ctx> {
     Expr {
-        expr: ExprKind,
+        expr: ExprKind<'ctx>,
         ty: Ty<'ctx>,
     },
     Call {
-        calling_conv: AbsCallingConv,
+        calling_conv: AbsCallingConv<'ctx>,
 
         args: IndexVec<ArgIndex, Local>,
 
@@ -205,7 +205,7 @@ fn evaluated_local<'ctx>(
     ctx: &'ctx Context<'ctx>,
     state: &mut State<'_, 'ctx>,
     name: &'static str,
-    expr: ExprKind,
+    expr: ExprKind<'ctx>,
     ty: Ty<'ctx>,
 ) -> Local {
     match expr {
@@ -228,7 +228,7 @@ fn evaluated_local<'ctx>(
 pub struct State<'builder, 'ctx> {
     binders: Vec<PlaceBinder>,
     builder: &'builder mut builder::FunctionBuilder<'ctx>,
-    label_resolution: LabelResolution<'builder>,
+    label_resolution: LabelResolution<'builder, 'ctx>,
 }
 
 impl<'builder, 'ctx> State<'builder, 'ctx> {
@@ -272,7 +272,7 @@ impl<'builder, 'ctx> State<'builder, 'ctx> {
     ///
     /// * `ctor` - The constructor of the terminator.
     /// * `until_resolve` - The label of the latest created basic block.
-    fn defer_terminate_block(&mut self, ctor: TerminatorCtor, until_resolve: Label) {
+    fn defer_terminate_block(&mut self, ctor: TerminatorCtor<'ctx>, until_resolve: Label) {
         let deferred = self.builder.defer_terminate_block();
         self.label_resolution
             .register(until_resolve, ResolveHandler::new(deferred, ctor));
@@ -401,8 +401,8 @@ pub fn lower_expr<'ctx>(
                     .collect::<IndexVec<_, _>>();
                 break 'bindee PlaceBindee::Call {
                     calling_conv: match apply_kind {
-                        ir_closure::ApplyKind::Direct { fn_index } => AbsCallingConv::Direct {
-                            fn_index: *fn_index,
+                        ir_closure::ApplyKind::Direct { function } => AbsCallingConv::Direct {
+                            function: *function,
                         },
                         ir_closure::ApplyKind::Closure { ident } => AbsCallingConv::Closure {
                             local: state.builder.get_local(*ident),

@@ -53,6 +53,10 @@ impl<'ctx> FnName<'ctx> {
         Self(Some(ident))
     }
 
+    pub fn as_non_main(&self) -> Ident<'ctx> {
+        self.0.unwrap()
+    }
+
     pub const MAIN_FN_NAME: Self = Self(None);
 }
 
@@ -93,7 +97,7 @@ pub enum ExprKind<'ctx> {
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct Closure<'ctx> {
-    pub function: FnIndex,
+    pub function: FunctionInstance<'ctx>,
     pub captured_args: IndexVec<ArgIndex, Ident<'ctx>>,
 }
 
@@ -101,12 +105,21 @@ pub struct Closure<'ctx> {
 pub enum ApplyKind<'ctx> {
     Direct {
         /// The function to apply.
-        fn_index: FnIndex,
+        function: FunctionInstance<'ctx>,
     },
     Closure {
         /// The closure to apply.
         ident: Ident<'ctx>,
     },
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+pub enum FunctionInstance<'ctx> {
+    /// A function defined in the program.
+    Defined(FnIndex),
+
+    /// A function imported from another module, such as `pervasives`.
+    Imported(FnName<'ctx>),
 }
 
 impl<'ctx> ExprKind<'ctx> {
