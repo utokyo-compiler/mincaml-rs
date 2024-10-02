@@ -4,7 +4,7 @@ use crate::{
 };
 use sourcemap::{Loc, Spanned};
 
-use super::{mincaml, Allocator};
+use super::{mincaml, mli, Allocator};
 
 pub struct LalrpopParser;
 
@@ -15,6 +15,18 @@ impl Parser for LalrpopParser {
     ) -> Result<syntax::Expr<'ctx>, crate::parser::Error<'input>> {
         let lexer = LexerWrapper::new(lexer);
         let parser = mincaml::ExprParser::new();
+
+        parser
+            .parse(alloc, lexer)
+            .map_err(Error::from_lalrpop_error)
+    }
+
+    fn parse_mli<'input, 'ctx>(
+        alloc: Allocator<'ctx>,
+        lexer: impl Lexer<'input>,
+    ) -> Result<syntax::Mli<'ctx>, Error<'input>> {
+        let lexer = LexerWrapper::new(lexer);
+        let parser = mli::MliParser::new();
 
         parser
             .parse(alloc, lexer)

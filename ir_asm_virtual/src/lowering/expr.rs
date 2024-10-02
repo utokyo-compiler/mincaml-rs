@@ -1,11 +1,11 @@
 mod label;
-
-use data_structure::index::vec::IndexVec;
 use label::{Label, LabelResolution, ResolveHandler, TerminatorCtor};
+
+use data_structure::{index::vec::IndexVec, index_vec};
 
 use crate::{
     builder, AbsCallingConv, ArgIndex, BasicBlock, Branch, Closure, Context, DisambiguatedIdent,
-    ExprKind, FnName, LitKind, Local, Place, ProjectionKind, StmtKind, TerminatorKind, Ty, Typed,
+    ExprKind, LitKind, Local, Place, ProjectionKind, StmtKind, TerminatorKind, Ty, Typed,
 };
 
 #[derive(Clone, Copy)]
@@ -27,7 +27,7 @@ impl BindingPlace {
 /// Generalized binding agent. You can think of it as a defunctionalized
 /// version of the following trait:
 ///
-/// ```no_run
+/// ```ignore
 /// trait PlaceBinder<'ctx> {
 ///     fn bind(
 ///         self,
@@ -76,12 +76,12 @@ impl PlaceBinder {
 /// Generalized expression to be bound.
 enum PlaceBindee<'ctx> {
     Expr {
-        expr: ExprKind<'ctx>,
+        expr: ExprKind,
         ty: Ty<'ctx>,
     },
     Call {
         calling_conv: AbsCallingConv,
-        fn_name: FnName<'ctx>,
+
         args: IndexVec<ArgIndex, Local>,
 
         /// return type of the function.
@@ -107,22 +107,18 @@ impl PlaceBinder {
                         });
                     }
                     PlaceBindee::Call {
-                        calling_conv,
-                        fn_name,
-                        args,
-                        ..
+                        calling_conv, args, ..
                     } => {
                         let target = state.builder.next_basic_block();
                         state.builder.terminate_block(TerminatorKind::Call {
                             calling_conv,
-                            fn_name,
                             args,
                             branch: Branch {
                                 target,
                                 args: match place {
-                                    BindingPlace::Discard => IndexVec::new(),
+                                    BindingPlace::Discard => index_vec![],
                                     BindingPlace::Local(local) => {
-                                        IndexVec::from_raw_vec(vec![local])
+                                        index_vec![local]
                                     }
                                 },
                             },
@@ -135,7 +131,6 @@ impl PlaceBinder {
                     PlaceBindee::Expr { expr, ty } => ctx.new_expr(Typed::new(expr, ty)),
                     PlaceBindee::Call {
                         calling_conv,
-                        fn_name,
                         args,
                         ty,
                     } => {
@@ -143,13 +138,10 @@ impl PlaceBinder {
                         let target = state.builder.next_basic_block();
                         state.builder.terminate_block(TerminatorKind::Call {
                             calling_conv,
-                            fn_name,
                             args,
                             branch: Branch::no_args(target),
                         });
-                        state
-                            .builder
-                            .set_args_to_current(IndexVec::from_raw_vec(vec![call_result]));
+                        state.builder.set_args_to_current(index_vec![call_result]);
                         ctx.new_expr(Typed::new(ExprKind::Read(Place::Local(call_result)), ty))
                     }
                 };
@@ -165,14 +157,13 @@ impl PlaceBinder {
                     state.defer_terminate_block(
                         TerminatorCtor::Branch {
                             target,
-                            args: IndexVec::from_raw_vec(vec![branch_arg]),
+                            args: index_vec![branch_arg],
                         },
                         target,
                     );
                 }
                 PlaceBindee::Call {
                     calling_conv,
-                    fn_name,
                     args,
                     ty,
                 } => {
@@ -180,10 +171,9 @@ impl PlaceBinder {
                     state.defer_terminate_block(
                         TerminatorCtor::Call {
                             calling_conv,
-                            fn_name,
                             args,
                             branch_target: target,
-                            branch_args: IndexVec::from_raw_vec(vec![call_result]),
+                            branch_args: index_vec![call_result],
                         },
                         target,
                     );
@@ -215,7 +205,7 @@ fn evaluated_local<'ctx>(
     ctx: &'ctx Context<'ctx>,
     state: &mut State<'_, 'ctx>,
     name: &'static str,
-    expr: ExprKind<'ctx>,
+    expr: ExprKind,
     ty: Ty<'ctx>,
 ) -> Local {
     match expr {
@@ -238,7 +228,7 @@ fn evaluated_local<'ctx>(
 pub struct State<'builder, 'ctx> {
     binders: Vec<PlaceBinder>,
     builder: &'builder mut builder::FunctionBuilder<'ctx>,
-    label_resolution: LabelResolution<'builder, 'ctx>,
+    label_resolution: LabelResolution<'builder>,
 }
 
 impl<'builder, 'ctx> State<'builder, 'ctx> {
@@ -282,7 +272,7 @@ impl<'builder, 'ctx> State<'builder, 'ctx> {
     ///
     /// * `ctor` - The constructor of the terminator.
     /// * `until_resolve` - The label of the latest created basic block.
-    fn defer_terminate_block(&mut self, ctor: TerminatorCtor<'ctx>, until_resolve: Label) {
+    fn defer_terminate_block(&mut self, ctor: TerminatorCtor, until_resolve: Label) {
         let deferred = self.builder.defer_terminate_block();
         self.label_resolution
             .register(until_resolve, ResolveHandler::new(deferred, ctor));
@@ -313,7 +303,7 @@ pub fn lower_expr<'ctx>(
                 ExprKind::Binary(*bin_op, e1, e2)
             }
             ir_closure::ExprKind::ClosureMake(closure) => ExprKind::ClosureMake(Closure {
-                fn_name: closure.fn_name,
+                function: closure.function,
                 captured_args: closure
                     .captured_args
                     .iter()
@@ -404,14 +394,20 @@ pub fn lower_expr<'ctx>(
             }
 
             // basic-block creation
-            ir_closure::ExprKind::App(apply_kind, fn_name, args) => {
+            ir_closure::ExprKind::App(apply_kind, args) => {
                 let args = args
                     .iter()
                     .map(|arg| state.builder.get_local(*arg))
                     .collect::<IndexVec<_, _>>();
                 break 'bindee PlaceBindee::Call {
-                    calling_conv: *apply_kind,
-                    fn_name: *fn_name,
+                    calling_conv: match apply_kind {
+                        ir_closure::ApplyKind::Direct { fn_index } => AbsCallingConv::Direct {
+                            fn_index: *fn_index,
+                        },
+                        ir_closure::ApplyKind::Closure { ident } => AbsCallingConv::Closure {
+                            local: state.builder.get_local(*ident),
+                        },
+                    },
                     args,
                     ty,
                 };
@@ -458,9 +454,7 @@ pub fn lower_expr<'ctx>(
                     place: BindingPlace::Local(local),
                 } = binder_of_if
                 {
-                    state
-                        .builder
-                        .set_args_to_current(IndexVec::from_raw_vec(vec![local]));
+                    state.builder.set_args_to_current(index_vec![local]);
                 }
 
                 return;

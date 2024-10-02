@@ -1,5 +1,5 @@
 use sourcemap::{Loc, Spanned};
-use syntax::{*, ExprKind::*, LitKind::*, BinOp::*, IBinOpKind::*, BBinOpKind::*, FBinOpKind::*, UnOp::*};
+use syntax::{*, ExprKind::*, LitKind::*, IntBinOpKind::*, BooleanBinOpKind::*, FloatBinOpKind::*, UnOp::*};
 
 use crate::lexer::{Error as LexError, Token};
 use super::Allocator;
@@ -50,26 +50,26 @@ SpannedIdent: Spanned<Ident<'ctx>> = {
 }
 
 TermOp: BinOp = {
-    "+" => IBinOp(Add),
-    "-" => IBinOp(Sub),
-    "+." => FBinOp(FAdd),
-    "-." => FBinOp(FSub)
+    "+" => BinOp::Int(Add),
+    "-" => BinOp::Int(Sub),
+    "+." => BinOp::Float(FAdd),
+    "-." => BinOp::Float(FSub)
 };
 
 FactorOp: BinOp = {
-    "*" => IBinOp(Mul),
-    "/" => IBinOp(Div),
-    "*." => FBinOp(FMul),
-    "/." => FBinOp(FDiv)
+    "*" => BinOp::Int(Mul),
+    "/" => BinOp::Int(Div),
+    "*." => BinOp::Float(FMul),
+    "/." => BinOp::Float(FDiv)
 };
 
 BooleanBinOp: BinOp = {
-    "=" => BBinOp(Eq),
-    "<=" => BBinOp(Le),
-    ">=" => BBinOp(Ge),
-    "<>" => BBinOp(Ne),
-    "<" => BBinOp(Lt),
-    ">" => BBinOp(Gt)
+    "=" => BinOp::Boolean(Eq),
+    "<=" => BinOp::Boolean(Le),
+    ">=" => BinOp::Boolean(Ge),
+    "<>" => BinOp::Boolean(Ne),
+    "<" => BinOp::Boolean(Lt),
+    ">" => BinOp::Boolean(Gt)
 };
 
 Literal: Expr<'ctx> = {

@@ -1,8 +1,8 @@
 use std::fmt::Display;
 
-use crate::{BBinOpKind, BinOp, FBinOpKind, IBinOpKind, LitKind, UnOp};
+use crate::{BinOp, BooleanBinOpKind, FloatBinOpKind, IntBinOpKind, LitKind, UnOp};
 
-impl BBinOpKind {
+impl BooleanBinOpKind {
     pub fn name(self) -> &'static str {
         match self {
             Self::Eq => "eq",
@@ -15,7 +15,7 @@ impl BBinOpKind {
     }
 }
 
-impl IBinOpKind {
+impl IntBinOpKind {
     pub fn name(self) -> &'static str {
         match self {
             Self::Add => "add",
@@ -26,7 +26,7 @@ impl IBinOpKind {
     }
 }
 
-impl FBinOpKind {
+impl FloatBinOpKind {
     pub fn name(self) -> &'static str {
         match self {
             Self::FAdd => "fadd",
@@ -40,9 +40,9 @@ impl FBinOpKind {
 impl BinOp {
     pub fn name(self) -> &'static str {
         match self {
-            Self::BBinOp(kind) => kind.name(),
-            Self::IBinOp(kind) => kind.name(),
-            Self::FBinOp(kind) => kind.name(),
+            Self::Boolean(kind) => kind.name(),
+            Self::Int(kind) => kind.name(),
+            Self::Float(kind) => kind.name(),
         }
     }
 }

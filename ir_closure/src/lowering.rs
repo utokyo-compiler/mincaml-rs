@@ -1,8 +1,8 @@
-use data_structure::{index::vec::IndexVec, FxHashSet, SetLikeVec};
+use data_structure::{index::vec::IndexVec, FxHashMap, FxHashSet, SetLikeVec};
 
 use crate::{
-    context::Context, ApplyKind, ArgIndex, Closure, Expr, ExprKind, FnName, Function, Ident,
-    LetBinding, Pattern, Program, Typed,
+    context::Context, ApplyKind, ArgIndex, Closure, Expr, ExprKind, FnIndex, FnName, FunctionDef,
+    Ident, LetBinding, Pattern, Program, Typed,
 };
 
 /// The main entrypoint of closure conversion.
@@ -14,25 +14,36 @@ use crate::{
 /// 3. 2. is a problem that should be handled by an optimization pass
 pub fn lowering<'ctx>(ctx: &'ctx Context<'ctx>, knorm_expr: ir_knorm::Expr<'ctx>) -> Program<'ctx> {
     let mut state = LoweringState::default();
-    let main = Function {
-        name: FnName::main_fn_name(ctx, knorm_expr.ty),
+    let main = FunctionDef {
+        name: FnName::MAIN_FN_NAME,
         args: IndexVec::new(),
         args_via_closure: IndexVec::new(),
         body: lower_expr(ctx, &mut state, &knorm_expr),
     };
+    state.push_function(main);
     Program {
         functions: state.functions,
-        main,
     }
 }
 
 #[derive(Default)]
 struct LoweringState<'ctx> {
     decided_to_make_closure: FxHashSet<FnName<'ctx>>,
-    functions: Vec<Function<'ctx>>,
+    functions: IndexVec<FnIndex, FunctionDef<'ctx>>,
+    function_resolutions: FxHashMap<FnName<'ctx>, FnIndex>,
 }
 
 impl<'ctx> LoweringState<'ctx> {
+    fn push_function(&mut self, func: FunctionDef<'ctx>) {
+        let name = func.name;
+        let idx = self.functions.push(func);
+        self.function_resolutions.insert(name, idx);
+    }
+
+    fn resolve_function(&self, fn_name: &FnName<'ctx>) -> FnIndex {
+        self.function_resolutions[fn_name]
+    }
+
     fn decided_to_make_closure(&self, fn_name: &FnName<'ctx>) -> bool {
         self.decided_to_make_closure.contains(fn_name)
     }
@@ -86,20 +97,20 @@ fn lower_expr<'ctx>(
                     state.ack_decide_to_make_closure(fn_name);
                 }
                 let fv_set: IndexVec<_, _> = fv_set.into_iter().collect();
-                let func = Function {
+                let func = FunctionDef {
                     name: fn_name,
                     args: args.clone(),
                     args_via_closure: fv_set.clone(),
                     body: lower_expr(ctx, state, value),
                 };
-                state.functions.push(func);
+                state.push_function(func);
 
                 let follows = lower_expr(ctx, state, follows);
 
                 if state.decided_to_make_closure(&fn_name) {
                     let value = ctx.new_expr(Typed::new(
                         ExprKind::ClosureMake(Closure {
-                            fn_name,
+                            function: state.resolve_function(&fn_name),
                             captured_args: fv_set,
                         }),
                         value.ty,
@@ -121,11 +132,12 @@ fn lower_expr<'ctx>(
             let fn_name = FnName::new(*f);
             ExprKind::App(
                 if state.decided_to_make_closure(&fn_name) {
-                    ApplyKind::Closure
+                    ApplyKind::Closure { ident: *f }
                 } else {
-                    ApplyKind::Direct
+                    ApplyKind::Direct {
+                        fn_index: state.resolve_function(&fn_name),
+                    }
                 },
-                fn_name,
                 args.clone(),
             )
         }

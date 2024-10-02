@@ -3,8 +3,8 @@ use data_structure::{
     index::{vec::IndexVec, Indexable},
 };
 use sourcemap::{Span, Spanned};
-pub use syntax::{BinOp, LitKind, UnOp, BBinOpKind, FBinOpKind, IBinOpKind};
-pub use ty::{ArgIndex, TupleIndex, Ty, Typed};
+pub use syntax::{BinOp, BooleanBinOpKind, FloatBinOpKind, IntBinOpKind, LitKind, UnOp};
+pub use ty::{ArgIndex, TupleIndex, Ty, TyKind, Typed};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 /// Represents a resolved identifier.

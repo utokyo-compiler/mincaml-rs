@@ -1,4 +1,4 @@
-use ir_knorm::{Context, Expr, ExprKind, Ident, MutVisitor, UnOp, BinOp, LetBinding, LitKind, BBinOpKind, IBinOpKind, FBinOpKind};
+use ir_knorm::{Context, Expr, ExprKind, Ident, MutVisitor, UnOp, BinOp, LetBinding, LitKind };
 use middleware::{FxHashMap, GlobalContext};
 
 use crate::KnormPass;
@@ -6,29 +6,31 @@ use crate::KnormPass;
 pub struct ConstantFold;
 
 fn bin_op_fold(bin_op: BinOp, x: LitKind, y: LitKind) -> Option<LitKind> {
+    use ir_knorm:: {BooleanBinOpKind as BOp, FloatBinOpKind as FOp, IntBinOpKind as IOp};
+
     match (bin_op, x, y) {
-        (BinOp::BBinOp(BBinOpKind::Eq), LitKind::Bool(x), LitKind::Bool(y)) => Some(LitKind::Bool(x == y)),
-        (BinOp::BBinOp(BBinOpKind::Ne), LitKind::Bool(x), LitKind::Bool(y)) => Some(LitKind::Bool(x != y)),
-        (BinOp::BBinOp(BBinOpKind::Eq), LitKind::Int(x), LitKind::Int(y)) => Some(LitKind::Bool(x == y)),
-        (BinOp::BBinOp(BBinOpKind::Ne), LitKind::Int(x), LitKind::Int(y)) => Some(LitKind::Bool(x != y)),
-        (BinOp::BBinOp(BBinOpKind::Eq), LitKind::Float(x), LitKind::Float(y)) => Some(LitKind::Bool(x == y)),
-        (BinOp::BBinOp(BBinOpKind::Ne), LitKind::Float(x), LitKind::Float(y)) => Some(LitKind::Bool(x != y)),
-        (BinOp::BBinOp(BBinOpKind::Ge), LitKind::Int(x), LitKind::Int(y)) => Some(LitKind::Bool(x >= y)),
-        (BinOp::BBinOp(BBinOpKind::Le), LitKind::Int(x), LitKind::Int(y)) => Some(LitKind::Bool(x <= y)),
-        (BinOp::BBinOp(BBinOpKind::Gt), LitKind::Int(x), LitKind::Int(y)) => Some(LitKind::Bool(x > y)),
-        (BinOp::BBinOp(BBinOpKind::Lt), LitKind::Int(x), LitKind::Int(y)) => Some(LitKind::Bool(x < y)),
-        (BinOp::BBinOp(BBinOpKind::Ge), LitKind::Float(x), LitKind::Float(y)) => Some(LitKind::Bool(x >= y)),
-        (BinOp::BBinOp(BBinOpKind::Le), LitKind::Float(x), LitKind::Float(y)) => Some(LitKind::Bool(x <= y)),
-        (BinOp::BBinOp(BBinOpKind::Gt), LitKind::Float(x), LitKind::Float(y)) => Some(LitKind::Bool(x > y)),
-        (BinOp::BBinOp(BBinOpKind::Lt), LitKind::Float(x), LitKind::Float(y)) => Some(LitKind::Bool(x < y)),
-        (BinOp::IBinOp(IBinOpKind::Add), LitKind::Int(x), LitKind::Int(y)) => Some(LitKind::Int(x + y)),
-        (BinOp::IBinOp(IBinOpKind::Sub), LitKind::Int(x), LitKind::Int(y)) => Some(LitKind::Int(x - y)),
-        (BinOp::IBinOp(IBinOpKind::Mul), LitKind::Int(x), LitKind::Int(y)) => Some(LitKind::Int(x * y)),
-        (BinOp::IBinOp(IBinOpKind::Div), LitKind::Int(x), LitKind::Int(y)) => Some(LitKind::Int(x / y)),
-        (BinOp::FBinOp(FBinOpKind::FAdd), LitKind::Float(x), LitKind::Float(y)) => Some(LitKind::Float(f32::to_bits(f32::from_bits(x) + f32::from_bits(y)))),
-        (BinOp::FBinOp(FBinOpKind::FSub), LitKind::Float(x), LitKind::Float(y)) => Some(LitKind::Float(f32::to_bits(f32::from_bits(x) - f32::from_bits(y)))),
-        (BinOp::FBinOp(FBinOpKind::FMul), LitKind::Float(x), LitKind::Float(y)) => Some(LitKind::Float(f32::to_bits(f32::from_bits(x) * f32::from_bits(y)))),
-        (BinOp::FBinOp(FBinOpKind::FDiv), LitKind::Float(x), LitKind::Float(y)) => Some(LitKind::Float(f32::to_bits(f32::from_bits(x) / f32::from_bits(y)))),
+        (BinOp::Boolean(BOp::Eq), LitKind::Bool(x), LitKind::Bool(y)) => Some(LitKind::Bool(x == y)),
+        (BinOp::Boolean(BOp::Ne), LitKind::Bool(x), LitKind::Bool(y)) => Some(LitKind::Bool(x != y)),
+        (BinOp::Boolean(BOp::Eq), LitKind::Int(x), LitKind::Int(y)) => Some(LitKind::Bool(x == y)),
+        (BinOp::Boolean(BOp::Ne), LitKind::Int(x), LitKind::Int(y)) => Some(LitKind::Bool(x != y)),
+        (BinOp::Boolean(BOp::Eq), LitKind::Float(x), LitKind::Float(y)) => Some(LitKind::Bool(x == y)),
+        (BinOp::Boolean(BOp::Ne), LitKind::Float(x), LitKind::Float(y)) => Some(LitKind::Bool(x != y)),
+        (BinOp::Boolean(BOp::Ge), LitKind::Int(x), LitKind::Int(y)) => Some(LitKind::Bool(x >= y)),
+        (BinOp::Boolean(BOp::Le), LitKind::Int(x), LitKind::Int(y)) => Some(LitKind::Bool(x <= y)),
+        (BinOp::Boolean(BOp::Gt), LitKind::Int(x), LitKind::Int(y)) => Some(LitKind::Bool(x > y)),
+        (BinOp::Boolean(BOp::Lt), LitKind::Int(x), LitKind::Int(y)) => Some(LitKind::Bool(x < y)),
+        (BinOp::Boolean(BOp::Ge), LitKind::Float(x), LitKind::Float(y)) => Some(LitKind::Bool(x >= y)),
+        (BinOp::Boolean(BOp::Le), LitKind::Float(x), LitKind::Float(y)) => Some(LitKind::Bool(x <= y)),
+        (BinOp::Boolean(BOp::Gt), LitKind::Float(x), LitKind::Float(y)) => Some(LitKind::Bool(x > y)),
+        (BinOp::Boolean(BOp::Lt), LitKind::Float(x), LitKind::Float(y)) => Some(LitKind::Bool(x < y)),
+        (BinOp::Int(IOp::Add), LitKind::Int(x), LitKind::Int(y)) => Some(LitKind::Int(x + y)),
+        (BinOp::Int(IOp::Sub), LitKind::Int(x), LitKind::Int(y)) => Some(LitKind::Int(x - y)),
+        (BinOp::Int(IOp::Mul), LitKind::Int(x), LitKind::Int(y)) => Some(LitKind::Int(x * y)),
+        (BinOp::Int(IOp::Div), LitKind::Int(x), LitKind::Int(y)) => Some(LitKind::Int(x / y)),
+        (BinOp::Float(FOp::FAdd), LitKind::Float(x), LitKind::Float(y)) => Some(LitKind::Float(f32::to_bits(f32::from_bits(x) + f32::from_bits(y)))),
+        (BinOp::Float(FOp::FSub), LitKind::Float(x), LitKind::Float(y)) => Some(LitKind::Float(f32::to_bits(f32::from_bits(x) - f32::from_bits(y)))),
+        (BinOp::Float(FOp::FMul), LitKind::Float(x), LitKind::Float(y)) => Some(LitKind::Float(f32::to_bits(f32::from_bits(x) * f32::from_bits(y)))),
+        (BinOp::Float(FOp::FDiv), LitKind::Float(x), LitKind::Float(y)) => Some(LitKind::Float(f32::to_bits(f32::from_bits(x) / f32::from_bits(y)))),
         _ => None,
     }
 }

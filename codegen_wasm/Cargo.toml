@@ -1,0 +1,11 @@
+[package]
+name = "codegen_wasm"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+data_structure.workspace = true
+wasm-encoder.workspace = true
+
+ir_closure.workspace = true

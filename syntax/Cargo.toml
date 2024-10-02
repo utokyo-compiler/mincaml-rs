@@ -8,4 +8,3 @@ edition.workspace = true
 [dependencies]
 data_structure.workspace = true
 sourcemap.workspace = true
-bumpalo.workspace = true

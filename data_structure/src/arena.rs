@@ -16,6 +16,10 @@ impl<T> TypedArena<T> {
     pub fn alloc_boxed(&self, value: T) -> Box<'_, T> {
         Box::new_unchecked(self.container.alloc(value), self)
     }
+
+    pub fn into_vec(self) -> Vec<T> {
+        self.container.into_vec()
+    }
 }
 
 impl TypedArena<u8> {

@@ -1,0 +1,8 @@
+[package]
+name = "runtime"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+wasi-common.workspace = true
+wasmtime.workspace = true

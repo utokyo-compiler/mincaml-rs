@@ -6,6 +6,7 @@ edition.workspace = true
 [features]
 
 [dependencies]
+bitvec.workspace = true
 typed-arena.workspace = true
 rustc-hash.workspace = true
 
