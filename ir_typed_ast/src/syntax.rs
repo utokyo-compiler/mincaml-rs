@@ -42,6 +42,17 @@ impl<'ctx> DisambiguatedIdent<'ctx> {
     }
 }
 
+impl<'ctx> std::fmt::Display for DisambiguatedIdent<'ctx> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UserDefined { name, .. } => write!(f, "{}", name.0),
+            Self::CompilerGenerated { name, disambiguator } => {
+                write!(f, ".{}#{}", name, disambiguator)
+            }
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct Ident<'ctx>(Box<'ctx, TypedIdent<'ctx>>);
 
