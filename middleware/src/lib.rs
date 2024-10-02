@@ -16,6 +16,10 @@ pub struct Arena<'ctx> {
     asm_virtual_expr: TypedArena<ir_asm_virtual::TypedExprKind<'ctx>>,
 }
 
+pub struct Option {
+    pub inline_size_limit: usize,
+}
+
 pub struct GlobalContext<'ctx> {
     parsing_context: parser::Context<'ctx>,
     typing_context: typing::Context<'ctx>,
@@ -23,10 +27,11 @@ pub struct GlobalContext<'ctx> {
     closure_context: ir_closure::Context<'ctx>,
     asm_virtual_context: ir_asm_virtual::Context<'ctx>,
     pub common_types: CommonTypes<'ctx>,
+    compiler_option: Option,
 }
 
 impl<'ctx> GlobalContext<'ctx> {
-    pub fn new(arena: &'ctx Arena<'ctx>) -> Self {
+    pub fn new(arena: &'ctx Arena<'ctx>, compiler_option: Option) -> Self {
         let parsing_context = parser::Context::new(&arena.ident, &arena.expr);
         let typing_context =
             typing::Context::new(&arena.type_, &arena.typed_ident, &arena.typed_expr);
@@ -41,6 +46,7 @@ impl<'ctx> GlobalContext<'ctx> {
             knorm_context,
             closure_context,
             asm_virtual_context,
+            compiler_option
         }
     }
 
@@ -62,5 +68,9 @@ impl<'ctx> GlobalContext<'ctx> {
 
     pub fn asm_virtual_context(&self) -> &ir_asm_virtual::Context<'ctx> {
         &self.asm_virtual_context
+    }
+
+    pub fn compiler_option(&self) -> &Option {
+        &self.compiler_option
     }
 }

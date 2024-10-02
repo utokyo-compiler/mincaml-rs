@@ -14,9 +14,16 @@ fn generate_fresh_ident<'ctx>(ctx: &Context<'ctx>, tag: &'static str, ty: ir_kno
     ));
 }
 
-pub struct AlphaRename;
+#[derive(Default)]
+pub struct AlphaRename<'ctx>(FxHashMap<Ident<'ctx>, Ident<'ctx>>);
 
-impl<'ctx> KnormPass<'ctx> for AlphaRename {
+impl<'ctx> AlphaRename<'ctx> {
+    pub fn new(initial_env: FxHashMap<Ident<'ctx>, Ident<'ctx>>) -> Self {
+        Self(initial_env)
+    }
+}
+
+impl<'ctx> KnormPass<'ctx> for AlphaRename<'ctx> {
     fn run_pass(&mut self, ctx: &'ctx middleware::GlobalContext<'ctx>, expr: &mut Expr<'ctx>) {
         struct RenameVisitor<'ctx> {
             ctx: &'ctx Context<'ctx>,
@@ -42,7 +49,7 @@ impl<'ctx> KnormPass<'ctx> for AlphaRename {
 
         RenameVisitor {
             ctx: ctx.knorm_context(),
-            env: FxHashMap::default(),
+            env: self.0.clone(),
         }
         .visit_expr(expr);
     }

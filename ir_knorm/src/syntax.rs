@@ -104,6 +104,9 @@ impl<'ctx> LetBinding<'ctx> {
             value,
         }
     }
+    pub fn is_function(&self) -> bool {
+        !self.args.is_empty()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

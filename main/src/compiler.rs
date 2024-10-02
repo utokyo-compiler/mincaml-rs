@@ -1,8 +1,8 @@
-use middleware::{Arena, GlobalContext};
+use middleware::{Arena, GlobalContext, Option};
 
-pub fn run(input: &str) {
+pub fn run(input: &str, compiler_option: Option) {
     let arena = Arena::default();
-    let global_ctxt = GlobalContext::new(&arena);
+    let global_ctxt = GlobalContext::new(&arena, compiler_option);
 
     let parsed_tree = parser::lex_and_parse(global_ctxt.parsing_context(), input).unwrap();
     let typed_tree = typing::typeck(
