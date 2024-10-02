@@ -2,7 +2,7 @@ use data_structure::{index::vec::IndexVec, FxHashMap, FxHashSet, SetLikeVec};
 
 use crate::{
     context::Context, ApplyKind, ArgIndex, Closure, Expr, ExprKind, FnIndex, FnName, FunctionDef,
-    Ident, LetBinding, Pattern, Program, Typed,
+    FunctionInstance, Ident, LetBinding, Pattern, Program, Typed,
 };
 
 /// The main entrypoint of closure conversion.
@@ -40,8 +40,11 @@ impl<'ctx> LoweringState<'ctx> {
         self.function_resolutions.insert(name, idx);
     }
 
-    fn resolve_function(&self, fn_name: &FnName<'ctx>) -> FnIndex {
-        self.function_resolutions[fn_name]
+    fn resolve_function(&self, fn_name: FnName<'ctx>) -> FunctionInstance<'ctx> {
+        match self.function_resolutions.get(&fn_name) {
+            Some(resolution) => FunctionInstance::Defined(*resolution),
+            None => FunctionInstance::Imported(fn_name),
+        }
     }
 
     fn decided_to_make_closure(&self, fn_name: &FnName<'ctx>) -> bool {
@@ -110,7 +113,7 @@ fn lower_expr<'ctx>(
                 if state.decided_to_make_closure(&fn_name) {
                     let value = ctx.new_expr(Typed::new(
                         ExprKind::ClosureMake(Closure {
-                            function: state.resolve_function(&fn_name),
+                            function: state.resolve_function(fn_name),
                             captured_args: fv_set,
                         }),
                         value.ty,
@@ -135,7 +138,7 @@ fn lower_expr<'ctx>(
                     ApplyKind::Closure { ident: *f }
                 } else {
                     ApplyKind::Direct {
-                        fn_index: state.resolve_function(&fn_name),
+                        function: state.resolve_function(fn_name),
                     }
                 },
                 args.clone(),

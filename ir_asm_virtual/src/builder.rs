@@ -28,7 +28,7 @@ impl<'ctx> BasicBlockBuilder<'ctx> {
     }
 
     /// Terminates the current block and wraps up into a `BasicBlockData`.
-    pub fn terminate_block(self, terminator: Option<TerminatorKind>) -> BasicBlockData<'ctx> {
+    pub fn terminate_block(self, terminator: Option<TerminatorKind<'ctx>>) -> BasicBlockData<'ctx> {
         BasicBlockData {
             args: self.args,
             stmts: self.stmts,
@@ -151,7 +151,7 @@ impl<'ctx> FunctionBuilder<'ctx> {
     /// Finish current basic block and start a new one.
     ///
     /// Returns the finished block.
-    pub fn terminate_block(&mut self, terminator: TerminatorKind) -> BasicBlock {
+    pub fn terminate_block(&mut self, terminator: TerminatorKind<'ctx>) -> BasicBlock {
         let basic_block_data =
             std::mem::take(&mut self.basic_block_builder).terminate_block(Some(terminator));
         self.push_basic_block(basic_block_data)
@@ -161,7 +161,7 @@ impl<'ctx> FunctionBuilder<'ctx> {
     pub fn terminate_block_deferred(
         &mut self,
         basic_block: DeferredBasicBlock,
-        terminator: TerminatorKind,
+        terminator: TerminatorKind<'ctx>,
     ) {
         #[cfg(debug_assertions)]
         assert!(self.unterminated_blocks.remove(&basic_block.0));

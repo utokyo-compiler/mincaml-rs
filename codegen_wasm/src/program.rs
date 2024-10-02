@@ -4,12 +4,13 @@ use data_structure::{
     index::{vec::Idx, Indexable},
     FxHashMap,
 };
+use ir_closure::FnName;
 use wasm_encoder::{EntityType, ImportSection, Module};
 
 use crate::{
     function,
     index::{FuncIdx, TypeIdx},
-    ty::WasmPrimitiveTy,
+    ty::{WasmPrimitiveTy, WasmTy},
 };
 
 pub fn codegen(asm_virtual_prog: ir_closure::Program<'_>) -> Result<Vec<u8>> {
@@ -17,24 +18,46 @@ pub fn codegen(asm_virtual_prog: ir_closure::Program<'_>) -> Result<Vec<u8>> {
     let mut main_fn_idx = None;
 
     let program = {
-        let signature_interner = SignatureInterner::new(&signarute_arena);
-        let import_fns = Vec::new();
+        let mut signature_interner = SignatureInterner::new(&signarute_arena);
+
+        use ir_closure::Visitor;
+        struct VisitImportedFn<'ctx> {
+            fn_names: Vec<FnName<'ctx>>,
+        }
+        impl<'ctx> Visitor<'ctx> for VisitImportedFn<'ctx> {
+            fn visit_imported_function(&mut self, fn_name: &FnName<'ctx>) {
+                self.fn_names.push(*fn_name);
+            }
+        }
+        let mut visitor = VisitImportedFn {
+            fn_names: Vec::new(),
+        };
+        visitor.visit_program(&asm_virtual_prog);
+
+        let import_fns = visitor
+            .fn_names
+            .into_iter()
+            .map(|fn_name| ImportFn {
+                namespace: NameSpace::Pervasives { fn_name },
+                sig: signature_interner.intern(FnTypeSignature::from_ty(fn_name.as_non_main().ty)),
+            })
+            .collect();
 
         let mut state = State {
-            import_fns_len: import_fns.len(),
+            import_fns,
             signature_interner,
             functions: Vec::new(),
         };
 
         for (fn_index, function) in asm_virtual_prog.functions.into_iter_enumerated() {
             if function.name == ir_closure::FnName::MAIN_FN_NAME {
-                main_fn_idx = Some(state.new_fn_index(fn_index));
+                main_fn_idx = Some(state.get_func_idx_from_fn_index(fn_index));
             }
             function::codegen(&mut state, function)?;
         }
 
         Program {
-            import_fns,
+            import_fns: state.import_fns,
             functions: state.functions,
         }
     };
@@ -57,8 +80,9 @@ pub fn codegen(asm_virtual_prog: ir_closure::Program<'_>) -> Result<Vec<u8>> {
     }
 
     // write import section
-    for ImportFn { module, field, sig } in &program.import_fns {
+    for ImportFn { namespace, sig } in &program.import_fns {
         let mut import_section = ImportSection::new();
+        let (module, field) = namespace.into_wasm();
         import_section.import(module, field, EntityType::Function(sig.unwrap_idx()));
         module_builder.section(&import_section);
     }
@@ -132,12 +156,12 @@ pub fn codegen(asm_virtual_prog: ir_closure::Program<'_>) -> Result<Vec<u8>> {
 }
 
 pub struct Program<'ctx> {
-    pub import_fns: Vec<ImportFn>,
+    pub import_fns: Vec<ImportFn<'ctx>>,
     pub functions: Vec<function::FunctionDef<'ctx>>,
 }
 
 pub struct State<'arena, 'ctx> {
-    pub import_fns_len: usize,
+    pub import_fns: Vec<ImportFn<'ctx>>,
     pub functions: Vec<function::FunctionDef<'ctx>>,
     pub signature_interner: SignatureInterner<'arena>,
 }
@@ -148,15 +172,63 @@ impl<'ctx> State<'_, 'ctx> {
     }
 
     /// Create a new function index.
-    pub fn new_fn_index(&self, index: ir_closure::FnIndex) -> FuncIdx {
-        FuncIdx::new(self.import_fns_len + index.index())
+    pub fn get_func_idx(&self, function: ir_closure::FunctionInstance<'ctx>) -> FuncIdx {
+        match function {
+            ir_closure::FunctionInstance::Defined(fn_index) => {
+                self.get_func_idx_from_fn_index(fn_index)
+            }
+            ir_closure::FunctionInstance::Imported(fn_name) => self
+                .find_imported_fn(fn_name)
+                .map(FuncIdx::new)
+                .unwrap_or_else(|| panic!("imported function not found: {:?}", fn_name)),
+        }
+    }
+
+    fn find_imported_fn(&self, fn_name: ir_closure::FnName<'ctx>) -> Option<usize> {
+        self.import_fns
+            .iter()
+            .enumerate()
+            .find_map(|(index, import_fn)| import_fn.namespace.matches(fn_name).then_some(index))
+    }
+
+    /// Create a new function index.
+    pub fn get_func_idx_from_fn_index(&self, index: ir_closure::FnIndex) -> FuncIdx {
+        FuncIdx::new(self.import_fns.len() + index.index())
     }
 }
 
-pub struct ImportFn {
-    pub module: &'static str,
-    pub field: &'static str,
+pub struct ImportFn<'ctx> {
+    pub namespace: NameSpace<'ctx>,
     pub sig: TypeIdx,
+}
+
+#[derive(Clone, Copy)]
+pub enum NameSpace<'ctx> {
+    #[allow(dead_code)]
+    Wasm {
+        module: &'static str,
+        field: &'static str,
+    },
+    Pervasives {
+        fn_name: FnName<'ctx>,
+    },
+}
+
+impl<'ctx> NameSpace<'ctx> {
+    pub fn into_wasm(self) -> (&'static str, &'ctx str) {
+        match self {
+            NameSpace::Wasm { module, field } => (module, field),
+            Self::Pervasives { fn_name } => ("pervasives", fn_name.as_non_main().name()),
+        }
+    }
+    pub fn matches(&self, fn_name: FnName<'ctx>) -> bool {
+        match self {
+            NameSpace::Wasm { .. } => false,
+            NameSpace::Pervasives {
+                fn_name: self_fn_name,
+            } => self_fn_name == &fn_name,
+        }
+    }
 }
 
 #[derive(Hash, PartialEq, Eq, Clone)]
@@ -182,6 +254,17 @@ impl FnTypeSignature {
         Self {
             params: Vec::new(),
             results,
+        }
+    }
+
+    pub fn from_ty(ty: ir_closure::Ty<'_>) -> Self {
+        let (params, result) = ty.kind().as_fun_ty().unwrap();
+        Self {
+            params: params
+                .iter()
+                .map(|param| *WasmTy::from_ty(*param).as_primitive().unwrap())
+                .collect(),
+            results: vec![*WasmTy::from_ty(result).as_primitive().unwrap()],
         }
     }
 }

@@ -33,6 +33,13 @@ impl<'ctx> DisambiguatedIdent<'ctx> {
             disambiguator,
         }
     }
+
+    pub fn name(&self) -> &'ctx str {
+        match self {
+            Self::UserDefined { name, .. } => name.0,
+            Self::CompilerGenerated { name, .. } => name,
+        }
+    }
 }
 
 impl<'ctx> std::fmt::Display for DisambiguatedIdent<'ctx> {

@@ -166,7 +166,7 @@ pub fn codegen<'ctx>(
         }
         ir_closure::ExprKind::ClosureMake(closure) => {
             function_state.push_raw(Instruction::RefFunc(
-                program_state.new_fn_index(closure.function).unwrap_idx(),
+                program_state.get_func_idx(closure.function).unwrap_idx(),
             ));
         }
         ir_closure::ExprKind::App(ir_closure::ApplyKind::Closure { ident }, args) => {
@@ -197,7 +197,7 @@ pub fn codegen<'ctx>(
                 table_index: TABLE_IDX,
             });
         }
-        ir_closure::ExprKind::App(ir_closure::ApplyKind::Direct { fn_index }, args) => {
+        ir_closure::ExprKind::App(ir_closure::ApplyKind::Direct { function }, args) => {
             for arg in args {
                 let local = function_state.get_local(*arg);
                 for local in local.iter() {
@@ -205,7 +205,7 @@ pub fn codegen<'ctx>(
                 }
             }
             function_state.push_raw(Instruction::Call(
-                program_state.new_fn_index(*fn_index).unwrap_idx(),
+                program_state.get_func_idx(*function).unwrap_idx(),
             ));
         }
         ir_closure::ExprKind::Tuple(vars) => {

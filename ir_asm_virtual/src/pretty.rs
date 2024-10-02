@@ -96,8 +96,16 @@ impl BasicBlockPrinter<'_, '_> {
         }
     }
 
+    fn format_function_instance<'ctx>(&self, f: &mut Formatter<'_>, function_instance: &FunctionInstance) -> fmt::Result {
+        match function_instance {
+            FunctionInstance::Defined(index) => write!(f, "{}", self.func_names[*index]),
+            FunctionInstance::Imported(fn_name) => write!(f, "{}", fn_name),
+        }
+    }
+
     fn format_closure<'ctx>(&self, f: &mut Formatter<'_>, closure: &Closure) -> fmt::Result {
-        write!(f, "{}{{", self.func_names[closure.function])?;
+        self.format_function_instance(f, &closure.function)?;
+        write!(f, "{{")?;
         closure.captured_args.iter().try_for_each(|arg| write!(f, "{}, ", self.locals[*arg].ident.value))?;
         write!(f, "}}")
     }

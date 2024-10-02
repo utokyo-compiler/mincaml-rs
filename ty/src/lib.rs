@@ -66,6 +66,14 @@ impl<'ctx> TyKind<'ctx> {
             None
         }
     }
+
+    pub fn as_fun_ty(&self) -> Option<(&[Ty<'ctx>], Ty<'ctx>)> {
+        if let Self::Fun(args, ret) = self {
+            Some((args.as_slice(), *ret))
+        } else {
+            None
+        }
+    }
 }
 
 /// Used in type checking.

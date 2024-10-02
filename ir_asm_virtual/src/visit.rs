@@ -34,11 +34,11 @@ macro_rules! declare_visitor {
                 }
             }
 
-            fn visit_function(&mut self, function: & $($mutability)? FnIndex) {
+            fn visit_function(&mut self, function: & $($mutability)? FunctionInstance<'ctx>) {
                 self.super_function(function);
             }
 
-            fn super_function(&mut self, _function: & $($mutability)? FnIndex) {}
+            fn super_function(&mut self, _function: & $($mutability)? FunctionInstance<'ctx>) {}
 
             fn visit_block_data(&mut self, block: & $($mutability)? BasicBlockData<'ctx>) {
                 self.super_block_data(block);
@@ -106,11 +106,11 @@ macro_rules! declare_visitor {
                 self.visit_local(base, context);
             }
 
-            fn visit_expr(&mut self, expr: & $($mutability)? ExprKind) {
+            fn visit_expr(&mut self, expr: & $($mutability)? ExprKind<'ctx>) {
                 self.super_expr(expr);
             }
 
-            fn super_expr(&mut self, expr: & $($mutability)? ExprKind) {
+            fn super_expr(&mut self, expr: & $($mutability)? ExprKind<'ctx>) {
                 match expr {
                     ExprKind::Const(_) => (),
                     ExprKind::Unary(_, e) => self.visit_local(e, LocalVisitContext::Use),
@@ -136,22 +136,22 @@ macro_rules! declare_visitor {
                 }
             }
 
-            fn visit_closure_make(&mut self, closure: & $($mutability)? Closure) {
+            fn visit_closure_make(&mut self, closure: & $($mutability)? Closure<'ctx>) {
                 self.super_closure_make(closure);
             }
 
-            fn super_closure_make(&mut self, closure: & $($mutability)? Closure) {
+            fn super_closure_make(&mut self, closure: & $($mutability)? Closure<'ctx>) {
                 self.visit_function(& $($mutability)? closure.function);
                 for captured_arg in & $($mutability)? closure.captured_args {
                     self.visit_local(captured_arg, LocalVisitContext::Use);
                 }
             }
 
-            fn visit_terminator(&mut self, terminator: & $($mutability)? TerminatorKind) {
+            fn visit_terminator(&mut self, terminator: & $($mutability)? TerminatorKind<'ctx>) {
                 self.super_terminator(terminator);
             }
 
-            fn super_terminator(&mut self, terminator: & $($mutability)? TerminatorKind) {
+            fn super_terminator(&mut self, terminator: & $($mutability)? TerminatorKind<'ctx>) {
                 match terminator {
                     TerminatorKind::Return => (),
                     TerminatorKind::Branch(branch) => {

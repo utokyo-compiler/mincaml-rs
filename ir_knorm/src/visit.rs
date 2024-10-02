@@ -1,8 +1,7 @@
-use crate::syntax::{
-    ArgIndex, BinOp, Expr, ExprKind, Ident, LetBinding, LitKind, Pattern, TupleIndex, UnOp,
+use crate::{
+    ArgIndex, BinOp, Expr, ExprKind, Ident, LetBinding, LitKind, Pattern, TupleIndex, Ty, UnOp,
 };
 use data_structure::{index::vec::IndexVec, FxHashSet};
-use ir_typed_ast::Ty;
 
 macro_rules! declare_visitor {
     ($name:ident, $($mutability:ident)?) => {

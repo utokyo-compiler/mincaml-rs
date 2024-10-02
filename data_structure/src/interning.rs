@@ -72,7 +72,7 @@ impl<'ctx, T: ?Sized> Interned<'ctx, T> {
     }
 }
 
-impl<T> Deref for Interned<'_, T> {
+impl<T: ?Sized> Deref for Interned<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
