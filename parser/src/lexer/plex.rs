@@ -47,6 +47,8 @@ lexer! {
             Err(e) => LexState::Error(ErrorKind::IllegalFloatConstant(text, e)),
         }
     },
+    // Naive string literal
+    r#""[^"]*""# => LexState::Token(Token::StringLiteral),
     r"\-" => LexState::Token(Token::Hyphen),
     r"\+" => LexState::Token(Token::Plus),
     r"\*" => LexState::Token(Token::Ast),
@@ -67,10 +69,14 @@ lexer! {
     r"let" => LexState::Token(Token::Let),
     r"in" => LexState::Token(Token::In),
     r"rec" => LexState::Token(Token::Rec),
+    r"val" => LexState::Token(Token::Val),
+    r"external" => LexState::Token(Token::External),
     r"," => LexState::Token(Token::Comma),
     r"Array\.make" => LexState::Token(Token::ArrayMake),
     r"\." => LexState::Token(Token::Dot),
     r"<\-" => LexState::Token(Token::LessHyphen),
+    r"\->" => LexState::Token(Token::HyphenGreater),
+    r":" => LexState::Token(Token::Colon),
     r";" => LexState::Token(Token::Semi),
     r"[a-z_][0-9A-Za-z_]*" => LexState::Token(Token::Ident(text)),
     r"." => LexState::Error(ErrorKind::UnrecognizedToken(text))

@@ -97,14 +97,13 @@ impl<K: Hash + Eq + Copy> HashSetInterner<K> {
         K: Borrow<Q>,
         Q: ?Sized + Hash + Eq,
     {
-        match self.set.lock().unwrap().get(value) {
-            Some(x) => *x,
-            None => {
-                let value = new();
-                self.set.lock().unwrap().insert(value);
-                value
-            }
+        if let Some(x) = self.set.lock().unwrap().get(value) {
+            return *x;
         }
+
+        let value = new();
+        self.set.lock().unwrap().insert(value);
+        value
     }
 
     #[inline]
@@ -113,14 +112,13 @@ impl<K: Hash + Eq + Copy> HashSetInterner<K> {
         K: Borrow<Q>,
         Q: Hash + Eq,
     {
-        match self.set.lock().unwrap().get(&value) {
-            Some(x) => *x,
-            None => {
-                let value = new(value);
-                self.set.lock().unwrap().insert(value);
-                value
-            }
+        if let Some(x) = self.set.lock().unwrap().get(&value) {
+            return *x;
         }
+
+        let value = new(value);
+        self.set.lock().unwrap().insert(value);
+        value
     }
 }
 

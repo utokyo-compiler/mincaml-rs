@@ -1,3 +1,4 @@
+pub mod mli;
 mod prettify;
 
 use data_structure::interning::Interned;
@@ -160,3 +161,5 @@ pub enum Pattern<'ctx> {
     Var(Spanned<Ident<'ctx>>),
     Tuple(Vec<Spanned<Ident<'ctx>>>),
 }
+
+pub use mli::Mli;

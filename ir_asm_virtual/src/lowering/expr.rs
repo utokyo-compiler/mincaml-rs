@@ -27,7 +27,7 @@ impl BindingPlace {
 /// Generalized binding agent. You can think of it as a defunctionalized
 /// version of the following trait:
 ///
-/// ```no_run
+/// ```ignore
 /// trait PlaceBinder<'ctx> {
 ///     fn bind(
 ///         self,

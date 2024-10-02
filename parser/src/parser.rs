@@ -1,7 +1,7 @@
 use std::fmt;
 
 use sourcemap::{Loc, Spanned};
-use syntax::{Expr, ExprKind};
+use syntax::{Expr, ExprKind, Mli};
 
 use crate::{
     context::Context,
@@ -19,6 +19,9 @@ mod lalrpop;
 #[allow(clippy::all)]
 mod mincaml;
 #[cfg(feature = "lalrpop")]
+#[allow(clippy::all)]
+mod mli;
+#[cfg(feature = "lalrpop")]
 pub type SelectedParser = lalrpop::LalrpopParser;
 
 /// Assertion that the selected parser implements `Parser`.
@@ -33,6 +36,11 @@ pub trait Parser {
         alloc: Allocator<'ctx>,
         lexer: impl Lexer<'input>,
     ) -> Result<Expr<'ctx>, Error<'input>>;
+
+    fn parse_mli<'input, 'ctx>(
+        alloc: Allocator<'ctx>,
+        lexer: impl Lexer<'input>,
+    ) -> Result<Mli<'ctx>, Error<'input>>;
 }
 
 #[derive(Debug, Clone)]

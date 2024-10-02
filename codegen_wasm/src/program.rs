@@ -14,6 +14,7 @@ use crate::{
 
 pub fn codegen(asm_virtual_prog: ir_closure::Program<'_>) -> Result<Vec<u8>> {
     let signarute_arena = TypedArena::new();
+    let mut main_fn_idx = None;
 
     let program = {
         let signature_interner = SignatureInterner::new(&signarute_arena);
@@ -25,7 +26,10 @@ pub fn codegen(asm_virtual_prog: ir_closure::Program<'_>) -> Result<Vec<u8>> {
             functions: Vec::new(),
         };
 
-        for function in asm_virtual_prog.functions {
+        for (fn_index, function) in asm_virtual_prog.functions.into_iter_enumerated() {
+            if function.name == ir_closure::FnName::MAIN_FN_NAME {
+                main_fn_idx = Some(state.new_fn_index(fn_index));
+            }
             function::codegen(&mut state, function)?;
         }
 
@@ -87,6 +91,26 @@ pub fn codegen(asm_virtual_prog: ir_closure::Program<'_>) -> Result<Vec<u8>> {
         page_size_log2: None,
     });
     module_builder.section(&memory_section);
+
+    // write global section
+    let mut global_section = wasm_encoder::GlobalSection::new();
+    global_section.global(
+        wasm_encoder::GlobalType {
+            val_type: wasm_encoder::ValType::I32,
+            mutable: true,
+            shared: false,
+        },
+        &wasm_encoder::ConstExpr::i32_const(0),
+    );
+    module_builder.section(&global_section);
+
+    // write export section
+    let mut export_section = wasm_encoder::ExportSection::new();
+    // export main function as default
+    if let Some(main_fn_idx) = main_fn_idx {
+        export_section.export("", wasm_encoder::ExportKind::Func, main_fn_idx.unwrap_idx());
+    }
+    module_builder.section(&export_section);
 
     // write code section
     let mut code_section = wasm_encoder::CodeSection::new();

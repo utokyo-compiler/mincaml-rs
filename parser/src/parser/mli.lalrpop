@@ -1,0 +1,100 @@
+use sourcemap::Loc;
+use syntax::{*, IntBinOpKind::*, FloatBinOpKind::*, BooleanBinOpKind::*, mli};
+
+use crate::lexer::{Error as LexError, Token};
+use super::Allocator;
+
+grammar<'input, 'ctx>(alloc: Allocator<'ctx>);
+extern {
+    type Location = Loc;
+    type Error = LexError<'input>;
+
+    enum Token<'input> {
+        "(" => Token::LPar,
+        ")" => Token::RPar,
+        Bool => Token::Bool(<bool>),
+        Int => Token::Int(<i32>),
+        Float => Token::Float(<f32>),
+        Ident => Token::Ident(<&'input str>),
+        "-" => Token::Hyphen,
+        "+" => Token::Plus,
+        "*" => Token::Ast,
+        "/" => Token::Slash,
+        "-." => Token::HyphenDot,
+        "+." => Token::PlusDot,
+        "*." => Token::AstDot,
+        "/." => Token::SlashDot,
+        "=" => Token::Equal,
+        "<>" => Token::LessGreater,
+        "<=" => Token::LessEqual,
+        ">=" => Token::GreaterEqual,
+        "<" => Token::Less,
+        ">" => Token::Greater,
+        "rec" => Token::Rec,
+        "val" => Token::Val,
+        "external" => Token::External,
+        "," => Token::Comma,
+        "." => Token::Dot,
+        "<-" => Token::LessHyphen,
+        "->" => Token::HyphenGreater,
+        "%something" => Token::StringLiteral,
+        ":" => Token::Colon,
+        ";" => Token::Semi,
+    }
+}
+
+pub Mli: mli::Mli<'ctx> = {
+    <mut a:Mli> <d:Decl> => {
+        a.declarations.push(d);
+        a
+    },
+    Decl => mli::Mli { declarations: vec![<>]},
+}
+
+Decl: mli::Declaration<'ctx> = {
+    "external" <item_ident:ItemIdent> ":" <ascribed_ty:TypeAscription> "=" "%something"+
+        => mli::Declaration {
+            item_ident,
+            ascribed_ty,
+        },
+    "val" <item_ident:ItemIdent> ":" <ascribed_ty:TypeAscription>
+        => mli::Declaration {
+            item_ident,
+            ascribed_ty,
+        },
+}
+
+ItemIdent: mli::ItemIdent<'ctx> = {
+    <x:Ident> => mli::ItemIdent::new_ident(alloc.ctx().intern_ident(x)),
+    "(" <op:Op> ")" => mli::ItemIdent::new_operator(op),
+}
+
+#[inline]
+BinOp: BinOp = {
+    "+" => BinOp::Int(Add),
+    "-" => BinOp::Int(Sub),
+    "*" => BinOp::Int(Mul),
+    "/" => BinOp::Int(Div),
+    "+." => BinOp::Float(FAdd),
+    "-." => BinOp::Float(FSub),
+    "*." => BinOp::Float(FMul),
+    "/." => BinOp::Float(FDiv),
+    "=" => BinOp::Boolean(Eq),
+    "<=" => BinOp::Boolean(Le),
+    ">=" => BinOp::Boolean(Ge),
+    "<>" => BinOp::Boolean(Ne),
+    "<" => BinOp::Boolean(Lt),
+    ">" => BinOp::Boolean(Gt),
+};
+
+Op: mli::Operator = {
+    BinOp => mli::Operator::Binary(<>),
+}
+
+TypeAscription: mli::AscribedTy<'ctx> = {
+    <mut a:TypeAscription> "->" <t:Ident> => {
+        a.elements.push(alloc.ctx().intern_ident(t));
+        a
+    },
+    Ident => mli::AscribedTy::new(vec![alloc.ctx().intern_ident(<>)]),
+}
