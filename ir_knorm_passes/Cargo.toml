@@ -5,5 +5,5 @@ edition.workspace = true
 
 [dependencies]
 middleware.workspace = true
-
+data_structure.workspace = true
 ir_knorm.workspace = true
