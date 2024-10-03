@@ -38,16 +38,12 @@ impl MultipleInput {
 
     pub fn add_file(&mut self, file: InputFile) {
         self.offsets.push(self.offset_accumulated);
-        self.offset_accumulated += file.content.chars().count();
+        self.offset_accumulated += file.content().chars().count();
         self.files.push(file);
     }
 
     pub fn concatenated_string(&self) -> String {
-        let vec: Vec<_> = self
-            .files
-            .iter()
-            .map(|file| file.content.as_str())
-            .collect();
+        let vec: Vec<_> = self.files.iter().map(|file| file.content()).collect();
         vec.join("\n")
     }
 
@@ -69,9 +65,18 @@ impl Default for MultipleInput {
     }
 }
 
-pub struct InputFile {
-    pub path: PathBuf,
-    pub content: String,
+pub enum InputFile {
+    File { path: PathBuf, content: String },
+    String { content: String },
+}
+
+impl InputFile {
+    pub fn content(&self) -> &str {
+        match self {
+            InputFile::File { content, .. } => content,
+            InputFile::String { content } => content,
+        }
+    }
 }
 
 #[derive(Default)]

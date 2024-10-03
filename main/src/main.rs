@@ -58,11 +58,11 @@ fn main() {
     let mut mli_input = middleware::session::MultipleInput::new();
     for path in input_pathes {
         match path.extension().and_then(|ext| ext.to_str()) {
-            Some("ml") => ml_input.add_file(middleware::session::InputFile {
+            Some("ml") => ml_input.add_file(middleware::session::InputFile::File {
                 content: fs::read_to_string(&path).unwrap(),
                 path,
             }),
-            Some("mli") => mli_input.add_file(middleware::session::InputFile {
+            Some("mli") => mli_input.add_file(middleware::session::InputFile::File {
                 content: fs::read_to_string(&path).unwrap(),
                 path,
             }),
