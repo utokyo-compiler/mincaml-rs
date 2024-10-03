@@ -1,5 +1,5 @@
 use sourcemap::Loc;
-use syntax::{*, IntBinOpKind::*, FloatBinOpKind::*, BooleanBinOpKind::*, mli};
+use syntax::{*, IntBinOpKind::*, FloatBinOpKind::*, RelationBinOpKind::*, mli};
 
 use crate::lexer::{Error as LexError, Token};
 use super::Allocator;
@@ -79,12 +79,12 @@ BinOp: BinOp = {
     "-." => BinOp::Float(FSub),
     "*." => BinOp::Float(FMul),
     "/." => BinOp::Float(FDiv),
-    "=" => BinOp::Boolean(Eq),
-    "<=" => BinOp::Boolean(Le),
-    ">=" => BinOp::Boolean(Ge),
-    "<>" => BinOp::Boolean(Ne),
-    "<" => BinOp::Boolean(Lt),
-    ">" => BinOp::Boolean(Gt),
+    "=" => BinOp::Relation(Eq),
+    "<=" => BinOp::Relation(Le),
+    ">=" => BinOp::Relation(Ge),
+    "<>" => BinOp::Relation(Ne),
+    "<" => BinOp::Relation(Lt),
+    ">" => BinOp::Relation(Gt),
 };
 
 Op: mli::Operator = {

@@ -1,6 +1,6 @@
-use middleware::{Arena, GlobalContext, Option};
+use middleware::{Arena, CompilerOption, GlobalContext};
 
-pub fn run(input: &str, compiler_option: Option) {
+pub fn run(input: &str, compiler_option: CompilerOption) {
     let arena = Arena::default();
     let global_ctxt = GlobalContext::new(&arena, compiler_option);
 

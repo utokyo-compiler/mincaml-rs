@@ -1,4 +1,4 @@
-use ir_knorm::{Expr, MutVisitor, ExprKind};
+use ir_knorm::{Expr, ExprKind, MutVisitor};
 
 use crate::KnormPass;
 
@@ -8,33 +8,27 @@ impl<'ctx> KnormPass<'ctx> for LetFlatten {
     fn run_pass(&mut self, ctx: &'ctx middleware::GlobalContext<'ctx>, expr: &mut Expr<'ctx>) {
         struct LookupVisitor<'ctx> {
             ctx: &'ctx ir_knorm::Context<'ctx>,
-            outer_let: Vec<Expr<'ctx>>,
-            last_result: Option<Expr<'ctx>>
+            outer_lets: Vec<Expr<'ctx>>,
+            last_result: Option<Expr<'ctx>>,
         }
 
         impl<'ctx> MutVisitor<'ctx> for LookupVisitor<'ctx> {
             fn visit_expr(&mut self, expr: &mut Expr<'ctx>) {
-                let t = expr.ty.clone();
                 match &mut expr.value {
                     ExprKind::Let(binding, continuation) => {
                         self.visit_expr(continuation);
 
-                        // Dummeis for swapping with the body of the let binding.
-                        // Values do not reflect the actual type of the binding,
-                        // but they will be reset or discarded later.
-                        let mut inner_dummy = self.ctx.new_expr(ir_knorm::Typed::new(ExprKind::Const(ir_knorm::LitKind::Int(0)), t.clone()));
-                        let mut expr_dummy = self.ctx.new_expr(ir_knorm::Typed::new(ExprKind::Const(ir_knorm::LitKind::Int(0)), t));
+                        let mut new_inner = self.ctx.new_expr(binding.value.take());
+                        let new_outer_let = self.ctx.new_expr(expr.take());
 
-                        std::mem::swap(&mut inner_dummy, &mut binding.value);
-                        std::mem::swap(&mut expr_dummy, expr);
-
-                        self.outer_let.push(expr_dummy);
-                        self.visit_expr(&mut inner_dummy);
+                        self.outer_lets.push(new_outer_let);
+                        self.visit_expr(&mut new_inner);
 
                         *expr = self.last_result.take().unwrap();
                     }
-                    _ => { // Not a let binding
-                        if let Some(mut outer) = self.outer_let.pop() {
+                    _ => {
+                        // Not a let binding
+                        if let Some(mut outer) = self.outer_lets.pop() {
                             match &mut outer.value {
                                 ExprKind::Let(b, _) => {
                                     std::mem::swap(&mut b.value, expr);
@@ -52,8 +46,8 @@ impl<'ctx> KnormPass<'ctx> for LetFlatten {
 
         LookupVisitor {
             ctx: ctx.knorm_context(),
-            outer_let: vec![],
-            last_result: None
+            outer_lets: vec![],
+            last_result: None,
         }
         .visit_expr(expr);
     }

@@ -11,8 +11,8 @@ use data_structure::{
 };
 
 pub use ir_closure::{
-    ArgIndex, BinOp, DisambiguatedIdent, FnIndex, FnName, Ident, LitKind, Pattern, TupleIndex, Ty, TyKind,
-    Typed, UnOp, FunctionInstance,
+    ArgIndex, BinOp, DisambiguatedIdent, FnIndex, FnName, FunctionInstance, Ident, LitKind,
+    Pattern, TupleIndex, Ty, TyKind, Typed, UnOp,
 };
 
 pub type Expr<'ctx> = Box<'ctx, TypedExprKind<'ctx>>;

@@ -159,6 +159,16 @@ impl<'ctx, T> Typed<'ctx, T> {
     }
 }
 
+impl<'ctx, T: Default> Typed<'ctx, T> {
+    /// Creates a new `Typed` with the default value of `T`.
+    pub fn take(&mut self) -> Self {
+        Self {
+            value: std::mem::take(self),
+            ty: self.ty,
+        }
+    }
+}
+
 impl<'ctx, T> std::ops::Deref for Typed<'ctx, T> {
     type Target = T;
 

@@ -85,7 +85,7 @@ fn decide_ty<'ctx>(
             let e1 = decide_ty(ctx, common_types, name_res, subst, e1)?;
             let e2 = decide_ty(ctx, common_types, name_res, subst, e2)?;
             let ty = match bin_op {
-                syntax::BinOp::Boolean(..) => {
+                syntax::BinOp::Relation(..) => {
                     unify(subst, e1.ty, e2.ty)?;
                     common_types.bool
                 }

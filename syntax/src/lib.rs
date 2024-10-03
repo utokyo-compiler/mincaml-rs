@@ -52,7 +52,7 @@ impl<'ctx> ExprKind<'ctx> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum BooleanBinOpKind {
+pub enum RelationBinOpKind {
     Eq,
     Le,
     Ge,
@@ -79,7 +79,7 @@ pub enum FloatBinOpKind {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BinOp {
-    Boolean(BooleanBinOpKind),
+    Relation(RelationBinOpKind),
     Int(IntBinOpKind),
     Float(FloatBinOpKind),
 }
@@ -92,16 +92,19 @@ pub enum UnOp {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+/// Represents a literal value.
 pub enum LitKind {
     Unit,
     Bool(bool),
     Int(i32),
+    /// Floating point number as `u32` bits. Mutually convertible with `f32` via `u32::from_bits` and `f32::to_bits`.
     Float(u32),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct LetBinder<'ctx> {
     pattern: Pattern<'ctx>,
+    /// Arguments for the function. Allowed only if the pattern is a var.
     args: Vec<Spanned<Ident<'ctx>>>,
     value: Expr<'ctx>,
 }

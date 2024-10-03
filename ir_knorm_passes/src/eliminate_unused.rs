@@ -2,27 +2,31 @@ use ir_knorm::{Context, Expr, ExprKind, Ident, MutVisitor, Visitor};
 
 use crate::KnormPass;
 
-fn is_pure<'ctx>(expr: &Expr<'ctx>) -> bool {
+/// Check if the expression has side effects.
+fn is_pure(expr: &Expr<'_>) -> bool {
     struct SideEffectVisitor {
         pub has_side_effect: bool,
     }
 
     impl<'ctx> Visitor<'ctx> for SideEffectVisitor {
         fn visit_expr_kind(&mut self, expr: &ExprKind<'ctx>) {
-            match expr {
-                ExprKind::Set(_, _, _) | ExprKind::App(_, _) => self.has_side_effect = true,
-                _ => self.super_expr_kind(expr),
+            if let ExprKind::Set(..) | ExprKind::App(..) = expr {
+                self.has_side_effect = true;
+            } else {
+                self.super_expr_kind(expr);
             }
         }
     }
 
-    let mut visitor = SideEffectVisitor { has_side_effect: false };
+    let mut visitor = SideEffectVisitor {
+        has_side_effect: false,
+    };
     visitor.visit_expr(expr);
 
     !visitor.has_side_effect
 }
 
-// check if the variable is used in the expression
+/// Check if the variable is used in the expression.
 fn is_every_var_free<'ctx>(vars: &[Ident<'ctx>], expr: &Expr<'ctx>) -> bool {
     struct AppearanceVisitor<'ctx, 'a> {
         vars: &'a [Ident<'ctx>],
@@ -37,7 +41,10 @@ fn is_every_var_free<'ctx>(vars: &[Ident<'ctx>], expr: &Expr<'ctx>) -> bool {
         }
     }
 
-    let mut visitor = AppearanceVisitor { vars, appeared: false };
+    let mut visitor = AppearanceVisitor {
+        vars,
+        appeared: false,
+    };
     visitor.visit_expr(expr);
 
     !visitor.appeared
@@ -55,16 +62,17 @@ impl<'ctx> KnormPass<'ctx> for EliminateUnused {
             fn visit_expr(&mut self, expr: &mut Expr<'ctx>) {
                 match &mut expr.value {
                     ExprKind::Let(binding, continuation) if is_pure(&binding.value) => {
-                        let should_eliminate: bool = match &binding.pattern {
+                        let should_eliminate = match &binding.pattern {
                             ir_knorm::Pattern::Var(x) => is_every_var_free(&[*x], continuation),
                             ir_knorm::Pattern::Tuple(xs) => is_every_var_free(xs, continuation),
-                            ir_knorm::Pattern::Unit => true
+                            ir_knorm::Pattern::Unit => true,
                         };
 
                         if should_eliminate {
-                            let mut dummy = self.ctx.new_expr(ir_knorm::Typed::new(ExprKind::Const(ir_knorm::LitKind::Int(0)), binding.value.ty.clone()));
-                            std::mem::swap(&mut dummy, continuation);
-                            *expr = dummy;
+                            // Skip the binding and directly visit the continuation.
+                            *expr = self.ctx.new_expr(continuation.take());
+
+                            self.visit_expr(expr);
                         }
                     }
                     _ => self.super_expr(expr),
@@ -73,7 +81,8 @@ impl<'ctx> KnormPass<'ctx> for EliminateUnused {
         }
 
         EliminationVisitor {
-            ctx: ctx.knorm_context()
-        }.visit_expr(expr);
+            ctx: ctx.knorm_context(),
+        }
+        .visit_expr(expr);
     }
 }

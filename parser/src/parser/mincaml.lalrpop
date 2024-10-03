@@ -1,5 +1,5 @@
 use sourcemap::{Loc, Spanned};
-use syntax::{*, ExprKind::*, LitKind::*, IntBinOpKind::*, BooleanBinOpKind::*, FloatBinOpKind::*, UnOp::*};
+use syntax::{*, ExprKind::*, LitKind::*, IntBinOpKind::*, RelationBinOpKind::*, FloatBinOpKind::*, UnOp::*};
 
 use crate::lexer::{Error as LexError, Token};
 use super::Allocator;
@@ -63,13 +63,13 @@ FactorOp: BinOp = {
     "/." => BinOp::Float(FDiv)
 };
 
-BooleanBinOp: BinOp = {
-    "=" => BinOp::Boolean(Eq),
-    "<=" => BinOp::Boolean(Le),
-    ">=" => BinOp::Boolean(Ge),
-    "<>" => BinOp::Boolean(Ne),
-    "<" => BinOp::Boolean(Lt),
-    ">" => BinOp::Boolean(Gt)
+RelationBinOp: BinOp = {
+    "=" => BinOp::Relation(Eq),
+    "<=" => BinOp::Relation(Le),
+    ">=" => BinOp::Relation(Ge),
+    "<>" => BinOp::Relation(Ne),
+    "<" => BinOp::Relation(Lt),
+    ">" => BinOp::Relation(Gt)
 };
 
 Literal: Expr<'ctx> = {
@@ -125,7 +125,7 @@ pub Expr: Expr<'ctx> = {
     // = <> < > <= >=
     #[precedence(level="5")]
     #[assoc(side="left")]
-    <l:@L> <e1:Expr> <op:BooleanBinOp> <e2:Expr> <r:@R>
+    <l:@L> <e1:Expr> <op:RelationBinOp> <e2:Expr> <r:@R>
         => alloc.spanned(Binary(op, e1, e2), (l, r)),
 
     // .() <-

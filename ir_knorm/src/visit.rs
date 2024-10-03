@@ -69,6 +69,7 @@ macro_rules! declare_visitor {
                         self.visit_ident(e2);
                         self.visit_ident(e3);
                     }
+                    ExprKind::Invalid => unreachable!("invalid expression"),
                 }
             }
 

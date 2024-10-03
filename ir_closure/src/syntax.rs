@@ -8,7 +8,7 @@ use data_structure::{
 };
 
 pub use ir_knorm::{
-    ArgIndex, BinOp, BooleanBinOpKind, DisambiguatedIdent, FloatBinOpKind, Ident, IntBinOpKind,
+    ArgIndex, BinOp, RelationBinOpKind, DisambiguatedIdent, FloatBinOpKind, Ident, IntBinOpKind,
     LitKind, Pattern, TupleIndex, Ty, TyKind, Typed, TypedIdent, UnOp,
 };
 

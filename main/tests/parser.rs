@@ -1,6 +1,7 @@
 fn parse_input(input: &str) {
     let arena = middleware::Arena::default();
-    let global_ctxt = middleware::GlobalContext::new(&arena);
+    let compiler_option = middleware::CompilerOption::default();
+    let global_ctxt = middleware::GlobalContext::new(&arena, compiler_option);
 
     let _parsed_tree = parser::lex_and_parse(global_ctxt.parsing_context(), input).unwrap();
 }
@@ -12,7 +13,8 @@ fn test_parse_input() {
 
 fn parse_input_mli(input: &str) {
     let arena = middleware::Arena::default();
-    let global_ctxt = middleware::GlobalContext::new(&arena);
+    let compiler_option = middleware::CompilerOption::default();
+    let global_ctxt = middleware::GlobalContext::new(&arena, compiler_option);
 
     let _parsed_tree = parser::lex_and_parse_mli(global_ctxt.parsing_context(), input).unwrap();
 }

@@ -1,12 +1,12 @@
-use ir_knorm::{Expr, ExprKind, Ident, Visitor, MutVisitor, ArgIndex};
-use middleware::FxHashMap;
 use data_structure::index::vec::IndexVec;
+use ir_knorm::{AlphaRename, ArgIndex, Expr, ExprKind, Ident, MutVisitor, Visitor};
+use middleware::FxHashMap;
 
-use crate::{alpha_rename::AlphaRename, KnormPass};
+use crate::KnormPass;
 
 pub struct Inlining;
 
-fn calculate_size<'ctx>(expr: &Expr<'ctx>) -> usize {
+fn calculate_size(expr: &Expr<'_>) -> usize {
     struct SizeVisitor {
         pub size: usize,
     }
@@ -26,22 +26,28 @@ fn calculate_size<'ctx>(expr: &Expr<'ctx>) -> usize {
 
 impl<'ctx> KnormPass<'ctx> for Inlining {
     fn run_pass(&mut self, ctx: &'ctx middleware::GlobalContext<'ctx>, expr: &mut Expr<'ctx>) {
-        struct Hoge<'ctx> {
+        struct InliningVisitor<'ctx> {
             ctx: &'ctx middleware::GlobalContext<'ctx>,
             env: FxHashMap<Ident<'ctx>, (IndexVec<ArgIndex, Ident<'ctx>>, Expr<'ctx>)>,
         }
 
-        impl<'ctx> MutVisitor<'ctx> for Hoge<'ctx> {
+        impl<'ctx> MutVisitor<'ctx> for InliningVisitor<'ctx> {
             fn visit_expr(&mut self, expr: &mut Expr<'ctx>) {
                 match &mut expr.value {
                     // function definition
                     ExprKind::Let(binding, _) if binding.is_function() => {
                         if let Some(f_var) = binding.pattern.as_var() {
-                            if calculate_size(&binding.value) < self.ctx.compiler_option().inline_size_limit {
-                                self.env.insert(f_var, (binding.args.clone(), binding.value.clone()));
+                            if calculate_size(&binding.value)
+                                < self
+                                    .ctx
+                                    .compiler_option()
+                                    .inline_size_limit
+                                    .unwrap_or(usize::MAX)
+                            {
+                                self.env
+                                    .insert(f_var, (binding.args.clone(), binding.value.clone()));
                             }
-                        }
-                        else {
+                        } else {
                             unreachable!()
                         }
                         self.super_expr(expr);
@@ -53,11 +59,12 @@ impl<'ctx> KnormPass<'ctx> for Inlining {
                                 initial_env.insert(*y, *x);
                             }
                             let mut body = body.clone();
-                            AlphaRename::new(initial_env).run_pass(self.ctx, &mut body);
+                            AlphaRename::new_from_initial("inline", initial_env)
+                                .run(self.ctx.knorm_context(), &mut body);
 
                             *expr = body;
                         }
-                    },
+                    }
                     _ => {
                         self.super_expr(expr);
                     }
@@ -65,7 +72,7 @@ impl<'ctx> KnormPass<'ctx> for Inlining {
             }
         }
 
-        Hoge {
+        InliningVisitor {
             ctx,
             env: FxHashMap::default(),
         }

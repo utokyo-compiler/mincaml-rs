@@ -58,17 +58,17 @@ pub fn codegen<'ctx>(
             let local2 = function_state.get_local(*e2).expect_single()?;
 
             match bin_op {
-                ir_closure::BinOp::Boolean(bbin_op_kind) => {
+                ir_closure::BinOp::Relation(bbin_op_kind) => {
                     function_state.push_raw(Instruction::LocalGet(local1.unwrap_idx()));
                     function_state.push_raw(Instruction::LocalGet(local2.unwrap_idx()));
 
                     let instr = match bbin_op_kind {
-                        ir_closure::BooleanBinOpKind::Eq => Instruction::I32Eq,
-                        ir_closure::BooleanBinOpKind::Ne => Instruction::I32Ne,
-                        ir_closure::BooleanBinOpKind::Lt => Instruction::I32LtS,
-                        ir_closure::BooleanBinOpKind::Le => Instruction::I32LeS,
-                        ir_closure::BooleanBinOpKind::Gt => Instruction::I32GtS,
-                        ir_closure::BooleanBinOpKind::Ge => Instruction::I32GeS,
+                        ir_closure::RelationBinOpKind::Eq => Instruction::I32Eq,
+                        ir_closure::RelationBinOpKind::Ne => Instruction::I32Ne,
+                        ir_closure::RelationBinOpKind::Lt => Instruction::I32LtS,
+                        ir_closure::RelationBinOpKind::Le => Instruction::I32LeS,
+                        ir_closure::RelationBinOpKind::Gt => Instruction::I32GtS,
+                        ir_closure::RelationBinOpKind::Ge => Instruction::I32GeS,
                     };
                     function_state.push_raw(instr);
                 }

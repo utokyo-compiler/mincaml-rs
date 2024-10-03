@@ -17,6 +17,5 @@ mod visit;
 pub use context::*;
 pub use graph::*;
 pub use lowering::*;
-pub use pretty::*;
 pub use syntax::*;
 pub use visit::*;

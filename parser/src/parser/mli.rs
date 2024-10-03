@@ -1,7 +1,7 @@
 // auto-generated: "lalrpop 0.21.0"
-// sha3: 544c60d6374b21ea1223d3e5f116cdd92c37cf3291fc5f3ee14e345fa583dcdb
+// sha3: a43c34a1faf669179ea3b6da53433d6ce47c3c823facab24adc0f15713850c14
 use sourcemap::Loc;
-use syntax::{*, IntBinOpKind::*, FloatBinOpKind::*, BooleanBinOpKind::*, mli};
+use syntax::{*, IntBinOpKind::*, FloatBinOpKind::*, RelationBinOpKind::*, mli};
 use crate::lexer::{Error as LexError, Token};
 use super::Allocator;
 #[allow(unused_extern_crates)]
@@ -16,7 +16,7 @@ extern crate alloc;
 mod __parse__Mli {
 
     use sourcemap::Loc;
-    use syntax::{*, IntBinOpKind::*, FloatBinOpKind::*, BooleanBinOpKind::*, mli};
+    use syntax::{*, IntBinOpKind::*, FloatBinOpKind::*, RelationBinOpKind::*, mli};
     use crate::lexer::{Error as LexError, Token};
     use super::super::Allocator;
     #[allow(unused_extern_crates)]
@@ -1983,7 +1983,7 @@ fn __action15<
     (_, __0, _): (Loc, Token<'input>, Loc),
 ) -> BinOp
 {
-    BinOp::Boolean(Eq)
+    BinOp::Relation(Eq)
 }
 
 #[allow(unused_variables)]
@@ -1996,7 +1996,7 @@ fn __action16<
     (_, __0, _): (Loc, Token<'input>, Loc),
 ) -> BinOp
 {
-    BinOp::Boolean(Le)
+    BinOp::Relation(Le)
 }
 
 #[allow(unused_variables)]
@@ -2009,7 +2009,7 @@ fn __action17<
     (_, __0, _): (Loc, Token<'input>, Loc),
 ) -> BinOp
 {
-    BinOp::Boolean(Ge)
+    BinOp::Relation(Ge)
 }
 
 #[allow(unused_variables)]
@@ -2022,7 +2022,7 @@ fn __action18<
     (_, __0, _): (Loc, Token<'input>, Loc),
 ) -> BinOp
 {
-    BinOp::Boolean(Ne)
+    BinOp::Relation(Ne)
 }
 
 #[allow(unused_variables)]
@@ -2035,7 +2035,7 @@ fn __action19<
     (_, __0, _): (Loc, Token<'input>, Loc),
 ) -> BinOp
 {
-    BinOp::Boolean(Lt)
+    BinOp::Relation(Lt)
 }
 
 #[allow(unused_variables)]
@@ -2048,7 +2048,7 @@ fn __action20<
     (_, __0, _): (Loc, Token<'input>, Loc),
 ) -> BinOp
 {
-    BinOp::Boolean(Gt)
+    BinOp::Relation(Gt)
 }
 
 #[allow(unused_variables)]

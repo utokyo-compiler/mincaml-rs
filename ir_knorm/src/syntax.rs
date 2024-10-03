@@ -5,7 +5,7 @@ use data_structure::{
 };
 
 pub use ir_typed_ast::{
-    ArgIndex, BinOp, BooleanBinOpKind, DisambiguatedIdent, FloatBinOpKind, IntBinOpKind, LitKind,
+    ArgIndex, BinOp, DisambiguatedIdent, FloatBinOpKind, IntBinOpKind, LitKind, RelationBinOpKind,
     TupleIndex, Ty, TyKind, Typed, TypedIdent, UnOp,
 };
 
@@ -35,7 +35,7 @@ impl<'ctx> std::ops::DerefMut for Ident<'ctx> {
 pub type Expr<'ctx> = Box<'ctx, TypedExprKind<'ctx>>;
 pub type TypedExprKind<'ctx> = Typed<'ctx, ExprKind<'ctx>>;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub enum ExprKind<'ctx> {
     Const(LitKind),
     Unary(UnOp, Ident<'ctx>),
@@ -48,6 +48,13 @@ pub enum ExprKind<'ctx> {
     ArrayMake(Ident<'ctx>, Ident<'ctx>),
     Get(Ident<'ctx>, Ident<'ctx>),
     Set(Ident<'ctx>, Ident<'ctx>, Ident<'ctx>),
+
+    #[default]
+    /// Invalid expression.
+    ///
+    /// Useful for discarding values, should not occur anywhere else. This variant will be
+    /// introduced mostly in `Typed::take()`.
+    Invalid,
 }
 
 impl<'ctx> ExprKind<'ctx> {
@@ -78,6 +85,8 @@ impl<'ctx> ExprKind<'ctx> {
             ExprKind::ArrayMake(..) => "Array.make",
             ExprKind::Get(..) => "get",
             ExprKind::Set(..) => "set",
+
+            ExprKind::Invalid => unreachable!("invalid expression"),
         }
     }
 }
@@ -110,8 +119,9 @@ impl<'ctx> LetBinding<'ctx> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub enum Pattern<'ctx> {
+    #[default]
     Unit,
     Var(Ident<'ctx>),
     Tuple(IndexVec<TupleIndex, Ident<'ctx>>),

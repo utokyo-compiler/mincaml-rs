@@ -54,7 +54,7 @@ fn main() {
     let _output_path = config
         .output
         .unwrap_or_else(|| exit_with("output file is required"));
-    
+
     let mut input_contents = Vec::new();
     for path in input_pathes {
         let content = fs::read_to_string(path).unwrap();
@@ -63,8 +63,8 @@ fn main() {
     let files = MultipleInputFiles::new(input_contents);
     let input = files.concatenated();
 
-    let compiler_option = middleware::Option {
-        inline_size_limit: config.inline_size_limit.unwrap_or(0),
+    let compiler_option = middleware::CompilerOption {
+        inline_size_limit: config.inline_size_limit,
     };
 
     compiler::run(&input, compiler_option);
