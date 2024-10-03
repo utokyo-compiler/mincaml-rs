@@ -78,6 +78,7 @@ pub fn codegen(closure_prog: ir_closure::Program<'_>) -> Result<Vec<u8>> {
                 .map(WasmPrimitiveTy::into_valtype),
         );
     }
+    module_builder.section(&type_section);
 
     // write import section
     for ImportFn { namespace, sig } in &program.import_fns {

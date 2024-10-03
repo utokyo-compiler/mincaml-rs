@@ -32,6 +32,7 @@ pub fn codegen<'ctx>(
     }
 
     expr::codegen(program_state, &mut state, &function.body)?;
+    state.push_raw(wasm_encoder::Instruction::End);
 
     let results = WasmTy::from_ty(function.body.ty)
         .into_iter_primitives()
