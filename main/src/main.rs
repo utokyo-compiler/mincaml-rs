@@ -2,7 +2,6 @@ use std::{fs, path::PathBuf};
 
 use clap::Parser;
 use serde::Deserialize;
-use sourcemap::MultipleInputFiles;
 
 mod compiler;
 
@@ -50,27 +49,36 @@ fn main() {
     let config = command_line.command_line.merge(config);
     let input_pathes = config
         .input
-        .unwrap_or_else(|| exit_with("input files are required"));
+        .unwrap_or_else(|| exit_missing_args("input files are required"));
     let _output_path = config
         .output
-        .unwrap_or_else(|| exit_with("output file is required"));
+        .unwrap_or_else(|| exit_missing_args("output file is required"));
 
-    let mut input_contents = Vec::new();
+    let mut ml_input = middleware::session::MultipleInput::new();
+    let mut mli_input = middleware::session::MultipleInput::new();
     for path in input_pathes {
-        let content = fs::read_to_string(path).unwrap();
-        input_contents.push(content);
+        match path.extension().and_then(|ext| ext.to_str()) {
+            Some("ml") => ml_input.add_file(middleware::session::InputFile {
+                content: fs::read_to_string(&path).unwrap(),
+                path,
+            }),
+            Some("mli") => mli_input.add_file(middleware::session::InputFile {
+                content: fs::read_to_string(&path).unwrap(),
+                path,
+            }),
+            _ => panic!("unsupported file extension or missing extension"),
+        }
     }
-    let files = MultipleInputFiles::new(input_contents);
-    let input = files.concatenated();
 
-    let compiler_option = middleware::CompilerOption {
+    let compiler_option = middleware::session::CompilerOption {
         inline_size_limit: config.inline_size_limit,
     };
+    let session = middleware::session::Session::new(ml_input, mli_input, compiler_option);
 
-    compiler::run(&input, compiler_option);
+    compiler::run(session);
 }
 
-fn exit_with(message: &'static str) -> ! {
+fn exit_missing_args(message: &'static str) -> ! {
     <CommandLine as clap::CommandFactory>::command()
         .error(clap::error::ErrorKind::MissingRequiredArgument, message)
         .exit();

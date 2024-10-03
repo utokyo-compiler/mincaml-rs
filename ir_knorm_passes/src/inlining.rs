@@ -36,19 +36,13 @@ impl<'ctx> KnormPass<'ctx> for Inlining {
                 match &mut expr.value {
                     // function definition
                     ExprKind::Let(binding, _) if binding.is_function() => {
-                        if let Some(f_var) = binding.pattern.as_var() {
-                            if calculate_size(&binding.value)
-                                < self
-                                    .ctx
-                                    .compiler_option()
-                                    .inline_size_limit
-                                    .unwrap_or(usize::MAX)
-                            {
-                                self.env
-                                    .insert(f_var, (binding.args.clone(), binding.value.clone()));
-                            }
-                        } else {
+                        let Some(f_var) = binding.pattern.as_var() else {
                             unreachable!()
+                        };
+                        let limit = self.ctx.session().compiler_option.inline_size_limit;
+                        if limit.is_none() || calculate_size(&binding.value) < limit.unwrap() {
+                            self.env
+                                .insert(f_var, (binding.args.clone(), binding.value.clone()));
                         }
                         self.super_expr(expr);
                     }

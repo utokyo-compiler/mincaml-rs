@@ -1,10 +1,11 @@
-use middleware::{Arena, CompilerOption, GlobalContext};
+use middleware::{session::Session, Arena, GlobalContext};
 
-pub fn run(input: &str, compiler_option: CompilerOption) {
+pub fn run(session: Session) {
     let arena = Arena::default();
-    let global_ctxt = GlobalContext::new(&arena, compiler_option);
+    let global_ctxt = GlobalContext::new(&arena, session);
 
-    let parsed_tree = parser::lex_and_parse(global_ctxt.parsing_context(), input).unwrap();
+    let input = global_ctxt.session().input.concatenated_string();
+    let parsed_tree = parser::lex_and_parse(global_ctxt.parsing_context(), &input).unwrap();
     let typed_tree = typing::typeck(
         global_ctxt.typing_context(),
         &global_ctxt.common_types,

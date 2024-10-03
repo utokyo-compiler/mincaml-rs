@@ -1,6 +1,9 @@
+pub mod session;
+
 pub use data_structure::{FxHashMap, FxHashSet};
 
 use data_structure::arena::TypedArena;
+use session::Session;
 use sourcemap::Spanned;
 use ty::{context::CommonTypes, TyKind};
 
@@ -16,11 +19,6 @@ pub struct Arena<'ctx> {
     asm_virtual_expr: TypedArena<ir_asm_virtual::TypedExprKind<'ctx>>,
 }
 
-#[derive(Default)]
-pub struct CompilerOption {
-    pub inline_size_limit: Option<usize>,
-}
-
 pub struct GlobalContext<'ctx> {
     parsing_context: parser::Context<'ctx>,
     typing_context: typing::Context<'ctx>,
@@ -28,11 +26,11 @@ pub struct GlobalContext<'ctx> {
     closure_context: ir_closure::Context<'ctx>,
     asm_virtual_context: ir_asm_virtual::Context<'ctx>,
     pub common_types: CommonTypes<'ctx>,
-    compiler_option: CompilerOption,
+    session: Session,
 }
 
 impl<'ctx> GlobalContext<'ctx> {
-    pub fn new(arena: &'ctx Arena<'ctx>, compiler_option: CompilerOption) -> Self {
+    pub fn new(arena: &'ctx Arena<'ctx>, session: Session) -> Self {
         let parsing_context = parser::Context::new(&arena.ident, &arena.expr);
         let typing_context =
             typing::Context::new(&arena.type_, &arena.typed_ident, &arena.typed_expr);
@@ -47,7 +45,7 @@ impl<'ctx> GlobalContext<'ctx> {
             knorm_context,
             closure_context,
             asm_virtual_context,
-            compiler_option,
+            session,
         }
     }
 
@@ -71,7 +69,7 @@ impl<'ctx> GlobalContext<'ctx> {
         &self.asm_virtual_context
     }
 
-    pub fn compiler_option(&self) -> &CompilerOption {
-        &self.compiler_option
+    pub fn session(&self) -> &Session {
+        &self.session
     }
 }
