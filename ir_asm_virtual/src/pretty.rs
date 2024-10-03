@@ -172,14 +172,26 @@ impl BasicBlockPrinter<'_, '_> {
         }
     }
 
-    fn format_basic_block(&self, f: &mut Formatter<'_>, bb: &BasicBlockData) -> fmt::Result {
-        write!(f, "\targs: ")?;
-        bb.args
-            .iter()
-            .try_for_each(|arg| write!(f, "{}, ", self.locals[*arg]))?;
-        bb.stmts
-            .iter()
-            .try_for_each(|stmt| self.format_stmt_kind(f, stmt))
+    fn format_basic_block(
+        &self,
+        f: &mut Formatter<'_>,
+        bb: BasicBlock,
+        data: &BasicBlockData,
+    ) -> fmt::Result {
+        write!(f, "\tbb{}", bb.index())?;
+        if !data.args.is_empty() {
+            write!(f, " (")?;
+            data.args
+                .iter()
+                .try_for_each(|arg| write!(f, "{}, ", self.locals[*arg]))?;
+            write!(f, ") ")?;
+        }
+        writeln!(f, ":")?;
+        data.stmts.iter().try_for_each(|stmt| {
+            write!(f, "\t")?;
+            self.format_stmt_kind(f, stmt)?;
+            writeln!(f)
+        })
     }
 }
 
@@ -196,23 +208,26 @@ fn format_function_def(
     function.local_decls[function.args]
         .iter()
         .try_for_each(|arg| write!(f, "{arg}, "))?;
-    writeln!(f, ")")?;
-    function.basic_blocks.iter().try_for_each(|bb| {
-        BasicBlockPrinter {
-            func_names,
-            locals: &function.local_decls,
-        }
-        .format_basic_block(f, bb)
-    })
+    writeln!(f, ") {{")?;
+    function
+        .basic_blocks
+        .iter_enumerated()
+        .try_for_each(|(bb, data)| {
+            BasicBlockPrinter {
+                func_names,
+                locals: &function.local_decls,
+            }
+            .format_basic_block(f, bb, data)
+        })?;
+    writeln!(f, "}}")
 }
 
 impl Display for Program<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let func_names = self.functions.iter().map(|func| func.name).collect();
 
-        self.functions.iter().try_for_each(|function| {
-            format_function_def(f, &func_names, function)?;
-            writeln!(f)
-        })
+        self.functions
+            .iter()
+            .try_for_each(|function| format_function_def(f, &func_names, function))
     }
 }
