@@ -4,6 +4,7 @@ use std::path::PathBuf;
 pub struct Session {
     pub input: MultipleInput,
     pub input_interface: MultipleInput,
+    pub output_path: Option<PathBuf>,
     pub compiler_option: CompilerOption,
 }
 
@@ -11,11 +12,13 @@ impl Session {
     pub fn new(
         input: MultipleInput,
         input_interface: MultipleInput,
+        output_path: Option<PathBuf>,
         compiler_option: CompilerOption,
     ) -> Self {
         Self {
             input,
             input_interface,
+            output_path,
             compiler_option,
         }
     }
@@ -38,16 +41,12 @@ impl MultipleInput {
 
     pub fn add_file(&mut self, file: InputFile) {
         self.offsets.push(self.offset_accumulated);
-        self.offset_accumulated += file.content.chars().count();
+        self.offset_accumulated += file.content().chars().count();
         self.files.push(file);
     }
 
     pub fn concatenated_string(&self) -> String {
-        let vec: Vec<_> = self
-            .files
-            .iter()
-            .map(|file| file.content.as_str())
-            .collect();
+        let vec: Vec<_> = self.files.iter().map(|file| file.content()).collect();
         vec.join("\n")
     }
 
@@ -69,9 +68,18 @@ impl Default for MultipleInput {
     }
 }
 
-pub struct InputFile {
-    pub path: PathBuf,
-    pub content: String,
+pub enum InputFile {
+    File { path: PathBuf, content: String },
+    String { content: String },
+}
+
+impl InputFile {
+    pub fn content(&self) -> &str {
+        match self {
+            InputFile::File { content, .. } => content,
+            InputFile::String { content } => content,
+        }
+    }
 }
 
 #[derive(Default)]
