@@ -130,17 +130,23 @@ fn decide_ty<'ctx>(
             let scope = name_res.begin_scope();
             let typed_pattern = match let_binder.pattern() {
                 syntax::Pattern::Var(var) => {
-                    let ident = name_res.define_in(scope, *var, Ty::mk_ty_var(ctx));
+                    let lhs_ty = Ty::mk_ty_var(ctx);
+                    let ident = name_res.define_in(scope, *var, lhs_ty);
+                    unify(subst, lhs_ty, typed_bound_value.ty)?;
                     ir_typed_ast::Pattern::Var(ir_typed_ast::Ident::new(ctx.alloc_ident(ident)))
                 }
                 syntax::Pattern::Tuple(vars) => {
+                    let mut lhs_tys = Vec::with_capacity(vars.len());
                     let idents = vars
                         .iter()
                         .map(|var| {
-                            let ident = name_res.define_in(scope, *var, Ty::mk_ty_var(ctx));
+                            let lhs_ty = Ty::mk_ty_var(ctx);
+                            lhs_tys.push(lhs_ty);
+                            let ident = name_res.define_in(scope, *var, lhs_ty);
                             ir_typed_ast::Ident::new(ctx.alloc_ident(ident))
                         })
                         .collect();
+                    unify(subst, Ty::mk_tuple(ctx, lhs_tys), typed_bound_value.ty)?;
                     ir_typed_ast::Pattern::Tuple(idents)
                 }
             };
