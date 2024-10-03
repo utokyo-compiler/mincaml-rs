@@ -10,6 +10,7 @@ fn parse_input(input: &str) {
     let session = middleware::session::Session::new(
         ml_input,
         mil_input,
+        None,
         middleware::session::CompilerOption::default(),
     );
     let global_ctxt = middleware::GlobalContext::new(&arena, session);
@@ -35,6 +36,7 @@ fn parse_input_mli(input: &str) {
     let session = middleware::session::Session::new(
         ml_input,
         mli_input,
+        None,
         middleware::session::CompilerOption::default(),
     );
     let global_ctxt = middleware::GlobalContext::new(&arena, session);

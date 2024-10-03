@@ -50,7 +50,7 @@ fn main() {
     let input_pathes = config
         .input
         .unwrap_or_else(|| exit_missing_args("input files are required"));
-    let _output_path = config
+    let output_path = config
         .output
         .unwrap_or_else(|| exit_missing_args("output file is required"));
 
@@ -73,7 +73,8 @@ fn main() {
     let compiler_option = middleware::session::CompilerOption {
         inline_size_limit: config.inline_size_limit,
     };
-    let session = middleware::session::Session::new(ml_input, mli_input, compiler_option);
+    let session =
+        middleware::session::Session::new(ml_input, mli_input, Some(output_path), compiler_option);
 
     compiler::run(session);
 }

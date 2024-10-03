@@ -4,6 +4,7 @@ use std::path::PathBuf;
 pub struct Session {
     pub input: MultipleInput,
     pub input_interface: MultipleInput,
+    pub output_path: Option<PathBuf>,
     pub compiler_option: CompilerOption,
 }
 
@@ -11,11 +12,13 @@ impl Session {
     pub fn new(
         input: MultipleInput,
         input_interface: MultipleInput,
+        output_path: Option<PathBuf>,
         compiler_option: CompilerOption,
     ) -> Self {
         Self {
             input,
             input_interface,
+            output_path,
             compiler_option,
         }
     }

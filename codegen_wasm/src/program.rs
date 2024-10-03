@@ -13,7 +13,7 @@ use crate::{
     ty::{WasmPrimitiveTy, WasmTy},
 };
 
-pub fn codegen(asm_virtual_prog: ir_closure::Program<'_>) -> Result<Vec<u8>> {
+pub fn codegen(closure_prog: ir_closure::Program<'_>) -> Result<Vec<u8>> {
     let signarute_arena = TypedArena::new();
     let mut main_fn_idx = None;
 
@@ -32,7 +32,7 @@ pub fn codegen(asm_virtual_prog: ir_closure::Program<'_>) -> Result<Vec<u8>> {
         let mut visitor = VisitImportedFn {
             fn_names: Vec::new(),
         };
-        visitor.visit_program(&asm_virtual_prog);
+        visitor.visit_program(&closure_prog);
 
         let import_fns = visitor
             .fn_names
@@ -49,7 +49,7 @@ pub fn codegen(asm_virtual_prog: ir_closure::Program<'_>) -> Result<Vec<u8>> {
             functions: Vec::new(),
         };
 
-        for (fn_index, function) in asm_virtual_prog.functions.into_iter_enumerated() {
+        for (fn_index, function) in closure_prog.functions.into_iter_enumerated() {
             if function.name == ir_closure::FnName::MAIN_FN_NAME {
                 main_fn_idx = Some(state.get_func_idx_from_fn_index(fn_index));
             }

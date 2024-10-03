@@ -4,7 +4,10 @@
 use wasi_common::sync::WasiCtxBuilder;
 use wasmtime::{Engine, Linker, Module, Result, Store};
 
-pub fn run<'a>(bytes: &[u8], inherit_args: impl Iterator<Item = &'a str>) -> Result<()> {
+pub fn run_bytes<T>(bytes: &[u8], inherit_args: impl Iterator<Item = T>) -> Result<()>
+where
+    T: AsRef<str>,
+{
     // Define the WASI functions globally on the `Config`.
     let engine = Engine::default();
     let mut linker = Linker::new(&engine);
@@ -16,7 +19,7 @@ pub fn run<'a>(bytes: &[u8], inherit_args: impl Iterator<Item = &'a str>) -> Res
     let mut wasi_ctx_builder = WasiCtxBuilder::new();
     wasi_ctx_builder.inherit_stdio();
     for arg in inherit_args {
-        wasi_ctx_builder.arg(arg)?;
+        wasi_ctx_builder.arg(arg.as_ref())?;
     }
     let wasi = wasi_ctx_builder.build();
     let mut store = Store::new(&engine, wasi);

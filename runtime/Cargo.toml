@@ -6,3 +6,5 @@ edition.workspace = true
 [dependencies]
 wasi-common.workspace = true
 wasmtime.workspace = true
+
+clap.workspace = true
