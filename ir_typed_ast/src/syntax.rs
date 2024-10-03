@@ -3,7 +3,7 @@ use data_structure::{
     index::{vec::IndexVec, Indexable},
 };
 use sourcemap::{Span, Spanned};
-pub use syntax::{BinOp, RelationBinOpKind, FloatBinOpKind, IntBinOpKind, LitKind, UnOp};
+pub use syntax::{BinOp, FloatBinOpKind, IntBinOpKind, LitKind, RelationBinOpKind, UnOp};
 pub use ty::{ArgIndex, TupleIndex, Ty, TyKind, Typed};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -50,7 +50,7 @@ impl<'ctx> std::fmt::Display for DisambiguatedIdent<'ctx> {
                 name,
                 disambiguator,
             } => {
-                write!(f, ".{}#{}", name, disambiguator)
+                write!(f, "@{name}#{disambiguator}")
             }
         }
     }
