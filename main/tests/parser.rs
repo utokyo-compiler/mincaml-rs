@@ -4,12 +4,12 @@ fn parse_input(input: &str) {
     };
     let mut ml_input = middleware::session::MultipleInput::new();
     ml_input.add_file(input);
-    let mil_input = middleware::session::MultipleInput::default();
+    let mli_input = middleware::session::MultipleInput::default();
 
     let arena = middleware::Arena::default();
     let session = middleware::session::Session::new(
         ml_input,
-        mil_input,
+        mli_input,
         None,
         middleware::session::CompilerOption::default(),
     );
@@ -55,7 +55,7 @@ val fisneg : float -> bool
 external (<>) : int -> int -> bool = "%notequal"
 external ( * ) : int -> int -> int = "%mulint"
 
-external cos : float -> float = "cos_float" "cos" "float"
+external cos : float -> float = "cos_float" "cos" [@@unboxed] [@@noalloc] (* "float" *)
 "#,
     );
 }
