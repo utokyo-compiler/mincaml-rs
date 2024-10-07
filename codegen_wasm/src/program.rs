@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use anyhow::Result;
 use data_structure::{
     arena::TypedArena,
@@ -84,7 +86,7 @@ pub fn codegen(closure_prog: ir_closure::Program<'_>) -> Result<Vec<u8>> {
     for ImportFn { namespace, sig } in &program.import_fns {
         let mut import_section = ImportSection::new();
         let (module, field) = namespace.into_wasm();
-        import_section.import(module, field, EntityType::Function(sig.unwrap_idx()));
+        import_section.import(module, &field, EntityType::Function(sig.unwrap_idx()));
         module_builder.section(&import_section);
     }
 
@@ -216,10 +218,24 @@ pub enum NameSpace<'ctx> {
 }
 
 impl<'ctx> NameSpace<'ctx> {
-    pub fn into_wasm(self) -> (&'static str, &'ctx str) {
+    pub fn into_wasm(self) -> (&'static str, Cow<'static, str>) {
+        fn mangle_fn_name(fn_name: ir_closure::Ident<'_>) -> String {
+            match fn_name.value {
+                ir_closure::DisambiguatedIdent::UserDefined { name, span } => {
+                    format!("{}@{}..{}", name.0, span.start, span.end)
+                }
+                ir_closure::DisambiguatedIdent::Intrinsic { name } => name.0.to_string(),
+                ir_closure::DisambiguatedIdent::CompilerGenerated {
+                    name,
+                    disambiguator,
+                } => format!("__{name}#{{{disambiguator}}}"),
+            }
+        }
         match self {
-            NameSpace::Wasm { module, field } => (module, field),
-            Self::Pervasives { fn_name } => ("pervasives", fn_name.as_non_main().name()),
+            NameSpace::Wasm { module, field } => (module, field.into()),
+            Self::Pervasives { fn_name } => {
+                ("pervasives", mangle_fn_name(fn_name.as_non_main()).into())
+            }
         }
     }
     pub fn matches(&self, fn_name: FnName<'ctx>) -> bool {

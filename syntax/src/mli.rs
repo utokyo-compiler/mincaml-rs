@@ -1,6 +1,7 @@
 use crate::{BinOp, Ident};
 
 #[derive(Debug)]
+/// The interface of intrinsic library.
 pub struct Mli<'ctx> {
     pub declarations: Vec<Declaration<'ctx>>,
 }
@@ -15,6 +16,8 @@ pub struct Declaration<'ctx> {
 #[derive(Debug)]
 pub enum ItemIdent<'ctx> {
     Var(Ident<'ctx>),
+
+    /// An operator. Currently this is just ignored.
     Operator(Operator),
 }
 
@@ -26,15 +29,24 @@ impl<'ctx> ItemIdent<'ctx> {
     pub fn new_operator(operator: Operator) -> Self {
         Self::Operator(operator)
     }
+
+    pub fn as_var(&self) -> Option<&Ident<'ctx>> {
+        if let Self::Var(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Operator {
     Binary(BinOp),
 }
 
 #[derive(Debug)]
-/// A type ascription. Function types are supposed to be curried.
+/// A type ascription. Function types are supposed to be curried and
+/// not to contain complex types.
 pub struct AscribedTy<'ctx> {
     pub elements: Vec<Ident<'ctx>>,
 }

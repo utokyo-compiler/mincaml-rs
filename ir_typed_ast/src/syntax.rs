@@ -1,3 +1,5 @@
+pub mod mli;
+
 use data_structure::{
     arena::Box,
     index::{vec::IndexVec, Indexable},
@@ -13,6 +15,10 @@ pub enum DisambiguatedIdent<'ctx> {
         name: syntax::Ident<'ctx>,
         span: Span,
     },
+
+    /// An intrinsic function.
+    Intrinsic { name: syntax::Ident<'ctx> },
+
     CompilerGenerated {
         name: &'static str,
 
@@ -27,17 +33,15 @@ impl<'ctx> DisambiguatedIdent<'ctx> {
     pub fn new_user(name: syntax::Ident<'ctx>, span: Span) -> Self {
         Self::UserDefined { name, span }
     }
+
+    pub fn new_intrinsic(name: syntax::Ident<'ctx>) -> Self {
+        Self::Intrinsic { name }
+    }
+
     pub const fn new_compiler_unchecked(name: &'static str, disambiguator: usize) -> Self {
         Self::CompilerGenerated {
             name,
             disambiguator,
-        }
-    }
-
-    pub fn name(&self) -> &'ctx str {
-        match self {
-            Self::UserDefined { name, .. } => name.0,
-            Self::CompilerGenerated { name, .. } => name,
         }
     }
 }
@@ -50,8 +54,9 @@ impl<'ctx> std::fmt::Display for DisambiguatedIdent<'ctx> {
                 name,
                 disambiguator,
             } => {
-                write!(f, "@{name}#{disambiguator}")
+                write!(f, "__{name}#{{{disambiguator}}}")
             }
+            Self::Intrinsic { name } => write!(f, "{}", name.0),
         }
     }
 }

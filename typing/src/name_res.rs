@@ -15,17 +15,19 @@ pub struct Env<'ctx> {
 }
 
 struct Candidates<'ctx> {
-    inner: Vec<ScopedIdent<'ctx>>,
+    scopes: Vec<ScopedIdent<'ctx>>,
+    intrinsic: Option<Typed<'ctx, DisambiguatedIdent<'ctx>>>,
 }
 
 impl<'ctx> Candidates<'ctx> {
     fn new() -> Self {
         Self {
-            inner: Default::default(),
+            scopes: Default::default(),
+            intrinsic: None,
         }
     }
 
-    pub fn push(
+    pub fn push_scoped_ident(
         &mut self,
         ident: syntax::Ident<'ctx>,
         ty: Ty<'ctx>,
@@ -33,22 +35,27 @@ impl<'ctx> Candidates<'ctx> {
         scope_id: ScopeId,
     ) -> Typed<'ctx, DisambiguatedIdent<'ctx>> {
         let ident = Typed::new(ir_typed_ast::DisambiguatedIdent::new_user(ident, span), ty);
-        self.inner.push(ScopedIdent { ident, scope_id });
+        self.scopes.push(ScopedIdent { ident, scope_id });
         ident
+    }
+
+    pub fn register_intrinsic(&mut self, ident: syntax::Ident<'ctx>, ty: Ty<'ctx>) {
+        let ident = Typed::new(ir_typed_ast::DisambiguatedIdent::new_intrinsic(ident), ty);
+        self.intrinsic = Some(ident);
     }
 
     pub fn find(
         &mut self,
         ended_scopes: &FxHashSet<ScopeId>,
     ) -> Option<Typed<'ctx, DisambiguatedIdent<'ctx>>> {
-        while let Some(tail) = self.inner.last() {
+        while let Some(tail) = self.scopes.last() {
             if ended_scopes.contains(&tail.scope_id) {
-                self.inner.pop();
+                self.scopes.pop();
             } else {
                 return Some(tail.ident);
             }
         }
-        None
+        self.intrinsic
     }
 }
 
@@ -91,12 +98,22 @@ impl<'ctx> Env<'ctx> {
         ident: Spanned<syntax::Ident<'ctx>>,
         ty: Ty<'ctx>,
     ) -> Typed<'ctx, DisambiguatedIdent<'ctx>> {
-        self.candidates_map.entry(ident.node).or_default().push(
-            ident.node,
-            ty,
-            *ident.span.as_user_defined().unwrap(),
-            scope_id,
-        )
+        self.candidates_map
+            .entry(ident.node)
+            .or_default()
+            .push_scoped_ident(
+                ident.node,
+                ty,
+                *ident.span.as_user_defined().unwrap(),
+                scope_id,
+            )
+    }
+
+    pub fn register_intrinsic(&mut self, ident: syntax::Ident<'ctx>, ty: Ty<'ctx>) {
+        self.candidates_map
+            .entry(ident)
+            .or_default()
+            .register_intrinsic(ident, ty)
     }
 
     pub fn get(

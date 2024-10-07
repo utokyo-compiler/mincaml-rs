@@ -1,3 +1,4 @@
+#![feature(iterator_try_collect)]
 use data_structure::index::vec::IndexVec;
 use sourcemap::Spanned;
 use ty::{context::CommonTypes, Ty, TyKind, TyVarId, Typed};
@@ -24,17 +25,65 @@ pub enum Error<'ctx> {
 
     /// Invalid syntax.
     InvalidSyntax(sourcemap::Span),
+
+    /// Invalid type ascription.
+    InvalidTypeAscription(syntax::Ident<'ctx>),
 }
 
 /// The main entry point for type checking.
 ///
 /// Originally named `Typing.f`.
+///
+/// # Parameters
+///
+/// - `ctx`: The context for type checking.
+/// - `common_types`: Common, pre-interned types.
+/// - `parsed`: The parsed expression.
+/// - `parsed_interface`: The parsed interface.
+/// - `typed_interface`: The typed interface to be filled.
 pub fn typeck<'ctx>(
     ctx: &'ctx Context<'ctx>,
     common_types: &CommonTypes<'ctx>,
     parsed: syntax::Expr<'ctx>,
+    parsed_interface: syntax::mli::Mli<'ctx>,
+    typed_interface: &'ctx ir_typed_ast::mli::Mli<'ctx>,
 ) -> Result<ir_typed_ast::Expr<'ctx>, Error<'ctx>> {
     let mut name_res = name_res::Env::new();
+
+    for syntax::mli::Declaration {
+        item_ident,
+        ascribed_ty: syntax::mli::AscribedTy { elements },
+    } in parsed_interface.declarations
+    {
+        if let Some(&ident) = item_ident.as_var() {
+            fn ty_try_from_ascribed<'ctx>(
+                ident: syntax::Ident<'ctx>,
+                common_types: &CommonTypes<'ctx>,
+            ) -> Result<Ty<'ctx>, syntax::Ident<'ctx>> {
+                Ok(match ident.0 {
+                    "int" => common_types.int,
+                    "float" => common_types.float,
+                    "bool" => common_types.bool,
+                    "unit" => common_types.unit,
+                    _ => return Err(ident),
+                })
+            }
+            let mut types: Vec<_> = elements
+                .into_iter()
+                .map(|element| ty_try_from_ascribed(element, common_types))
+                .try_collect()
+                .map_err(Error::InvalidTypeAscription)?;
+            let ret = types.pop().expect("elements is must not empty");
+            let ty = Ty::mk_fun(ctx, types, ret);
+            let declaration = ir_typed_ast::mli::Declaration {
+                item_ident: ident,
+                ty,
+            };
+            typed_interface.add_declaration(declaration);
+            name_res.register_intrinsic(ident, ty);
+        }
+    }
+
     let mut subst = ty_var_subst::Env::new();
     let mut typed = decide_ty(ctx, common_types, &mut name_res, &mut subst, parsed)?;
     unify(&mut subst, typed.ty, Ty::mk_unit(ctx))?;
