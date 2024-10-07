@@ -24,6 +24,7 @@ default-members = ["main"]
 version = "0.2.0"
 edition = "2021"
 authors = ["s-ylide <71720482+s-ylide@users.noreply.github.com>"]
+license = "MIT/Apache-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

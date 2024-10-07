@@ -21,3 +21,20 @@ a mincaml port written in Rust
 | `elim.ml`      | `ir_knorm_passes/src/eliminate_unused.rs`                | Elimination of Unnecessary Definitions |   不要な束縛の除去   |
 | `closure.ml`   | `ir_closure/src/{syntax, lowering}.rs`                   |           closure conversion           |    クロージャ変換    |
 | `main.ml`      | `main/src/main.rs`                                       |            main entrypoint             |      main 関数       |
+
+## License
+
+Licensed under either of
+
+ * Apache License, Version 2.0
+   ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+ * MIT license
+   ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+at your option.
+
+## Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
+dual licensed as above, without any additional terms or conditions.
