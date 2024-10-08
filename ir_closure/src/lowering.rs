@@ -25,7 +25,7 @@ pub fn lowering<'ctx>(ctx: &'ctx Context<'ctx>, knorm_expr: ir_knorm::Expr<'ctx>
 
 #[derive(Default)]
 struct LoweringState<'ctx> {
-    decided_to_make_closure: FxHashSet<FnName<'ctx>>,
+    decided_to_call_directly: FxHashSet<FnName<'ctx>>,
     functions: IndexVec<FnIndex, FunctionDef<'ctx>>,
     function_resolutions: FxHashMap<Ident<'ctx>, FnIndex>,
 }
@@ -50,12 +50,12 @@ impl<'ctx> LoweringState<'ctx> {
         }
     }
 
-    fn decided_to_make_closure(&self, fn_name: &FnName<'ctx>) -> bool {
-        self.decided_to_make_closure.contains(fn_name)
+    fn decided_to_call_directly(&self, fn_name: &FnName<'ctx>) -> bool {
+        self.decided_to_call_directly.contains(fn_name)
     }
 
-    fn ack_decide_to_make_closure(&mut self, fn_name: FnName<'ctx>) {
-        self.decided_to_make_closure.insert(fn_name);
+    fn ack_decide_to_call_directly(&mut self, fn_name: FnName<'ctx>) {
+        self.decided_to_call_directly.insert(fn_name);
     }
 }
 
@@ -95,12 +95,12 @@ fn lower_expr<'ctx>(
                     fv_set,
                 } = analyze_let_rec(binding);
 
-                let decide_to_make_closure = did_fn_used_as_value || !fv_set.is_empty();
+                let decide_to_call_directly = !did_fn_used_as_value && fv_set.is_empty();
 
-                if decide_to_make_closure {
+                if decide_to_call_directly {
                     // DO NOT call `lower_expr` on `body`
                     // before `ack_decide_to_make_closure`.
-                    state.ack_decide_to_make_closure(fn_name);
+                    state.ack_decide_to_call_directly(fn_name);
                 }
                 let fv_set: IndexVec<_, _> = fv_set.into_iter().collect();
                 let func = FunctionDef::new(fn_name, args.clone(), fv_set.clone());
@@ -110,7 +110,14 @@ fn lower_expr<'ctx>(
 
                 let follows = lower_expr(ctx, state, follows);
 
-                if state.decided_to_make_closure(&fn_name) {
+                if state.decided_to_call_directly(&fn_name) {
+                    // The function is not used as a value and does not capture any variables
+
+                    // Remove the binding. Calling this function is allowed
+                    // only if the `App` has `ApplyKind::Direct`, so we do not
+                    // need to keep the binding.
+                    return follows;
+                } else {
                     let value = ctx.new_expr(Typed::new(
                         ExprKind::ClosureMake(Closure {
                             function: state.resolve_function(fn_name),
@@ -119,13 +126,6 @@ fn lower_expr<'ctx>(
                         value.ty,
                     ));
                     (value, follows)
-                } else {
-                    // the function is not used as a value and does not capture any variables
-
-                    // remove the binding. Calling this function is allowed
-                    // only if the `App` has `ApplyKind::Direct`, so we do not
-                    // need to keep the binding.
-                    return follows;
                 }
             };
             ExprKind::Let(LetBinding { pattern, value }, follows)
@@ -134,12 +134,12 @@ fn lower_expr<'ctx>(
         ir_knorm::ExprKind::App(f, args) => {
             let fn_name = FnName::new(*f);
             ExprKind::App(
-                if state.decided_to_make_closure(&fn_name) {
-                    ApplyKind::Closure { ident: *f }
-                } else {
+                if state.decided_to_call_directly(&fn_name) {
                     ApplyKind::Direct {
                         function: state.resolve_function(fn_name),
                     }
+                } else {
+                    ApplyKind::Closure { ident: *f }
                 },
                 args.clone(),
             )
