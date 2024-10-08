@@ -88,7 +88,7 @@ pub fn typeck<'ctx>(
     let mut subst = ty_var_subst::Env::new();
     let mut typed = decide_ty(ctx, common_types, &mut name_res, &mut subst, parsed).unwrap();
     unify(&mut subst, typed.ty, Ty::mk_unit(ctx)).unwrap();
-    subst.deref_ty_var(&mut typed);
+    subst.deref_ty_var(ctx, &mut typed);
     Ok(typed)
 }
 
