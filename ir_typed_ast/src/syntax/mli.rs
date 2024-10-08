@@ -21,6 +21,10 @@ impl<'ctx> Mli<'ctx> {
             .find(|decl_ident| decl_ident.item_ident.0 == ident)
             .copied()
     }
+
+    pub fn list_declaration(&self) -> Vec<Declaration<'ctx>> {
+        self.declarations.lock().unwrap().iter().copied().collect()
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

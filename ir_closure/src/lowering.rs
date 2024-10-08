@@ -30,20 +30,25 @@ pub fn lowering<'ctx>(ctx: &'ctx Context<'ctx>, knorm_expr: ir_knorm::Expr<'ctx>
 struct LoweringState<'ctx> {
     decided_to_make_closure: FxHashSet<FnName<'ctx>>,
     functions: IndexVec<FnIndex, FunctionDef<'ctx>>,
-    function_resolutions: FxHashMap<FnName<'ctx>, FnIndex>,
+    function_resolutions: FxHashMap<Ident<'ctx>, FnIndex>,
 }
 
 impl<'ctx> LoweringState<'ctx> {
     fn push_function(&mut self, func: FunctionDef<'ctx>) {
         let name = func.name;
         let idx = self.functions.push(func);
-        self.function_resolutions.insert(name, idx);
+        if let Some(name) = name.get_inner() {
+            self.function_resolutions.insert(name, idx);
+        }
     }
 
     fn resolve_function(&self, fn_name: FnName<'ctx>) -> FunctionInstance<'ctx> {
+        let Some(fn_name) = fn_name.get_inner() else {
+            unreachable!("main function cannot be called")
+        };
         match self.function_resolutions.get(&fn_name) {
             Some(resolution) => FunctionInstance::Defined(*resolution),
-            None => FunctionInstance::Imported(fn_name),
+            None => FunctionInstance::Imported(fn_name.as_intrinsic().unwrap()),
         }
     }
 

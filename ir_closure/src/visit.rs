@@ -1,4 +1,6 @@
-use crate::{ApplyKind, Expr, ExprKind, FnName, FunctionDef, FunctionInstance, Ident, Program};
+use crate::{ApplyKind, Expr, ExprKind, FunctionDef, FunctionInstance, Ident, Program};
+
+use data_structure::interning::Interned;
 
 macro_rules! declare_visitor {
     ($name:ident, $($mutability:ident)?) => {
@@ -105,11 +107,11 @@ macro_rules! declare_visitor {
                 }
             }
 
-            fn visit_imported_function(&mut self, name: & $($mutability)? FnName<'ctx>) {
+            fn visit_imported_function(&mut self, name: & $($mutability)? Interned<'ctx, str>) {
                 self.super_imported_function(name);
             }
 
-            fn super_imported_function(&mut self, _name: & $($mutability)? FnName<'ctx>) {}
+            fn super_imported_function(&mut self, _name: & $($mutability)? Interned<'ctx, str>) {}
         }
     };
 }

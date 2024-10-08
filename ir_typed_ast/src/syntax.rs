@@ -44,6 +44,14 @@ impl<'ctx> DisambiguatedIdent<'ctx> {
             disambiguator,
         }
     }
+
+    pub fn as_intrinsic(&self) -> Option<syntax::Ident<'ctx>> {
+        if let Self::Intrinsic { name } = self {
+            Some(*name)
+        } else {
+            None
+        }
+    }
 }
 
 impl<'ctx> std::fmt::Display for DisambiguatedIdent<'ctx> {

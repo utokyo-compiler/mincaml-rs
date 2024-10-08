@@ -4,9 +4,10 @@ use anyhow::Result;
 use data_structure::{
     arena::TypedArena,
     index::{vec::Idx, Indexable},
+    interning::Interned,
     FxHashMap,
 };
-use ir_closure::FnName;
+use ir_closure::ImportedFnName;
 use wasm_encoder::{EntityType, ImportSection, Module};
 
 use crate::{
@@ -15,7 +16,10 @@ use crate::{
     ty::{WasmPrimitiveTy, WasmTy},
 };
 
-pub fn codegen(closure_prog: ir_closure::Program<'_>) -> Result<Vec<u8>> {
+pub fn codegen<'ctx>(
+    closure_prog: ir_closure::Program<'ctx>,
+    typed_interface: &middleware::Mli<'ctx>,
+) -> Result<Vec<u8>> {
     let signarute_arena = TypedArena::new();
     let mut main_fn_idx = None;
 
@@ -24,10 +28,10 @@ pub fn codegen(closure_prog: ir_closure::Program<'_>) -> Result<Vec<u8>> {
 
         use ir_closure::Visitor;
         struct VisitImportedFn<'ctx> {
-            fn_names: Vec<FnName<'ctx>>,
+            fn_names: Vec<Interned<'ctx, str>>,
         }
         impl<'ctx> Visitor<'ctx> for VisitImportedFn<'ctx> {
-            fn visit_imported_function(&mut self, fn_name: &FnName<'ctx>) {
+            fn visit_imported_function(&mut self, fn_name: &Interned<'ctx, str>) {
                 self.fn_names.push(*fn_name);
             }
         }
@@ -40,8 +44,10 @@ pub fn codegen(closure_prog: ir_closure::Program<'_>) -> Result<Vec<u8>> {
             .fn_names
             .into_iter()
             .map(|fn_name| ImportFn {
-                namespace: NameSpace::Pervasives { fn_name },
-                sig: signature_interner.intern(FnTypeSignature::from_ty(fn_name.as_non_main().ty)),
+                namespace: NameSpace::Intrinsic { fn_name },
+                sig: signature_interner.intern(FnTypeSignature::from_ty(
+                    typed_interface.find_declaration(fn_name.0).unwrap().ty,
+                )),
             })
             .collect();
 
@@ -183,11 +189,11 @@ impl<'ctx> State<'_, 'ctx> {
             ir_closure::FunctionInstance::Imported(fn_name) => self
                 .find_imported_fn(fn_name)
                 .map(FuncIdx::new)
-                .unwrap_or_else(|| panic!("imported function not found: {:?}", fn_name)),
+                .unwrap_or_else(|| panic!("imported function not found: {fn_name:?}")),
         }
     }
 
-    fn find_imported_fn(&self, fn_name: ir_closure::FnName<'ctx>) -> Option<usize> {
+    fn find_imported_fn(&self, fn_name: ImportedFnName<'ctx>) -> Option<usize> {
         self.import_fns
             .iter()
             .enumerate()
@@ -212,36 +218,22 @@ pub enum NameSpace<'ctx> {
         module: &'static str,
         field: &'static str,
     },
-    Pervasives {
-        fn_name: FnName<'ctx>,
+    Intrinsic {
+        fn_name: ImportedFnName<'ctx>,
     },
 }
 
 impl<'ctx> NameSpace<'ctx> {
-    pub fn into_wasm(self) -> (&'static str, Cow<'static, str>) {
-        fn mangle_fn_name(fn_name: ir_closure::Ident<'_>) -> String {
-            match fn_name.value {
-                ir_closure::DisambiguatedIdent::UserDefined { name, span } => {
-                    format!("{}@{}..{}", name.0, span.start, span.end)
-                }
-                ir_closure::DisambiguatedIdent::Intrinsic { name } => name.0.to_string(),
-                ir_closure::DisambiguatedIdent::CompilerGenerated {
-                    name,
-                    disambiguator,
-                } => format!("__{name}#{{{disambiguator}}}"),
-            }
-        }
+    pub fn into_wasm(self) -> (&'static str, Cow<'ctx, str>) {
         match self {
-            NameSpace::Wasm { module, field } => (module, field.into()),
-            Self::Pervasives { fn_name } => {
-                ("pervasives", mangle_fn_name(fn_name.as_non_main()).into())
-            }
+            Self::Wasm { module, field } => (module, field.into()),
+            Self::Intrinsic { fn_name } => ("mincaml:runtime", fn_name.0.into()),
         }
     }
-    pub fn matches(&self, fn_name: FnName<'ctx>) -> bool {
+    pub fn matches(&self, fn_name: ImportedFnName<'ctx>) -> bool {
         match self {
-            NameSpace::Wasm { .. } => false,
-            NameSpace::Pervasives {
+            Self::Wasm { .. } => false,
+            Self::Intrinsic {
                 fn_name: self_fn_name,
             } => self_fn_name == &fn_name,
         }

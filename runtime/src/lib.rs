@@ -1,6 +1,8 @@
 // This code is taken from:
 // https://docs.wasmtime.dev/examples-rust-wasi.html#invoke-the-wasm-module
 
+mod intrinsic;
+
 use wasi_common::sync::WasiCtxBuilder;
 use wasmtime::{Engine, Linker, Module, Result, Store};
 
@@ -12,6 +14,7 @@ where
     let engine = Engine::default();
     let mut linker = Linker::new(&engine);
     wasi_common::sync::add_to_linker(&mut linker, |s| s)?;
+    intrinsic::provide_intrinsic_impls(&mut linker)?;
 
     // Create a WASI context and put it in a Store; all instances in the store
     // share this context. `WasiCtxBuilder` provides a number of ways to

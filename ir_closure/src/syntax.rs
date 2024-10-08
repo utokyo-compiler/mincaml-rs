@@ -5,11 +5,12 @@ use data_structure::{
         vec::{Idx, IndexVec},
         Indexable,
     },
+    interning::Interned,
 };
 
 pub use ir_knorm::{
-    ArgIndex, BinOp, RelationBinOpKind, DisambiguatedIdent, FloatBinOpKind, Ident, IntBinOpKind,
-    LitKind, Pattern, TupleIndex, Ty, TyKind, Typed, TypedIdent, UnOp,
+    ArgIndex, BinOp, DisambiguatedIdent, FloatBinOpKind, Ident, IntBinOpKind, LitKind, Pattern,
+    RelationBinOpKind, TupleIndex, Ty, TyKind, Typed, TypedIdent, UnOp,
 };
 
 pub type Expr<'ctx> = Box<'ctx, TypedExprKind<'ctx>>;
@@ -64,8 +65,8 @@ impl<'ctx> FnName<'ctx> {
         Self(Some(ident))
     }
 
-    pub fn as_non_main(&self) -> Ident<'ctx> {
-        self.0.unwrap()
+    pub fn get_inner(&self) -> Option<Ident<'ctx>> {
+        self.0
     }
 
     pub const MAIN_FN_NAME: Self = Self(None);
@@ -129,9 +130,11 @@ pub enum FunctionInstance<'ctx> {
     /// A function defined in the program.
     Defined(FnIndex),
 
-    /// A function imported from another module, such as `pervasives`.
-    Imported(FnName<'ctx>),
+    /// A function imported from other modules.
+    Imported(ImportedFnName<'ctx>),
 }
+
+pub type ImportedFnName<'ctx> = Interned<'ctx, str>;
 
 impl<'ctx> ExprKind<'ctx> {
     pub fn kind(&self) -> &Self {

@@ -7,6 +7,8 @@ use session::Session;
 use sourcemap::Spanned;
 use ty::{context::CommonTypes, TyKind};
 
+pub use ir_typed_ast::mli::Mli;
+
 #[derive(Default)]
 pub struct Arena<'ctx> {
     ident: TypedArena<u8>,
@@ -25,7 +27,7 @@ pub struct GlobalContext<'ctx> {
     knorm_context: ir_knorm::Context<'ctx>,
     closure_context: ir_closure::Context<'ctx>,
     asm_virtual_context: ir_asm_virtual::Context<'ctx>,
-    typed_interface: ir_typed_ast::mli::Mli<'ctx>,
+    typed_interface: Mli<'ctx>,
     pub common_types: CommonTypes<'ctx>,
     session: Session,
 }
@@ -75,7 +77,7 @@ impl<'ctx> GlobalContext<'ctx> {
         &self.session
     }
 
-    pub fn typed_interface(&self) -> &ir_typed_ast::mli::Mli<'ctx> {
+    pub fn typed_interface(&self) -> &Mli<'ctx> {
         &self.typed_interface
     }
 }
