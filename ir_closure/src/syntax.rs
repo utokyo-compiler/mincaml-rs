@@ -36,12 +36,57 @@ pub struct FunctionDef<'ctx> {
     /// are required to evaluate the function body.
     pub args_via_closure: IndexVec<ArgIndex, Ident<'ctx>>,
 
-    pub body: Expr<'ctx>,
+    /// The body of the function.
+    ///
+    /// This field should ONLY be `None` during construction.
+    body: Option<Expr<'ctx>>,
 }
 
 impl<'ctx> FunctionDef<'ctx> {
+    pub fn new(
+        name: FnName<'ctx>,
+        args: IndexVec<ArgIndex, Ident<'ctx>>,
+        args_via_closure: IndexVec<ArgIndex, Ident<'ctx>>,
+    ) -> Self {
+        Self {
+            name,
+            args,
+            args_via_closure,
+            body: None,
+        }
+    }
+
+    pub fn with_body(
+        name: FnName<'ctx>,
+        args: IndexVec<ArgIndex, Ident<'ctx>>,
+        args_via_closure: IndexVec<ArgIndex, Ident<'ctx>>,
+        body: Expr<'ctx>,
+    ) -> Self {
+        Self {
+            name,
+            args,
+            args_via_closure,
+            body: Some(body),
+        }
+    }
+
     pub fn ret_ty(&self) -> Ty<'ctx> {
-        self.body.ty
+        self.body().ty
+    }
+
+    pub fn body(&self) -> &Box<'ctx, Typed<'ctx, ExprKind<'ctx>>> {
+        self.body.as_ref().expect("function body is not set")
+    }
+
+    pub fn body_mut(&mut self) -> &mut Box<'ctx, Typed<'ctx, ExprKind<'ctx>>> {
+        self.body.as_mut().expect("function body is not set")
+    }
+
+    pub(crate) fn set_body(&mut self, body: Box<'ctx, Typed<'ctx, ExprKind<'ctx>>>) {
+        #[cfg(debug_assertions)]
+        assert!(self.body.is_none(), "function body is already set");
+
+        self.body = Some(body);
     }
 }
 

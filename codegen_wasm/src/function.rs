@@ -13,7 +13,7 @@ use crate::{
 
 pub fn codegen<'ctx>(
     program_state: &mut program::State<'_, 'ctx>,
-    function: ir_closure::FunctionDef<'ctx>,
+    mut function: ir_closure::FunctionDef<'ctx>,
 ) -> Result<()> {
     let mut state = State {
         locals: FxHashMap::default(),
@@ -21,20 +21,23 @@ pub fn codegen<'ctx>(
         instrs: Vec::new(),
     };
 
+    let args = std::mem::take(&mut function.args);
+    let args_via_closure = std::mem::take(&mut function.args_via_closure);
+
     let mut params = Vec::new();
     // closure calling convention
-    for args in function.args_via_closure.into_iter().chain(function.args) {
-        for wasm_ty in WasmTy::from_ty(args.ty).into_iter_primitives() {
+    for arg in args_via_closure.into_iter().chain(args) {
+        for wasm_ty in WasmTy::from_ty(arg.ty).into_iter_primitives() {
             let val_type = wasm_ty;
             params.push(val_type);
-            state.new_local_from(val_type, Some(args));
+            state.new_local_from(val_type, Some(arg));
         }
     }
 
-    expr::codegen(program_state, &mut state, &function.body)?;
+    expr::codegen(program_state, &mut state, function.body())?;
     state.push_raw(wasm_encoder::Instruction::End);
 
-    let results = WasmTy::from_ty(function.body.ty)
+    let results = WasmTy::from_ty(function.body().ty)
         .into_iter_primitives()
         .collect();
 

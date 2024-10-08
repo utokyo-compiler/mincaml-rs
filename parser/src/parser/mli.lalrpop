@@ -45,11 +45,7 @@ extern {
 }
 
 pub Mli: mli::Mli<'ctx> = {
-    <mut a:Mli> <d:Decl> => {
-        a.declarations.push(d);
-        a
-    },
-    Decl => mli::Mli { declarations: vec![<>]},
+    <declarations:Decl*> => mli::Mli { declarations }
 }
 
 Decl: mli::Declaration<'ctx> = {

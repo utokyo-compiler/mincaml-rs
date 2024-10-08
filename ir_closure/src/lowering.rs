@@ -14,13 +14,10 @@ use crate::{
 /// 3. 2. is a problem that should be handled by an optimization pass
 pub fn lowering<'ctx>(ctx: &'ctx Context<'ctx>, knorm_expr: ir_knorm::Expr<'ctx>) -> Program<'ctx> {
     let mut state = LoweringState::default();
-    let main = FunctionDef {
-        name: FnName::MAIN_FN_NAME,
-        args: IndexVec::new(),
-        args_via_closure: IndexVec::new(),
-        body: lower_expr(ctx, &mut state, &knorm_expr),
-    };
-    state.push_function(main);
+    let main = FunctionDef::new(FnName::MAIN_FN_NAME, IndexVec::new(), IndexVec::new());
+    let main_index = state.push_function(main);
+    let main_body = lower_expr(ctx, &mut state, &knorm_expr);
+    state.functions[main_index].set_body(main_body);
     Program {
         functions: state.functions,
     }
@@ -34,12 +31,13 @@ struct LoweringState<'ctx> {
 }
 
 impl<'ctx> LoweringState<'ctx> {
-    fn push_function(&mut self, func: FunctionDef<'ctx>) {
+    fn push_function(&mut self, func: FunctionDef<'ctx>) -> FnIndex {
         let name = func.name;
         let idx = self.functions.push(func);
         if let Some(name) = name.get_inner() {
             self.function_resolutions.insert(name, idx);
         }
+        idx
     }
 
     fn resolve_function(&self, fn_name: FnName<'ctx>) -> FunctionInstance<'ctx> {
@@ -105,13 +103,10 @@ fn lower_expr<'ctx>(
                     state.ack_decide_to_make_closure(fn_name);
                 }
                 let fv_set: IndexVec<_, _> = fv_set.into_iter().collect();
-                let func = FunctionDef {
-                    name: fn_name,
-                    args: args.clone(),
-                    args_via_closure: fv_set.clone(),
-                    body: lower_expr(ctx, state, value),
-                };
-                state.push_function(func);
+                let func = FunctionDef::new(fn_name, args.clone(), fv_set.clone());
+                let index = state.push_function(func);
+                let body = lower_expr(ctx, state, value);
+                state.functions[index].set_body(body);
 
                 let follows = lower_expr(ctx, state, follows);
 

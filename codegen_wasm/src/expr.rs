@@ -134,9 +134,7 @@ pub fn codegen<'ctx>(
 
                     let mut mem_arg = MEM_ARG;
                     for var in vars {
-                        let local = function_state.get_local(*var);
-                        function_state
-                            .push_raw(Instruction::LocalSet(local.expect_single()?.unwrap_idx()));
+                        function_state.push_raw(Instruction::LocalGet(local.unwrap_idx()));
                         let wasm_ty = WasmTy::from_ty(var.ty);
                         let prim_ty = wasm_ty.as_primitive().ok_or_else(|| {
                             anyhow::anyhow!("closure cannot be stored in a tuple")
@@ -152,6 +150,9 @@ pub fn codegen<'ctx>(
                                 return Err(anyhow::anyhow!("closure cannot be stored in a tuple"));
                             }
                         };
+                        let local = function_state.get_local(*var);
+                        function_state
+                            .push_raw(Instruction::LocalSet(local.expect_single()?.unwrap_idx()));
                         mem_arg.offset += prim_ty.size_of() as u64;
                     }
                 }
@@ -209,6 +210,9 @@ pub fn codegen<'ctx>(
             ));
         }
         ir_closure::ExprKind::Tuple(vars) => {
+            // return the address of the tuple
+            function_state.push_raw(Instruction::GlobalGet(HEAP_PTR));
+
             let mut mem_arg = MEM_ARG;
             for var in vars {
                 function_state.push_raw(Instruction::GlobalGet(HEAP_PTR));
