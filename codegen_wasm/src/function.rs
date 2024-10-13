@@ -27,7 +27,7 @@ pub fn codegen<'ctx>(
     let mut params = Vec::new();
     // closure calling convention
     for arg in args_via_closure.into_iter().chain(args) {
-        for wasm_ty in WasmTy::from_ty(arg.ty).into_iter_primitives() {
+        for wasm_ty in WasmTy::ty_to_primitive_iter(arg.ty) {
             let val_type = wasm_ty;
             params.push(val_type);
             state.new_local_from(val_type, Some(arg));
@@ -37,9 +37,7 @@ pub fn codegen<'ctx>(
     expr::codegen(program_state, &mut state, function.body())?;
     state.push_raw(wasm_encoder::Instruction::End);
 
-    let results = WasmTy::from_ty(function.body().ty)
-        .into_iter_primitives()
-        .collect();
+    let results = WasmTy::ty_to_primitive_iter(function.body().ty).collect();
 
     let function_def = FunctionDef {
         local_decls: state.local_decls,
@@ -83,12 +81,12 @@ impl Indexable<LocalIdx> for LocalDecl<'_> {}
 
 impl<'ctx> State<'ctx> {
     /// Get the local index of the given identifier. If the identifier is not found, create a new local.
-    pub fn get_local(&mut self, ident: ir_closure::Ident<'ctx>) -> LocalGroup {
+    pub fn get_local(&mut self, ident: ir_closure::Ident<'ctx>) -> Option<LocalGroup> {
         if let Some(local_group) = self.locals.get(&ident) {
-            return local_group.clone();
+            return Some(local_group.clone());
         }
 
-        let local_group = match WasmTy::from_ty(ident.ty) {
+        let local_group = match WasmTy::from_ty(ident.ty)? {
             WasmTy::Primitive(wasm_primitive_ty) => {
                 LocalGroup::Single(self.new_local_from(wasm_primitive_ty, Some(ident)))
             }
@@ -99,7 +97,7 @@ impl<'ctx> State<'ctx> {
             ),
         };
         self.locals.insert(ident, local_group.clone());
-        local_group
+        Some(local_group)
     }
 
     /// Create a new local.

@@ -15,6 +15,14 @@ use data_structure::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Ty<'ctx>(pub Interned<'ctx, TyKind<'ctx>>);
 
+impl<'ctx> std::ops::Deref for Ty<'ctx> {
+    type Target = TyKind<'ctx>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct ArgIndex(usize);
 impl Idx for ArgIndex {
@@ -70,6 +78,14 @@ impl<'ctx> TyKind<'ctx> {
     pub fn as_fun_ty(&self) -> Option<(&[Ty<'ctx>], Ty<'ctx>)> {
         if let Self::Fun(args, ret) = self {
             Some((args.as_slice(), *ret))
+        } else {
+            None
+        }
+    }
+
+    pub fn as_array(&self) -> Option<Ty<'ctx>> {
+        if let Self::Array(v) = self {
+            Some(*v)
         } else {
             None
         }

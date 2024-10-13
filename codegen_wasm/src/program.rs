@@ -89,12 +89,12 @@ pub fn codegen<'ctx>(
     module_builder.section(&type_section);
 
     // write import section
+    let mut import_section = ImportSection::new();
     for ImportFn { namespace, sig } in &program.import_fns {
-        let mut import_section = ImportSection::new();
         let (module, field) = namespace.into_wasm();
         import_section.import(module, &field, EntityType::Function(sig.unwrap_idx()));
-        module_builder.section(&import_section);
     }
+    module_builder.section(&import_section);
 
     // write function section
     let mut function_section = wasm_encoder::FunctionSection::new();
@@ -271,9 +271,13 @@ impl FnTypeSignature {
         Self {
             params: params
                 .iter()
-                .map(|param| *WasmTy::from_ty(*param).as_primitive().unwrap())
+                .flat_map(|param| WasmTy::from_ty(*param))
+                .flat_map(WasmTy::into_iter_primitives)
                 .collect(),
-            results: vec![*WasmTy::from_ty(result).as_primitive().unwrap()],
+            results: WasmTy::from_ty(result)
+                .into_iter()
+                .flat_map(WasmTy::into_iter_primitives)
+                .collect(),
         }
     }
 }
