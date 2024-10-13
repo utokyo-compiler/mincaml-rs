@@ -99,7 +99,7 @@ fn lower_expr<'ctx>(
                 let LetRecAnalysisResult {
                     did_fn_used_as_value,
                     fv_set,
-                } = analyze_let_rec(binding);
+                } = analyze_let_rec(binding, follows);
 
                 let decide_to_call_directly = !did_fn_used_as_value && fv_set.is_empty();
 
@@ -178,17 +178,20 @@ struct LetRecAnalysisResult<'ctx> {
     fv_set: SetLikeVec<Ident<'ctx>>,
 }
 
-/// Analyzes LetRec binding to decide whether to make a closure.
+/// Analyzes `LetRec` to decide whether to make a closure.
 ///
 /// Original implementation tries closure conversion and reverts
 /// their mutable state if it fails (it is a bad idea in general
 /// to have side effects in computations that can be backtracked).
 /// In this implementation, we know whether closure conversion
 /// will fail by analyzing in advance.
-fn analyze_let_rec<'ctx>(binding: &ir_knorm::LetBinding<'ctx>) -> LetRecAnalysisResult<'ctx> {
+fn analyze_let_rec<'ctx>(
+    binding: &ir_knorm::LetBinding<'ctx>,
+    follows: &ir_knorm::Expr<'ctx>,
+) -> LetRecAnalysisResult<'ctx> {
     let fn_name = binding.pattern.as_var().unwrap();
     let mut fv_set = SetLikeVec::default();
-    let visitor_helper = ir_knorm::FvVisitorHelper::new({
+    let mut collect_fv = ir_knorm::FvVisitorHelper::new({
         struct CollectFvVisitor<'a, 'ctx> {
             fv_set: &'a mut SetLikeVec<Ident<'ctx>>,
         }
@@ -204,18 +207,21 @@ fn analyze_let_rec<'ctx>(binding: &ir_knorm::LetBinding<'ctx>) -> LetRecAnalysis
         }
     });
     {
-        struct AnalysisVisitor<'ctx, F: ir_knorm::FvVisitor<'ctx>> {
-            visitor_helper: ir_knorm::FvVisitorHelper<'ctx, F>,
+        /// This visitor is used to collect free variables of the binding body.
+        struct AnalyzeBindingVisitor<'ctx, 'helper, F: ir_knorm::FvVisitor<'ctx>> {
+            collect_fv: &'helper mut ir_knorm::FvVisitorHelper<'ctx, F>,
             fn_name: Ident<'ctx>,
         }
         use ir_knorm::Visitor;
-        let mut visitor = AnalysisVisitor {
-            visitor_helper,
+        let mut binding_visitor = AnalyzeBindingVisitor {
+            collect_fv: &mut collect_fv,
             fn_name,
         };
-        visitor.visit_binding(binding);
+        binding_visitor.visit_binding(binding);
 
-        impl<'ctx, F: ir_knorm::FvVisitor<'ctx>> ir_knorm::Visitor<'ctx> for AnalysisVisitor<'ctx, F> {
+        impl<'ctx, F: ir_knorm::FvVisitor<'ctx>> ir_knorm::Visitor<'ctx>
+            for AnalyzeBindingVisitor<'ctx, '_, F>
+        {
             fn visit_app(&mut self, e: &Ident<'ctx>, es: &IndexVec<ArgIndex, Ident<'ctx>>) {
                 if *e != self.fn_name {
                     self.visit_ident(e);
@@ -225,11 +231,11 @@ fn analyze_let_rec<'ctx>(binding: &ir_knorm::LetBinding<'ctx>) -> LetRecAnalysis
                 }
             }
             fn visit_ident(&mut self, ident: &Ident<'ctx>) {
-                self.visitor_helper.super_ident(ident);
+                self.collect_fv.super_ident(ident);
             }
             fn visit_binding(&mut self, binding: &ir_knorm::LetBinding<'ctx>) {
                 self.visit_pattern(&binding.pattern);
-                self.visitor_helper.super_binding_args(&binding.args);
+                self.collect_fv.super_binding_args(&binding.args);
                 self.visit_expr(&binding.value);
             }
             fn visit_pattern(&mut self, pattern: &Pattern<'ctx>) {
@@ -238,7 +244,42 @@ fn analyze_let_rec<'ctx>(binding: &ir_knorm::LetBinding<'ctx>) -> LetRecAnalysis
                         return;
                     }
                 }
-                self.visitor_helper.super_pattern(pattern);
+                self.collect_fv.super_pattern(pattern);
+            }
+        }
+    }
+    {
+        /// This visitor is used to check whether the function is used as a value
+        /// outside of the binding.
+        struct AnalyzeFollowingVisitor<'ctx, 'helper, F: ir_knorm::FvVisitor<'ctx>> {
+            collect_fv: &'helper mut ir_knorm::FvVisitorHelper<'ctx, F>,
+            fn_name: Ident<'ctx>,
+        }
+        use ir_knorm::Visitor;
+        let mut following_visitor = AnalyzeFollowingVisitor {
+            collect_fv: &mut collect_fv,
+            fn_name,
+        };
+        following_visitor.visit_expr(follows);
+
+        impl<'ctx, F: ir_knorm::FvVisitor<'ctx>> ir_knorm::Visitor<'ctx>
+            for AnalyzeFollowingVisitor<'ctx, '_, F>
+        {
+            fn visit_app(&mut self, e: &Ident<'ctx>, es: &IndexVec<ArgIndex, Ident<'ctx>>) {
+                if *e != self.fn_name {
+                    // Do nothing
+                }
+                for e in es {
+                    self.visit_ident(e);
+                }
+            }
+            fn visit_ident(&mut self, ident: &Ident<'ctx>) {
+                if *ident == self.fn_name {
+                    self.collect_fv.super_ident(ident);
+                }
+            }
+            fn visit_binding(&mut self, binding: &ir_knorm::LetBinding<'ctx>) {
+                self.visit_expr(&binding.value);
             }
         }
     }
