@@ -14,13 +14,10 @@ use crate::{
 /// 3. 2. is a problem that should be handled by an optimization pass
 pub fn lowering<'ctx>(ctx: &'ctx Context<'ctx>, knorm_expr: ir_knorm::Expr<'ctx>) -> Program<'ctx> {
     let mut state = LoweringState::default();
-    let main = FunctionDef {
-        name: FnName::MAIN_FN_NAME,
-        args: IndexVec::new(),
-        args_via_closure: IndexVec::new(),
-        body: lower_expr(ctx, &mut state, &knorm_expr),
-    };
-    state.push_function(main);
+    let main = FunctionDef::new(FnName::MAIN_FN_NAME, IndexVec::new(), IndexVec::new());
+    let main_index = state.push_function(main);
+    let main_body = lower_expr(ctx, &mut state, &knorm_expr);
+    state.functions[main_index].set_body(main_body);
     Program {
         functions: state.functions,
     }
@@ -28,31 +25,43 @@ pub fn lowering<'ctx>(ctx: &'ctx Context<'ctx>, knorm_expr: ir_knorm::Expr<'ctx>
 
 #[derive(Default)]
 struct LoweringState<'ctx> {
-    decided_to_make_closure: FxHashSet<FnName<'ctx>>,
+    decided_to_call_directly: FxHashSet<FnName<'ctx>>,
     functions: IndexVec<FnIndex, FunctionDef<'ctx>>,
-    function_resolutions: FxHashMap<FnName<'ctx>, FnIndex>,
+    function_resolutions: FxHashMap<Ident<'ctx>, FnIndex>,
 }
 
 impl<'ctx> LoweringState<'ctx> {
-    fn push_function(&mut self, func: FunctionDef<'ctx>) {
+    fn push_function(&mut self, func: FunctionDef<'ctx>) -> FnIndex {
         let name = func.name;
         let idx = self.functions.push(func);
-        self.function_resolutions.insert(name, idx);
+        if let Some(name) = name.get_inner() {
+            self.function_resolutions.insert(name, idx);
+        }
+        idx
     }
 
     fn resolve_function(&self, fn_name: FnName<'ctx>) -> FunctionInstance<'ctx> {
+        let Some(fn_name) = fn_name.get_inner() else {
+            unreachable!("main function cannot be called")
+        };
         match self.function_resolutions.get(&fn_name) {
             Some(resolution) => FunctionInstance::Defined(*resolution),
-            None => FunctionInstance::Imported(fn_name),
+            None => FunctionInstance::Imported(fn_name.as_intrinsic().unwrap()),
         }
     }
 
-    fn decided_to_make_closure(&self, fn_name: &FnName<'ctx>) -> bool {
-        self.decided_to_make_closure.contains(fn_name)
+    /// Returns `true` if the function is going to be called directly.
+    fn call_directly(&self, fn_name: &FnName<'ctx>) -> bool {
+        if let Some(ident) = fn_name.get_inner() {
+            if ident.as_intrinsic().is_some() {
+                return true;
+            }
+        }
+        self.decided_to_call_directly.contains(fn_name)
     }
 
-    fn ack_decide_to_make_closure(&mut self, fn_name: FnName<'ctx>) {
-        self.decided_to_make_closure.insert(fn_name);
+    fn ack_decide_to_call_directly(&mut self, fn_name: FnName<'ctx>) {
+        self.decided_to_call_directly.insert(fn_name);
     }
 }
 
@@ -90,27 +99,31 @@ fn lower_expr<'ctx>(
                 let LetRecAnalysisResult {
                     did_fn_used_as_value,
                     fv_set,
-                } = analyze_let_rec(binding);
+                } = analyze_let_rec(binding, follows);
 
-                let decide_to_make_closure = did_fn_used_as_value || !fv_set.is_empty();
+                let decide_to_call_directly = !did_fn_used_as_value && fv_set.is_empty();
 
-                if decide_to_make_closure {
+                if decide_to_call_directly {
                     // DO NOT call `lower_expr` on `body`
                     // before `ack_decide_to_make_closure`.
-                    state.ack_decide_to_make_closure(fn_name);
+                    state.ack_decide_to_call_directly(fn_name);
                 }
                 let fv_set: IndexVec<_, _> = fv_set.into_iter().collect();
-                let func = FunctionDef {
-                    name: fn_name,
-                    args: args.clone(),
-                    args_via_closure: fv_set.clone(),
-                    body: lower_expr(ctx, state, value),
-                };
-                state.push_function(func);
+                let func = FunctionDef::new(fn_name, args.clone(), fv_set.clone());
+                let index = state.push_function(func);
+                let body = lower_expr(ctx, state, value);
+                state.functions[index].set_body(body);
 
                 let follows = lower_expr(ctx, state, follows);
 
-                if state.decided_to_make_closure(&fn_name) {
+                if state.call_directly(&fn_name) {
+                    // The function is not used as a value and does not capture any variables
+
+                    // Remove the binding. Calling this function is allowed
+                    // only if the `App` has `ApplyKind::Direct`, so we do not
+                    // need to keep the binding.
+                    return follows;
+                } else {
                     let value = ctx.new_expr(Typed::new(
                         ExprKind::ClosureMake(Closure {
                             function: state.resolve_function(fn_name),
@@ -119,13 +132,6 @@ fn lower_expr<'ctx>(
                         value.ty,
                     ));
                     (value, follows)
-                } else {
-                    // the function is not used as a value and does not capture any variables
-
-                    // remove the binding. Calling this function is allowed
-                    // only if the `App` has `ApplyKind::Direct`, so we do not
-                    // need to keep the binding.
-                    return follows;
                 }
             };
             ExprKind::Let(LetBinding { pattern, value }, follows)
@@ -134,12 +140,12 @@ fn lower_expr<'ctx>(
         ir_knorm::ExprKind::App(f, args) => {
             let fn_name = FnName::new(*f);
             ExprKind::App(
-                if state.decided_to_make_closure(&fn_name) {
-                    ApplyKind::Closure { ident: *f }
-                } else {
+                if state.call_directly(&fn_name) {
                     ApplyKind::Direct {
                         function: state.resolve_function(fn_name),
                     }
+                } else {
+                    ApplyKind::Closure { ident: *f }
                 },
                 args.clone(),
             )
@@ -172,17 +178,20 @@ struct LetRecAnalysisResult<'ctx> {
     fv_set: SetLikeVec<Ident<'ctx>>,
 }
 
-/// Analyzes LetRec binding to decide whether to make a closure.
+/// Analyzes `LetRec` to decide whether to make a closure.
 ///
 /// Original implementation tries closure conversion and reverts
 /// their mutable state if it fails (it is a bad idea in general
 /// to have side effects in computations that can be backtracked).
 /// In this implementation, we know whether closure conversion
 /// will fail by analyzing in advance.
-fn analyze_let_rec<'ctx>(binding: &ir_knorm::LetBinding<'ctx>) -> LetRecAnalysisResult<'ctx> {
+fn analyze_let_rec<'ctx>(
+    binding: &ir_knorm::LetBinding<'ctx>,
+    follows: &ir_knorm::Expr<'ctx>,
+) -> LetRecAnalysisResult<'ctx> {
     let fn_name = binding.pattern.as_var().unwrap();
     let mut fv_set = SetLikeVec::default();
-    let visitor_helper = ir_knorm::FvVisitorHelper::new({
+    let mut collect_fv = ir_knorm::FvVisitorHelper::new({
         struct CollectFvVisitor<'a, 'ctx> {
             fv_set: &'a mut SetLikeVec<Ident<'ctx>>,
         }
@@ -198,18 +207,21 @@ fn analyze_let_rec<'ctx>(binding: &ir_knorm::LetBinding<'ctx>) -> LetRecAnalysis
         }
     });
     {
-        struct AnalysisVisitor<'ctx, F: ir_knorm::FvVisitor<'ctx>> {
-            visitor_helper: ir_knorm::FvVisitorHelper<'ctx, F>,
+        /// This visitor is used to collect free variables of the binding body.
+        struct AnalyzeBindingVisitor<'ctx, 'helper, F: ir_knorm::FvVisitor<'ctx>> {
+            collect_fv: &'helper mut ir_knorm::FvVisitorHelper<'ctx, F>,
             fn_name: Ident<'ctx>,
         }
         use ir_knorm::Visitor;
-        let mut visitor = AnalysisVisitor {
-            visitor_helper,
+        let mut binding_visitor = AnalyzeBindingVisitor {
+            collect_fv: &mut collect_fv,
             fn_name,
         };
-        visitor.visit_binding(binding);
+        binding_visitor.visit_binding(binding);
 
-        impl<'ctx, F: ir_knorm::FvVisitor<'ctx>> ir_knorm::Visitor<'ctx> for AnalysisVisitor<'ctx, F> {
+        impl<'ctx, F: ir_knorm::FvVisitor<'ctx>> ir_knorm::Visitor<'ctx>
+            for AnalyzeBindingVisitor<'ctx, '_, F>
+        {
             fn visit_app(&mut self, e: &Ident<'ctx>, es: &IndexVec<ArgIndex, Ident<'ctx>>) {
                 if *e != self.fn_name {
                     self.visit_ident(e);
@@ -219,11 +231,11 @@ fn analyze_let_rec<'ctx>(binding: &ir_knorm::LetBinding<'ctx>) -> LetRecAnalysis
                 }
             }
             fn visit_ident(&mut self, ident: &Ident<'ctx>) {
-                self.visitor_helper.super_ident(ident);
+                self.collect_fv.super_ident(ident);
             }
             fn visit_binding(&mut self, binding: &ir_knorm::LetBinding<'ctx>) {
                 self.visit_pattern(&binding.pattern);
-                self.visitor_helper.super_binding_args(&binding.args);
+                self.collect_fv.super_binding_args(&binding.args);
                 self.visit_expr(&binding.value);
             }
             fn visit_pattern(&mut self, pattern: &Pattern<'ctx>) {
@@ -232,7 +244,42 @@ fn analyze_let_rec<'ctx>(binding: &ir_knorm::LetBinding<'ctx>) -> LetRecAnalysis
                         return;
                     }
                 }
-                self.visitor_helper.super_pattern(pattern);
+                self.collect_fv.super_pattern(pattern);
+            }
+        }
+    }
+    {
+        /// This visitor is used to check whether the function is used as a value
+        /// outside of the binding.
+        struct AnalyzeFollowingVisitor<'ctx, 'helper, F: ir_knorm::FvVisitor<'ctx>> {
+            collect_fv: &'helper mut ir_knorm::FvVisitorHelper<'ctx, F>,
+            fn_name: Ident<'ctx>,
+        }
+        use ir_knorm::Visitor;
+        let mut following_visitor = AnalyzeFollowingVisitor {
+            collect_fv: &mut collect_fv,
+            fn_name,
+        };
+        following_visitor.visit_expr(follows);
+
+        impl<'ctx, F: ir_knorm::FvVisitor<'ctx>> ir_knorm::Visitor<'ctx>
+            for AnalyzeFollowingVisitor<'ctx, '_, F>
+        {
+            fn visit_app(&mut self, e: &Ident<'ctx>, es: &IndexVec<ArgIndex, Ident<'ctx>>) {
+                if *e != self.fn_name {
+                    // Do nothing
+                }
+                for e in es {
+                    self.visit_ident(e);
+                }
+            }
+            fn visit_ident(&mut self, ident: &Ident<'ctx>) {
+                if *ident == self.fn_name {
+                    self.collect_fv.super_ident(ident);
+                }
+            }
+            fn visit_binding(&mut self, binding: &ir_knorm::LetBinding<'ctx>) {
+                self.visit_expr(&binding.value);
             }
         }
     }

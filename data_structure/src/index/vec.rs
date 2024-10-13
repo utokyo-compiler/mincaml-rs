@@ -3,13 +3,19 @@ use std::ops::{Index, IndexMut};
 
 use super::Indexable;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct IndexVec<I: Idx, T: Indexable<I>> {
     data: Vec<T>,
     // captures the type `I` and `T` in a phantom type
     // and make this type contravariant for `I`
     _marker: std::marker::PhantomData<fn(&I) -> T>,
+}
+
+impl<I: Idx, T: Indexable<I> + std::fmt::Debug> std::fmt::Debug for IndexVec<I, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.data.fmt(f)
+    }
 }
 
 impl<I: Idx, T: Indexable<I>> std::ops::Deref for IndexVec<I, T> {

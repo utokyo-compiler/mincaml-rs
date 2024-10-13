@@ -1,4 +1,15 @@
-use crate::{ApplyKind, Expr, ExprKind, FnName, FunctionDef, FunctionInstance, Ident, Program};
+use crate::{ApplyKind, Expr, ExprKind, FunctionDef, FunctionInstance, Ident, Program};
+
+use data_structure::interning::Interned;
+
+macro_rules! overload_mut {
+    ($receiver:ident, [body],) => {
+        $receiver.body()
+    };
+    ($receiver:ident, [body], mut) => {
+        $receiver.body_mut()
+    };
+}
 
 macro_rules! declare_visitor {
     ($name:ident, $($mutability:ident)?) => {
@@ -18,7 +29,7 @@ macro_rules! declare_visitor {
             }
 
             fn super_function_def(&mut self, function: & $($mutability)? FunctionDef<'ctx>) {
-                self.visit_expr(& $($mutability)? function.body);
+                self.visit_expr(overload_mut!(function, [body], $($mutability)?));
             }
 
             fn visit_expr(&mut self, expr: & $($mutability)? Expr<'ctx>) {
@@ -105,11 +116,11 @@ macro_rules! declare_visitor {
                 }
             }
 
-            fn visit_imported_function(&mut self, name: & $($mutability)? FnName<'ctx>) {
+            fn visit_imported_function(&mut self, name: & $($mutability)? Interned<'ctx, str>) {
                 self.super_imported_function(name);
             }
 
-            fn super_imported_function(&mut self, _name: & $($mutability)? FnName<'ctx>) {}
+            fn super_imported_function(&mut self, _name: & $($mutability)? Interned<'ctx, str>) {}
         }
     };
 }

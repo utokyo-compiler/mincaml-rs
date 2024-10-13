@@ -47,7 +47,7 @@ impl MultipleInput {
 
     pub fn concatenated_string(&self) -> String {
         let vec: Vec<_> = self.files.iter().map(|file| file.content()).collect();
-        vec.join("\n")
+        vec.concat()
     }
 
     pub fn get(&self, loc: sourcemap::Loc) -> Option<(&'_ InputFile, sourcemap::Loc)> {

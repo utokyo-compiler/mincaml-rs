@@ -49,6 +49,7 @@ lexer! {
     },
     // Naive string literal
     r#""[^"]*""# => LexState::Token(Token::StringLiteral),
+    r"\[@@[a-z_]*\]" => LexState::Token(Token::ItemAttr),
     r"\-" => LexState::Token(Token::Hyphen),
     r"\+" => LexState::Token(Token::Plus),
     r"\*" => LexState::Token(Token::Ast),

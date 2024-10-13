@@ -350,6 +350,7 @@ dependencies = [
  "anyhow",
  "data_structure",
  "ir_closure",
+ "middleware",
  "wasm-encoder",
 ]
 

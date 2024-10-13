@@ -1,4 +1,4 @@
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 /// Wrapper around `wasm_encoder::ValType`.
 pub enum WasmPrimitiveTy {
     I32,
@@ -30,6 +30,7 @@ impl WasmPrimitiveTy {
 }
 
 #[derive(Clone)]
+/// Represents a sequence of primitive types.
 pub enum WasmTy {
     Primitive(WasmPrimitiveTy),
     Many(Vec<WasmPrimitiveTy>),
@@ -43,9 +44,12 @@ impl WasmTy {
         }
     }
 
-    pub fn from_ty(ty: ir_closure::Ty) -> Self {
-        match ty.kind() {
-            ir_closure::TyKind::Unit => Self::Primitive(WasmPrimitiveTy::I32),
+    /// Converts the given type into a corresponding sequence of primitive types.
+    ///
+    /// Returns `None` if the given type is `Unit`.
+    pub fn from_ty(ty: ir_closure::Ty) -> Option<Self> {
+        Some(match ty.kind() {
+            ir_closure::TyKind::Unit => return None,
             ir_closure::TyKind::Bool => Self::Primitive(WasmPrimitiveTy::I32),
             ir_closure::TyKind::Int => Self::Primitive(WasmPrimitiveTy::I32),
             ir_closure::TyKind::Float => Self::Primitive(WasmPrimitiveTy::F32),
@@ -54,19 +58,27 @@ impl WasmTy {
                 tys.push(WasmPrimitiveTy::RefFn);
                 tys.extend(
                     args.iter()
-                        .flat_map(|arg| Self::from_ty(*arg).into_iter_primitives()),
+                        .flat_map(|arg| Self::from_ty(*arg))
+                        .flat_map(Self::into_iter_primitives),
                 );
                 tys
             }),
             ir_closure::TyKind::Tuple(..) => Self::Primitive(WasmPrimitiveTy::I32),
             ir_closure::TyKind::Array(..) => Self::Primitive(WasmPrimitiveTy::I32),
             ir_closure::TyKind::TyVar(..) => unreachable!(),
-        }
+        })
     }
 
-    pub fn as_primitive(&self) -> Option<&WasmPrimitiveTy> {
+    /// Converts the given type into a corresponding sequence of primitive types.
+    pub fn ty_to_primitive_iter(ty: ir_closure::Ty) -> impl Iterator<Item = WasmPrimitiveTy> {
+        Self::from_ty(ty)
+            .into_iter()
+            .flat_map(Self::into_iter_primitives)
+    }
+
+    pub fn as_primitive(&self) -> Option<WasmPrimitiveTy> {
         if let Self::Primitive(v) = self {
-            Some(v)
+            Some(*v)
         } else {
             None
         }

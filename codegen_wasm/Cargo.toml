@@ -9,3 +9,4 @@ data_structure.workspace = true
 wasm-encoder.workspace = true
 
 ir_closure.workspace = true
+middleware.workspace = true

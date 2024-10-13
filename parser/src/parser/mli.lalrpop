@@ -38,21 +38,18 @@ extern {
         "<-" => Token::LessHyphen,
         "->" => Token::HyphenGreater,
         "%something" => Token::StringLiteral,
+        "[@@something]" => Token::ItemAttr,
         ":" => Token::Colon,
         ";" => Token::Semi,
     }
 }
 
 pub Mli: mli::Mli<'ctx> = {
-    <mut a:Mli> <d:Decl> => {
-        a.declarations.push(d);
-        a
-    },
-    Decl => mli::Mli { declarations: vec![<>]},
+    <declarations:Decl*> => mli::Mli { declarations }
 }
 
 Decl: mli::Declaration<'ctx> = {
-    "external" <item_ident:ItemIdent> ":" <ascribed_ty:TypeAscription> "=" "%something"+
+    "external" <item_ident:ItemIdent> ":" <ascribed_ty:TypeAscription> "=" SkipRhs+
         => mli::Declaration {
             item_ident,
             ascribed_ty,
@@ -62,6 +59,11 @@ Decl: mli::Declaration<'ctx> = {
             item_ident,
             ascribed_ty,
         },
+}
+
+SkipRhs: () = {
+    "%something" => (),
+    "[@@something]" => (),
 }
 
 ItemIdent: mli::ItemIdent<'ctx> = {

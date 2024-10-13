@@ -113,7 +113,7 @@ impl BasicBlockPrinter<'_, '_> {
     ) -> fmt::Result {
         match function_instance {
             FunctionInstance::Defined(index) => write!(f, "{}", self.func_names[*index]),
-            FunctionInstance::Imported(fn_name) => write!(f, "{fn_name}"),
+            FunctionInstance::Imported(fn_name) => write!(f, "{}", fn_name.0),
         }
     }
 
