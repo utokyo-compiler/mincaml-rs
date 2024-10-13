@@ -16,10 +16,12 @@ pub use ir_knorm::{
 pub type Expr<'ctx> = Box<'ctx, TypedExprKind<'ctx>>;
 pub type TypedExprKind<'ctx> = Typed<'ctx, ExprKind<'ctx>>;
 
+#[derive(Debug)]
 pub struct Program<'ctx> {
     pub functions: IndexVec<FnIndex, FunctionDef<'ctx>>,
 }
 
+#[derive(Debug)]
 /// Function definition.
 ///
 /// A function may be defined as a closure

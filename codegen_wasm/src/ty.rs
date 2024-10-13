@@ -1,4 +1,4 @@
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 /// Wrapper around `wasm_encoder::ValType`.
 pub enum WasmPrimitiveTy {
     I32,
