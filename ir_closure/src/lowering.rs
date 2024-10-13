@@ -50,7 +50,13 @@ impl<'ctx> LoweringState<'ctx> {
         }
     }
 
-    fn decided_to_call_directly(&self, fn_name: &FnName<'ctx>) -> bool {
+    /// Returns `true` if the function is going to be called directly.
+    fn call_directly(&self, fn_name: &FnName<'ctx>) -> bool {
+        if let Some(ident) = fn_name.get_inner() {
+            if ident.as_intrinsic().is_some() {
+                return true;
+            }
+        }
         self.decided_to_call_directly.contains(fn_name)
     }
 
@@ -110,7 +116,7 @@ fn lower_expr<'ctx>(
 
                 let follows = lower_expr(ctx, state, follows);
 
-                if state.decided_to_call_directly(&fn_name) {
+                if state.call_directly(&fn_name) {
                     // The function is not used as a value and does not capture any variables
 
                     // Remove the binding. Calling this function is allowed
@@ -134,7 +140,7 @@ fn lower_expr<'ctx>(
         ir_knorm::ExprKind::App(f, args) => {
             let fn_name = FnName::new(*f);
             ExprKind::App(
-                if state.decided_to_call_directly(&fn_name) {
+                if state.call_directly(&fn_name) {
                     ApplyKind::Direct {
                         function: state.resolve_function(fn_name),
                     }
