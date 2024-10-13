@@ -16,8 +16,10 @@ pub fn codegen<'ctx>(
     mut function: ir_closure::FunctionDef<'ctx>,
 ) -> Result<()> {
     let mut state = State {
-        locals: FxHashMap::default(),
-        local_decls: IndexVec::new(),
+        local_def: LocalDef {
+            locals: FxHashMap::default(),
+            local_decls: IndexVec::new(),
+        },
         instrs: Vec::new(),
     };
 
@@ -25,22 +27,26 @@ pub fn codegen<'ctx>(
     let args_via_closure = std::mem::take(&mut function.args_via_closure);
 
     let mut params = Vec::new();
+    let results = WasmTy::ty_to_primitive_iter(function.body().ty).collect();
+
     // closure calling convention
     for arg in args_via_closure.into_iter().chain(args) {
         for wasm_ty in WasmTy::ty_to_primitive_iter(arg.ty) {
             let val_type = wasm_ty;
             params.push(val_type);
-            state.new_local_from(val_type, Some(arg));
         }
+        state.local_def.get(arg);
     }
 
     expr::codegen(program_state, &mut state, function.body())?;
-    state.push_raw(wasm_encoder::Instruction::End);
-
-    let results = WasmTy::ty_to_primitive_iter(function.body().ty).collect();
+    {
+        let this = &mut state;
+        let value = wasm_encoder::Instruction::End;
+        this.instrs.push(value)
+    };
 
     let function_def = FunctionDef {
-        local_decls: state.local_decls,
+        local_decls: state.local_def.local_decls,
         sig: program_state
             .signature_interner
             .intern(FnTypeSignature { params, results }),
@@ -58,18 +64,23 @@ pub struct FunctionDef<'ctx> {
 }
 
 pub struct State<'ctx> {
+    /// Local declarations.
+    pub local_def: LocalDef<'ctx>,
+
+    /// Instructions built so far.
+    pub instrs: Vec<wasm_encoder::Instruction<'static>>,
+}
+
+pub struct LocalDef<'ctx> {
     /// Mapping from identifiers to local indices created already.
     ///
     /// This is a cache for `get_local`.
     locals: FxHashMap<ir_closure::Ident<'ctx>, LocalGroup>,
     /// Local declarations.
     local_decls: IndexVec<LocalIdx, LocalDecl<'ctx>>,
-
-    /// Instructions built so far.
-    instrs: Vec<wasm_encoder::Instruction<'static>>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct LocalDecl<'ctx> {
     pub wasm_ty: WasmPrimitiveTy,
 
@@ -79,46 +90,46 @@ pub struct LocalDecl<'ctx> {
 }
 impl Indexable<LocalIdx> for LocalDecl<'_> {}
 
-impl<'ctx> State<'ctx> {
+impl<'ctx> LocalDef<'ctx> {
     /// Get the local index of the given identifier. If the identifier is not found, create a new local.
-    pub fn get_local(&mut self, ident: ir_closure::Ident<'ctx>) -> Option<LocalGroup> {
-        if let Some(local_group) = self.locals.get(&ident) {
-            return Some(local_group.clone());
-        }
-
-        let local_group = match WasmTy::from_ty(ident.ty)? {
-            WasmTy::Primitive(wasm_primitive_ty) => {
-                LocalGroup::Single(self.new_local_from(wasm_primitive_ty, Some(ident)))
+    pub fn get(&mut self, ident: ir_closure::Ident<'ctx>) -> Option<&'_ LocalGroup> {
+        match self.locals.entry(ident) {
+            std::collections::hash_map::Entry::Occupied(occupied_entry) => {
+                Some(occupied_entry.into_mut())
             }
-            WasmTy::Many(vec) => LocalGroup::Many(
-                vec.into_iter()
-                    .map(|wasm_primitive_ty| self.new_local_from(wasm_primitive_ty, Some(ident)))
-                    .collect(),
-            ),
-        };
-        self.locals.insert(ident, local_group.clone());
-        Some(local_group)
+            std::collections::hash_map::Entry::Vacant(vacant_entry) => {
+                let local_group = match WasmTy::from_ty(ident.ty)? {
+                    WasmTy::Primitive(wasm_primitive_ty) => LocalGroup::Single({
+                        self.local_decls.push(LocalDecl {
+                            wasm_ty: wasm_primitive_ty,
+                            ident: Some(ident),
+                        })
+                    }),
+                    WasmTy::Many(vec) => LocalGroup::Many(
+                        vec.into_iter()
+                            .map(|wasm_primitive_ty| {
+                                self.local_decls.push(LocalDecl {
+                                    wasm_ty: wasm_primitive_ty,
+                                    ident: Some(ident),
+                                })
+                            })
+                            .collect(),
+                    ),
+                };
+                Some(vacant_entry.insert(local_group))
+            }
+        }
     }
 
     /// Create a new local.
     pub fn new_local(&mut self, wasm_ty: WasmPrimitiveTy) -> LocalIdx {
-        self.new_local_from(wasm_ty, None)
+        self.local_decls.push(LocalDecl {
+            wasm_ty,
+            ident: None,
+        })
     }
 
-    fn new_local_from(
-        &mut self,
-        wasm_ty: WasmPrimitiveTy,
-        ident: Option<ir_closure::Ident<'ctx>>,
-    ) -> LocalIdx {
-        self.local_decls.push(LocalDecl { wasm_ty, ident })
-    }
-
-    /// Push a raw instruction.
-    pub fn push_raw(&mut self, value: wasm_encoder::Instruction<'static>) {
-        self.instrs.push(value)
-    }
-
-    pub fn get_local_decl(&self, index: LocalIdx) -> &LocalDecl {
+    pub fn get_decl(&self, index: LocalIdx) -> &LocalDecl {
         &self.local_decls[index]
     }
 }
