@@ -39,11 +39,7 @@ pub fn codegen<'ctx>(
     }
 
     expr::codegen(program_state, &mut state, function.body())?;
-    {
-        let this = &mut state;
-        let value = wasm_encoder::Instruction::End;
-        this.instrs.push(value)
-    };
+    state.instrs.push(wasm_encoder::Instruction::End);
 
     let function_def = FunctionDef {
         local_decls: state.local_def.local_decls,
