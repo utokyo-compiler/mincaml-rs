@@ -1,32 +1,23 @@
 use anyhow::Result;
-use wasm_encoder::{Instruction, MemArg};
+use wasm_encoder::Instruction;
 
 use crate::{
+    constant::{HEAP_PTR, MEM_ARG, TABLE_IDX},
     function,
-    index::LocalIdx,
     program::{self, FnTypeSignature},
-    ty::{WasmPrimitiveTy, WasmTy},
+    ty::WasmTy,
 };
-
-/// The global index of the heap pointer.
-const HEAP_PTR: u32 = 0;
 
 pub fn codegen<'ctx>(
     program_state: &mut program::State<'_, 'ctx>,
     function_state: &mut function::State<'ctx>,
     expr: &ir_closure::Expr<'ctx>,
 ) -> Result<()> {
-    const MEM_ARG: MemArg = MemArg {
-        offset: 0,
-        align: 2,
-        memory_index: 0,
-    };
-
     match expr.kind() {
         ir_closure::ExprKind::Const(lit_kind) => {
             match lit_kind {
                 ir_closure::LitKind::Unit => {
-                    // Do nothing
+                    // do nothing
                 }
                 ir_closure::LitKind::Bool(b) => {
                     function_state
@@ -44,7 +35,7 @@ pub fn codegen<'ctx>(
             };
         }
         ir_closure::ExprKind::Unary(un_op, e1) => {
-            let local = function_state.local_def.get(*e1).unwrap().expect_single()?;
+            let local = function_state.local_def.get(*e1).unwrap();
 
             match un_op {
                 ir_closure::UnOp::Neg => {
@@ -69,8 +60,8 @@ pub fn codegen<'ctx>(
             };
         }
         ir_closure::ExprKind::Binary(bin_op, e1, e2) => {
-            let local1 = function_state.local_def.get(*e1).unwrap().expect_single()?;
-            let local2 = function_state.local_def.get(*e2).unwrap().expect_single()?;
+            let local1 = function_state.local_def.get(*e1).unwrap();
+            let local2 = function_state.local_def.get(*e2).unwrap();
 
             match bin_op {
                 ir_closure::BinOp::Relation(bbin_op_kind) => {
@@ -126,19 +117,17 @@ pub fn codegen<'ctx>(
             }
         }
         ir_closure::ExprKind::If(cond, then_expr, else_expr) => {
-            let local = function_state.local_def.get(*cond);
-            function_state.instrs.push(Instruction::LocalGet(
-                local.unwrap().expect_single()?.unwrap_idx(),
-            ));
-            let typeidx = program_state
+            let local = function_state.local_def.get(*cond).unwrap();
+            function_state
+                .instrs
+                .push(Instruction::LocalGet(local.unwrap_idx()));
+            let type_index = program_state
                 .signature_interner
-                .intern(FnTypeSignature::from_results(
-                    WasmTy::ty_to_primitive_iter(expr.ty).collect(),
-                ));
+                .intern(FnTypeSignature::from_results(WasmTy::from_ty(expr.ty)));
             function_state
                 .instrs
                 .push(Instruction::If(wasm_encoder::BlockType::FunctionType(
-                    typeidx.unwrap_idx(),
+                    type_index.unwrap_idx(),
                 )));
             codegen(program_state, function_state, then_expr)?;
             function_state.instrs.push(Instruction::Else);
@@ -151,160 +140,123 @@ pub fn codegen<'ctx>(
 
             match pattern {
                 ir_closure::Pattern::Unit => {
-                    // Do nothing
+                    // do nothing
                 }
                 ir_closure::Pattern::Var(var) => {
                     let local = function_state.local_def.get(*var);
                     if let Some(local) = local {
-                        for local in local.iter() {
-                            function_state
-                                .instrs
-                                .push(Instruction::LocalSet(local.unwrap_idx()));
-                        }
+                        function_state
+                            .instrs
+                            .push(Instruction::LocalSet(local.unwrap_idx()));
                     }
                 }
                 ir_closure::Pattern::Tuple(vars) => {
-                    let local = function_state.local_def.new_local(WasmPrimitiveTy::I32);
+                    let local = function_state.local_def.new_local(WasmTy::I32);
                     function_state
                         .instrs
                         .push(Instruction::LocalSet(local.unwrap_idx()));
 
-                    let mut mem_arg = MEM_ARG;
-                    for var in vars {
-                        function_state
-                            .instrs
-                            .push(Instruction::LocalGet(local.unwrap_idx()));
-                        let Some(wasm_ty) = WasmTy::from_ty(var.ty) else {
-                            continue;
-                        };
-                        let prim_ty = wasm_ty.as_primitive().ok_or_else(|| {
-                            anyhow::anyhow!("closure cannot be stored in a tuple")
-                        })?;
-                        match prim_ty {
-                            WasmPrimitiveTy::I32 => {
-                                function_state.instrs.push(Instruction::I32Load(mem_arg))
-                            }
-                            WasmPrimitiveTy::F32 => {
-                                function_state.instrs.push(Instruction::F32Load(mem_arg))
-                            }
-                            WasmPrimitiveTy::RefFn => {
-                                return Err(anyhow::anyhow!("closure cannot be stored in a tuple"));
-                            }
-                        };
-                        let local = function_state.local_def.get(*var).unwrap();
-                        function_state
-                            .instrs
-                            .push(Instruction::LocalSet(local.expect_single()?.unwrap_idx()));
-                        mem_arg.offset += prim_ty.size_of() as u64;
-                    }
+                    function_state.instrs_load_from_tuple(vars.iter().copied(), local, MEM_ARG);
                 }
             };
+
+            // Continue with the rest of the code.
             codegen(program_state, function_state, follows)?;
         }
         ir_closure::ExprKind::Var(ident) => {
             let local = function_state.local_def.get(*ident);
             if let Some(local) = local {
-                for local in local.iter() {
-                    function_state
-                        .instrs
-                        .push(Instruction::LocalGet(local.unwrap_idx()));
-                }
+                function_state
+                    .instrs
+                    .push(Instruction::LocalGet(local.unwrap_idx()));
             }
         }
         ir_closure::ExprKind::ClosureMake(closure) => {
-            function_state.instrs.push(Instruction::RefFunc(
-                program_state.get_func_idx(closure.function).unwrap_idx(),
+            let local = function_state.local_def.new_local(WasmTy::I32);
+
+            // Here, we store the function index of the closure in
+            // the local variable **as a table index**.
+
+            // This transmutation should be synchronized with
+            // the table initialization in the element section.
+            function_state.instrs.push(Instruction::I32Const(
+                program_state.get_func_idx(closure.function).unwrap_idx() as i32,
             ));
-        }
-        ir_closure::ExprKind::App(ir_closure::ApplyKind::Closure { ident }, args) => {
-            let local = function_state.local_def.get(*ident).unwrap();
-            let local_group = local.as_many().unwrap();
-            let function = &local_group[0];
-            let closure_args = &local_group[1..];
-            // closure calling convention
-            const TABLE_IDX: u32 = 0;
             function_state
                 .instrs
-                .push(Instruction::LocalGet(function.unwrap_idx()));
-            function_state.instrs.push(Instruction::TableSet(TABLE_IDX));
-            for closure_arg in closure_args {
+                .push(Instruction::LocalSet(local.unwrap_idx()));
+
+            // Store the captured arguments in the tuple.
+            let vars: Vec<_> = closure
+                .captured_args
+                .iter()
+                .filter_map(|var| function_state.local_def.get_typed(*var))
+                .collect();
+            function_state.instrs_allocate_tuple(std::iter::once((local, WasmTy::I32)).chain(vars));
+        }
+        ir_closure::ExprKind::App(ir_closure::ApplyKind::Closure { ident }, args) => {
+            // closure calling convention
+
+            // Load the arguments.
+            for local in args
+                .iter()
+                .filter_map(|arg| function_state.local_def.get(*arg))
+            {
                 function_state
                     .instrs
-                    .push(Instruction::LocalGet(closure_arg.unwrap_idx()));
+                    .push(Instruction::LocalGet(local.unwrap_idx()));
             }
-            for arg in args {
-                let Some(local) = function_state.local_def.get(*arg) else {
-                    continue;
-                };
-                for local in local.iter() {
-                    function_state
-                        .instrs
-                        .push(Instruction::LocalGet(local.unwrap_idx()));
-                }
-            }
-            let type_idx = program_state
-                .signature_interner
-                .intern(FnTypeSignature::from_results(
-                    WasmTy::ty_to_primitive_iter(ident.ty).collect(),
-                ));
+
+            // Load the closure thunk pointer.
+            let local = function_state.local_def.get(*ident).unwrap();
+            function_state
+                .instrs
+                .push(Instruction::LocalGet(local.unwrap_idx()));
+
+            // Load the function pointer.
+            function_state
+                .instrs
+                .push(Instruction::LocalGet(local.unwrap_idx()));
+            function_state.instrs.push(Instruction::I32Load(MEM_ARG));
+
+            // Call the function via the table.
             function_state.instrs.push(Instruction::CallIndirect {
-                type_index: type_idx.unwrap_idx(),
+                type_index: program_state
+                    .signature_interner
+                    .intern({
+                        // The signature of the function is not the same to the
+                        // type of the closure because the last argument is the
+                        // thunk pointer.
+                        let mut signature = FnTypeSignature::from_fun_ty(ident.ty);
+                        signature.params.push(WasmTy::I32);
+                        signature
+                    })
+                    .unwrap_idx(),
                 table_index: TABLE_IDX,
             });
         }
         ir_closure::ExprKind::App(ir_closure::ApplyKind::Direct { function }, args) => {
-            for arg in args {
-                let Some(local) = function_state.local_def.get(*arg) else {
-                    continue;
-                };
-                for local in local.iter() {
-                    function_state
-                        .instrs
-                        .push(Instruction::LocalGet(local.unwrap_idx()));
-                }
+            // Load the arguments.
+            for local in args
+                .iter()
+                .filter_map(|arg| function_state.local_def.get(*arg))
+            {
+                function_state
+                    .instrs
+                    .push(Instruction::LocalGet(local.unwrap_idx()));
             }
+
+            // Call the function directly.
             function_state.instrs.push(Instruction::Call(
                 program_state.get_func_idx(*function).unwrap_idx(),
             ));
         }
         ir_closure::ExprKind::Tuple(vars) => {
-            // return the address of the tuple
-            function_state.instrs.push(Instruction::GlobalGet(HEAP_PTR));
-
-            let mut mem_arg = MEM_ARG;
-            for var in vars {
-                function_state.instrs.push(Instruction::GlobalGet(HEAP_PTR));
-
-                let Some(wasm_ty) = WasmTy::from_ty(var.ty) else {
-                    continue;
-                };
-
-                let local = function_state
-                    .local_def
-                    .get(*var)
-                    .unwrap()
-                    .expect_single()?;
-                function_state
-                    .instrs
-                    .push(Instruction::LocalGet(local.unwrap_idx()));
-
-                let prim_ty = wasm_ty
-                    .as_primitive()
-                    .ok_or_else(|| anyhow::anyhow!("closure cannot be stored in a tuple"))?;
-                match prim_ty {
-                    WasmPrimitiveTy::I32 => {
-                        function_state.instrs.push(Instruction::I32Store(mem_arg))
-                    }
-                    WasmPrimitiveTy::F32 => {
-                        function_state.instrs.push(Instruction::F32Store(mem_arg))
-                    }
-                    WasmPrimitiveTy::RefFn => {
-                        return Err(anyhow::anyhow!("closure cannot be stored in a tuple"));
-                    }
-                };
-                mem_arg.offset += prim_ty.size_of() as u64;
-            }
-            grow_heap(function_state, mem_arg.offset as i32);
+            let vars: Vec<_> = vars
+                .iter()
+                .filter_map(|var| function_state.local_def.get_typed(*var))
+                .collect();
+            function_state.instrs_allocate_tuple(vars.into_iter());
         }
         ir_closure::ExprKind::ArrayMake(len, init) => {
             // return the address of the array
@@ -314,16 +266,8 @@ pub fn codegen<'ctx>(
                 return Ok(());
             }
 
-            let local_len = function_state
-                .local_def
-                .get(*len)
-                .unwrap()
-                .expect_single()?;
-            let local_init = function_state
-                .local_def
-                .get(*init)
-                .unwrap()
-                .expect_single()?;
+            let local_len = function_state.local_def.get(*len).unwrap();
+            let local_init = function_state.local_def.get(*init).unwrap();
             let wasm_ty = function_state.local_def.get_decl(local_init).wasm_ty;
 
             function_state
@@ -337,7 +281,7 @@ pub fn codegen<'ctx>(
                 function_state.instrs.push(Instruction::BrIf(0));
 
                 // initial value is always zero
-                let loop_counter = function_state.local_def.new_local(WasmPrimitiveTy::I32);
+                let loop_counter = function_state.local_def.new_local(WasmTy::I32);
 
                 function_state
                     .instrs
@@ -357,15 +301,14 @@ pub fn codegen<'ctx>(
                         .instrs
                         .push(Instruction::LocalGet(local_init.unwrap_idx()));
                     match wasm_ty {
-                        WasmPrimitiveTy::I32 => {
+                        WasmTy::I32 => {
                             function_state.instrs.push(Instruction::I32Store(MEM_ARG));
                         }
-                        WasmPrimitiveTy::F32 => {
+                        WasmTy::F32 => {
                             function_state.instrs.push(Instruction::F32Store(MEM_ARG));
                         }
-                        WasmPrimitiveTy::RefFn => unreachable!(),
                     }
-                    grow_heap(function_state, wasm_ty.size_of() as i32);
+                    function_state.instrs_grow_heap(wasm_ty.size_of() as i32);
 
                     // if `loop_counter` <= `len`, continue
                     function_state
@@ -388,44 +331,23 @@ pub fn codegen<'ctx>(
                 return Err(anyhow::anyhow!("expected an array"));
             };
             if inner.is_unit() {
-                // Do nothing
+                // do nothing
                 return Ok(());
             }
-            let local_base = function_state
-                .local_def
-                .get(*base)
-                .unwrap()
-                .expect_single()?;
+            let local_base = function_state.local_def.get(*base).unwrap();
             let base_ty = function_state.local_def.get_decl(local_base).wasm_ty;
-            let local_index = function_state
-                .local_def
-                .get(*index)
-                .unwrap()
-                .expect_single()?;
+            let local_index = function_state.local_def.get(*index).unwrap();
 
-            calc_addr(function_state, local_base, local_index, base_ty);
+            function_state.instrs_calc_addr(local_base, local_index, base_ty);
 
             function_state.instrs.push(Instruction::I32Load(MEM_ARG));
         }
         ir_closure::ExprKind::Set(base, index, value) => {
-            let local_base = function_state
-                .local_def
-                .get(*base)
-                .unwrap()
-                .expect_single()?;
-            let base_ty = function_state.local_def.get_decl(local_base).wasm_ty;
-            let local_index = function_state
-                .local_def
-                .get(*index)
-                .unwrap()
-                .expect_single()?;
-            let local_value = function_state
-                .local_def
-                .get(*value)
-                .unwrap()
-                .expect_single()?;
+            let (local_base, base_ty) = function_state.local_def.get_typed(*base).unwrap();
+            let local_index = function_state.local_def.get(*index).unwrap();
+            let local_value = function_state.local_def.get(*value).unwrap();
 
-            calc_addr(function_state, local_base, local_index, base_ty);
+            function_state.instrs_calc_addr(local_base, local_index, base_ty);
 
             function_state
                 .instrs
@@ -435,32 +357,4 @@ pub fn codegen<'ctx>(
     };
     // do not add code here, because the code above may early return
     Ok(())
-}
-
-/// Grow the heap pointer by the given size.
-fn grow_heap(function_state: &mut function::State<'_>, size: i32) {
-    function_state.instrs.push(Instruction::GlobalGet(HEAP_PTR));
-    function_state.instrs.push(Instruction::I32Const(size));
-    function_state.instrs.push(Instruction::I32Add);
-    function_state.instrs.push(Instruction::GlobalSet(HEAP_PTR));
-}
-
-/// Compute the address of the element.
-fn calc_addr(
-    function_state: &mut function::State<'_>,
-    local_base: LocalIdx,
-    local_index: LocalIdx,
-    base_ty: WasmPrimitiveTy,
-) {
-    function_state
-        .instrs
-        .push(Instruction::LocalGet(local_base.unwrap_idx()));
-    function_state
-        .instrs
-        .push(Instruction::LocalGet(local_index.unwrap_idx()));
-    function_state
-        .instrs
-        .push(Instruction::I32Const(base_ty.size_of() as i32));
-    function_state.instrs.push(Instruction::I32Mul);
-    function_state.instrs.push(Instruction::I32Add);
 }

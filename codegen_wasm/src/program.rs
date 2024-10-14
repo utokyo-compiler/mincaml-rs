@@ -8,12 +8,12 @@ use data_structure::{
     FxHashMap,
 };
 use ir_closure::ImportedFnName;
-use wasm_encoder::{EntityType, ImportSection, Module};
+use wasm_encoder::{ConstExpr, EntityType, ImportSection, Module};
 
 use crate::{
     function,
     index::{FuncIdx, TypeIdx},
-    ty::{WasmPrimitiveTy, WasmTy},
+    ty::WasmTy,
 };
 
 pub fn codegen<'ctx>(
@@ -45,7 +45,7 @@ pub fn codegen<'ctx>(
             .into_iter()
             .map(|fn_name| ImportFn {
                 namespace: NameSpace::Intrinsic { fn_name },
-                sig: signature_interner.intern(FnTypeSignature::from_ty(
+                sig: signature_interner.intern(FnTypeSignature::from_fun_ty(
                     typed_interface.find_declaration(fn_name.0).unwrap().ty,
                 )),
             })
@@ -76,14 +76,8 @@ pub fn codegen<'ctx>(
     let mut type_section = wasm_encoder::TypeSection::new();
     for signature in signarute_arena.into_vec() {
         type_section.function(
-            signature
-                .params
-                .into_iter()
-                .map(WasmPrimitiveTy::into_valtype),
-            signature
-                .results
-                .into_iter()
-                .map(WasmPrimitiveTy::into_valtype),
+            signature.params.into_iter().map(WasmTy::into_valtype),
+            signature.results.map(WasmTy::into_valtype),
         );
     }
     module_builder.section(&type_section);
@@ -108,7 +102,7 @@ pub fn codegen<'ctx>(
     table_section.table(wasm_encoder::TableType {
         element_type: wasm_encoder::RefType::FUNCREF,
         table64: false,
-        minimum: 1,
+        minimum: (program.import_fns.len() + program.functions.len()) as u64,
         maximum: None,
         shared: false,
     });
@@ -144,6 +138,17 @@ pub fn codegen<'ctx>(
         export_section.export("", wasm_encoder::ExportKind::Func, main_fn_idx.unwrap_idx());
     }
     module_builder.section(&export_section);
+
+    // write element section
+    let mut element_section = wasm_encoder::ElementSection::new();
+    let offset = program.import_fns.len();
+    let range = offset as u32..offset as u32 + program.functions.len() as u32;
+    element_section.active(
+        None,
+        &ConstExpr::i32_const(offset as i32),
+        wasm_encoder::Elements::Functions(range.into_iter().collect::<Vec<_>>().as_slice()),
+    );
+    module_builder.section(&element_section);
 
     // write code section
     let mut code_section = wasm_encoder::CodeSection::new();
@@ -242,42 +247,28 @@ impl<'ctx> NameSpace<'ctx> {
 
 #[derive(Hash, PartialEq, Eq, Clone)]
 pub struct FnTypeSignature {
-    pub params: Vec<WasmPrimitiveTy>,
-    pub results: Vec<WasmPrimitiveTy>,
+    pub params: Vec<WasmTy>,
+    pub results: Option<WasmTy>,
 }
 
 impl FnTypeSignature {
-    #[allow(dead_code)]
-    #[inline]
-    pub fn new(
-        params: impl IntoIterator<Item = WasmPrimitiveTy>,
-        results: impl IntoIterator<Item = WasmPrimitiveTy>,
-    ) -> Self {
-        Self {
-            params: params.into_iter().collect(),
-            results: results.into_iter().collect(),
-        }
-    }
-
-    pub fn from_results(results: Vec<WasmPrimitiveTy>) -> Self {
+    pub fn from_results(results: Option<WasmTy>) -> Self {
         Self {
             params: Vec::new(),
             results,
         }
     }
 
-    pub fn from_ty(ty: ir_closure::Ty<'_>) -> Self {
+    /// Create a new function type signature from the given function type.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the given type is not a function type.
+    pub fn from_fun_ty(ty: ir_closure::Ty<'_>) -> Self {
         let (params, result) = ty.kind().as_fun_ty().unwrap();
         Self {
-            params: params
-                .iter()
-                .flat_map(|param| WasmTy::from_ty(*param))
-                .flat_map(WasmTy::into_iter_primitives)
-                .collect(),
-            results: WasmTy::from_ty(result)
-                .into_iter()
-                .flat_map(WasmTy::into_iter_primitives)
-                .collect(),
+            params: params.iter().copied().filter_map(WasmTy::from_ty).collect(),
+            results: WasmTy::from_ty(result),
         }
     }
 }
@@ -298,6 +289,9 @@ impl<'arena> SignatureInterner<'arena> {
         }
     }
 
+    /// Intern the given function type signature.
+    ///
+    /// If the given signature is already interned, the existing index is returned.
     pub fn intern(&mut self, signature: FnTypeSignature) -> TypeIdx {
         if let Some(&idx) = self.map.get(&signature) {
             return idx;

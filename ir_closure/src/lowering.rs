@@ -14,7 +14,12 @@ use crate::{
 /// 3. 2. is a problem that should be handled by an optimization pass
 pub fn lowering<'ctx>(ctx: &'ctx Context<'ctx>, knorm_expr: ir_knorm::Expr<'ctx>) -> Program<'ctx> {
     let mut state = LoweringState::default();
-    let main = FunctionDef::new(FnName::MAIN_FN_NAME, IndexVec::new(), IndexVec::new());
+    let main = FunctionDef::new(
+        FnName::MAIN_FN_NAME,
+        IndexVec::new(),
+        IndexVec::new(),
+        false,
+    );
     let main_index = state.push_function(main);
     let main_body = lower_expr(ctx, &mut state, &knorm_expr);
     state.functions[main_index].set_body(main_body);
@@ -109,7 +114,12 @@ fn lower_expr<'ctx>(
                     state.ack_decide_to_call_directly(fn_name);
                 }
                 let fv_set: IndexVec<_, _> = fv_set.into_iter().collect();
-                let func = FunctionDef::new(fn_name, args.clone(), fv_set.clone());
+                let func = FunctionDef::new(
+                    fn_name,
+                    args.clone(),
+                    fv_set.clone(),
+                    !state.call_directly(&fn_name),
+                );
                 let index = state.push_function(func);
                 let body = lower_expr(ctx, state, value);
                 state.functions[index].set_body(body);
