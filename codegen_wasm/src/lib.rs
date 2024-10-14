@@ -1,3 +1,4 @@
+pub(crate) mod constant;
 pub(crate) mod expr;
 pub(crate) mod function;
 pub(crate) mod index;

@@ -36,7 +36,16 @@ pub struct FunctionDef<'ctx> {
     ///
     /// They are not passed as arguments to the function but
     /// are required to evaluate the function body.
+    ///
+    /// If the function is not a closure, this field should be empty.
     pub args_via_closure: IndexVec<ArgIndex, Ident<'ctx>>,
+
+    /// Whether the function is a closure.
+    ///
+    /// This field is similar to `args_via_closure.is_empty()`, but not the same
+    /// because a function that captures no variables and is used as a value
+    /// should be counted as a closure.
+    pub is_closure: bool,
 
     /// The body of the function.
     ///
@@ -49,11 +58,13 @@ impl<'ctx> FunctionDef<'ctx> {
         name: FnName<'ctx>,
         args: IndexVec<ArgIndex, Ident<'ctx>>,
         args_via_closure: IndexVec<ArgIndex, Ident<'ctx>>,
+        is_closure: bool,
     ) -> Self {
         Self {
             name,
             args,
             args_via_closure,
+            is_closure,
             body: None,
         }
     }
@@ -62,12 +73,14 @@ impl<'ctx> FunctionDef<'ctx> {
         name: FnName<'ctx>,
         args: IndexVec<ArgIndex, Ident<'ctx>>,
         args_via_closure: IndexVec<ArgIndex, Ident<'ctx>>,
+        is_closure: bool,
         body: Expr<'ctx>,
     ) -> Self {
         Self {
             name,
             args,
             args_via_closure,
+            is_closure,
             body: Some(body),
         }
     }
