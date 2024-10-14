@@ -31,11 +31,22 @@ pub fn codegen<'ctx>(
     let mut params = Vec::new();
     let results = WasmTy::from_ty(function.body().ty);
 
+    for arg in args {
+        // about parameters (arguments)
+
+        let Some(wasm_ty) = WasmTy::from_ty(arg.ty) else {
+            continue;
+        };
+        let val_type = wasm_ty;
+        params.push(val_type);
+        state.local_def.get(arg);
+    }
+
     // closure calling convention
     if function.is_closure {
         // about parameters (arguments)
 
-        // The first argument is the thunk pointer.
+        // The last argument is the thunk pointer.
         let pointer_ty = WasmTy::I32;
         params.push(pointer_ty);
         let local = state.local_def.new_local(pointer_ty);
@@ -53,17 +64,6 @@ pub fn codegen<'ctx>(
     } else {
         #[cfg(debug_assertions)]
         assert!(args_via_closure.is_empty());
-    }
-
-    for arg in args {
-        // about parameters (arguments)
-
-        let Some(wasm_ty) = WasmTy::from_ty(arg.ty) else {
-            continue;
-        };
-        let val_type = wasm_ty;
-        params.push(val_type);
-        state.local_def.get(arg);
     }
 
     // about body

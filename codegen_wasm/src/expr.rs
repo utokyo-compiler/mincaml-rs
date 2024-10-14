@@ -197,12 +197,6 @@ pub fn codegen<'ctx>(
         ir_closure::ExprKind::App(ir_closure::ApplyKind::Closure { ident }, args) => {
             // closure calling convention
 
-            // Load the closure thunk pointer first.
-            let local = function_state.local_def.get(*ident).unwrap();
-            function_state
-                .instrs
-                .push(Instruction::LocalGet(local.unwrap_idx()));
-
             // Load the arguments.
             for local in args
                 .iter()
@@ -212,6 +206,12 @@ pub fn codegen<'ctx>(
                     .instrs
                     .push(Instruction::LocalGet(local.unwrap_idx()));
             }
+
+            // Load the closure thunk pointer.
+            let local = function_state.local_def.get(*ident).unwrap();
+            function_state
+                .instrs
+                .push(Instruction::LocalGet(local.unwrap_idx()));
 
             // Load the function pointer.
             function_state
@@ -225,10 +225,10 @@ pub fn codegen<'ctx>(
                     .signature_interner
                     .intern({
                         // The signature of the function is not the same to the
-                        // type of the closure because the first argument is the
+                        // type of the closure because the last argument is the
                         // thunk pointer.
                         let mut signature = FnTypeSignature::from_fun_ty(ident.ty);
-                        signature.params.insert(0, WasmTy::I32);
+                        signature.params.push(WasmTy::I32);
                         signature
                     })
                     .unwrap_idx(),
