@@ -38,7 +38,7 @@ pub fn codegen<'ctx>(
             let local = function_state.local_def.get(*e1).unwrap();
 
             match un_op {
-                ir_closure::UnOp::Neg => {
+                ir_closure::UnOp::Ineg => {
                     function_state.instrs.push(Instruction::I32Const(0));
                     function_state
                         .instrs
@@ -51,7 +51,7 @@ pub fn codegen<'ctx>(
                         .push(Instruction::LocalGet(local.unwrap_idx()));
                     function_state.instrs.push(Instruction::I32Eqz);
                 }
-                ir_closure::UnOp::FNeg => {
+                ir_closure::UnOp::Fneg => {
                     function_state
                         .instrs
                         .push(Instruction::LocalGet(local.unwrap_idx()));

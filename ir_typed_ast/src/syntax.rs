@@ -5,7 +5,7 @@ use data_structure::{
     index::{vec::IndexVec, Indexable},
 };
 use sourcemap::{Span, Spanned};
-pub use syntax::{BinOp, FloatBinOpKind, IntBinOpKind, LitKind, RelationBinOpKind, UnOp};
+pub use syntax::{BinOp, FloatBinOpKind, IntBinOpKind, LitKind, RelationBinOpKind};
 pub use ty::{ArgIndex, TupleIndex, Ty, TyKind, Typed};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -140,6 +140,23 @@ impl Indexable<TupleIndex> for Expr<'_> {}
 impl<'ctx> ExprKind<'ctx> {
     pub fn kind(&self) -> &Self {
         self
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum UnOp {
+    Not,
+    Ineg,
+    Fneg,
+}
+
+impl UnOp {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Not => "!",
+            Self::Ineg => "-",
+            Self::Fneg => "-.",
+        }
     }
 }
 
