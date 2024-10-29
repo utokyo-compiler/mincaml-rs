@@ -37,8 +37,8 @@ fn format_ty(f: &mut Formatter<'_>, ty: &Ty) -> fmt::Result {
 fn format_un_op(f: &mut Formatter<'_>, un_op: &UnOp) -> fmt::Result {
     match un_op {
         UnOp::Not => write!(f, "!"),
-        UnOp::Neg => write!(f, "-"),
-        UnOp::FNeg => write!(f, "-."),
+        UnOp::Ineg => write!(f, "-"),
+        UnOp::Fneg => write!(f, "-."),
     }
 }
 

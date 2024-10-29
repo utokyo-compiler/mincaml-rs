@@ -38,7 +38,7 @@ pub fn codegen<'ctx>(
             let local = function_state.local_def.get(*e1).unwrap();
 
             match un_op {
-                ir_closure::UnOp::Neg => {
+                ir_closure::UnOp::Ineg => {
                     function_state.instrs.push(Instruction::I32Const(0));
                     function_state
                         .instrs
@@ -51,7 +51,7 @@ pub fn codegen<'ctx>(
                         .push(Instruction::LocalGet(local.unwrap_idx()));
                     function_state.instrs.push(Instruction::I32Eqz);
                 }
-                ir_closure::UnOp::FNeg => {
+                ir_closure::UnOp::Fneg => {
                     function_state
                         .instrs
                         .push(Instruction::LocalGet(local.unwrap_idx()));
@@ -267,8 +267,7 @@ pub fn codegen<'ctx>(
             }
 
             let local_len = function_state.local_def.get(*len).unwrap();
-            let local_init = function_state.local_def.get(*init).unwrap();
-            let wasm_ty = function_state.local_def.get_decl(local_init).wasm_ty;
+            let (local_init, wasm_ty) = function_state.local_def.get_typed(*init).unwrap();
 
             function_state
                 .instrs
@@ -334,8 +333,7 @@ pub fn codegen<'ctx>(
                 // do nothing
                 return Ok(());
             }
-            let local_base = function_state.local_def.get(*base).unwrap();
-            let base_ty = function_state.local_def.get_decl(local_base).wasm_ty;
+            let (local_base, base_ty) = function_state.local_def.get_typed(*base).unwrap();
             let local_index = function_state.local_def.get(*index).unwrap();
 
             function_state.instrs_calc_addr(local_base, local_index, base_ty);

@@ -2,7 +2,7 @@ use plex::lexer;
 
 use sourcemap::{Loc, LocSize, Spanned};
 
-use crate::lexer::{ErrorKind, Lexer, Result, Token};
+use crate::lexer::{ErrorKind, Lexer, ParseIntegerErr, Result, Token};
 
 enum CommentState {
     Open,
@@ -35,13 +35,17 @@ lexer! {
     r"true" => LexState::Token(Token::Bool(true)),
     r"false" => LexState::Token(Token::Bool(false)),
     r"not" => LexState::Token(Token::Not),
-    r"0|[1-9][0-9]*" => {
-        match text.parse() {
-            Ok(i) => LexState::Token(Token::Int(i)),
-            Err(e) => LexState::Error(ErrorKind::IllegalIntegerConstant(text, e)),
+    r"[0-9]+" => {
+        if text.starts_with('0') && text.len() > 1 {
+            LexState::Error(ErrorKind::IllegalIntegerConstant(text, ParseIntegerErr::LeadingZero))
+        } else {
+            match text.parse() {
+                Ok(i) => LexState::Token(Token::Int(i)),
+                Err(e) => LexState::Error(ErrorKind::IllegalIntegerConstant(text, ParseIntegerErr::ParseIntError(e))),
+            }
         }
     },
-    r"0|[1-9][0-9]*\.[0-9]*([eE][+-]?[0-9]+)?" => {
+    r"(0|[1-9][0-9]*)\.[0-9]*([eE][+-]?[0-9]+)?" => {
         match text.parse() {
             Ok(i) => LexState::Token(Token::Float(i)),
             Err(e) => LexState::Error(ErrorKind::IllegalFloatConstant(text, e)),

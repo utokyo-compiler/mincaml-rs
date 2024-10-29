@@ -65,7 +65,7 @@ impl<'ctx> KnormPass<'ctx> for ConstantFold {
             fn visit_expr(&mut self, expr: &mut Expr<'ctx>) {
                 match &expr.value {
                     ExprKind::Unary(un_op, x) => match (un_op, self.env.get(x)) {
-                        (UnOp::Neg, Some(LitKind::Int(i))) => {
+                        (UnOp::Ineg, Some(LitKind::Int(i))) => {
                             *expr = self.ctx.new_expr(ir_knorm::Typed::new(
                                 ExprKind::Const(LitKind::Int(-i)),
                                 expr.ty,
@@ -77,7 +77,7 @@ impl<'ctx> KnormPass<'ctx> for ConstantFold {
                                 expr.ty,
                             ));
                         }
-                        (UnOp::FNeg, Some(LitKind::Float(f))) => {
+                        (UnOp::Fneg, Some(LitKind::Float(f))) => {
                             *expr = self.ctx.new_expr(ir_knorm::Typed::new(
                                 ExprKind::Const(LitKind::Float(f32::to_bits(-f32::from_bits(*f)))),
                                 expr.ty,

@@ -87,7 +87,7 @@ pub fn typeck<'ctx>(
 
     let mut subst = ty_var_subst::Env::new();
     let mut typed = decide_ty(ctx, common_types, &mut name_res, &mut subst, parsed).unwrap();
-    unify(&mut subst, typed.ty, Ty::mk_unit(ctx)).unwrap();
+    unify(&mut subst, typed.ty, common_types.unit).unwrap();
     subst.deref_ty_var(ctx, &mut typed);
     Ok(typed)
 }
@@ -115,21 +115,25 @@ fn decide_ty<'ctx>(
         }
         syntax::ExprKind::Unary(un_op, e) => {
             let e = decide_ty(ctx, common_types, name_res, subst, e).unwrap();
-            let ty = match un_op {
+            let (un_op, ty) = match un_op {
                 syntax::UnOp::Neg => {
-                    unify(subst, e.ty, common_types.int).unwrap();
-                    common_types.int
+                    if let Err(_err) = unify(subst, e.ty, common_types.int) {
+                        unify(subst, e.ty, common_types.float).unwrap();
+                        (ir_typed_ast::UnOp::Fneg, common_types.float)
+                    } else {
+                        (ir_typed_ast::UnOp::Ineg, common_types.int)
+                    }
                 }
                 syntax::UnOp::FNeg => {
                     unify(subst, e.ty, common_types.float).unwrap();
-                    common_types.float
+                    (ir_typed_ast::UnOp::Fneg, common_types.float)
                 }
                 syntax::UnOp::Not => {
                     unify(subst, e.ty, common_types.bool).unwrap();
-                    common_types.bool
+                    (ir_typed_ast::UnOp::Not, common_types.bool)
                 }
             };
-            (ty, ir_typed_ast::ExprKind::Unary(*un_op, e))
+            (ty, ir_typed_ast::ExprKind::Unary(un_op, e))
         }
         syntax::ExprKind::Binary(bin_op, e1, e2) => {
             let e1 = decide_ty(ctx, common_types, name_res, subst, e1).unwrap();
@@ -156,7 +160,7 @@ fn decide_ty<'ctx>(
             let e1 = decide_ty(ctx, common_types, name_res, subst, e1).unwrap();
             let e2 = decide_ty(ctx, common_types, name_res, subst, e2).unwrap();
             let e3 = decide_ty(ctx, common_types, name_res, subst, e3).unwrap();
-            unify(subst, e1.ty, Ty::mk_bool(ctx)).unwrap();
+            unify(subst, e1.ty, common_types.bool).unwrap();
             unify(subst, e2.ty, e3.ty).unwrap();
             (e2.ty, ir_typed_ast::ExprKind::If(e1, e2, e3))
         }
@@ -244,7 +248,7 @@ fn decide_ty<'ctx>(
         syntax::ExprKind::Then(e1, e2) => {
             let e1 = decide_ty(ctx, common_types, name_res, subst, e1).unwrap();
             let e2 = decide_ty(ctx, common_types, name_res, subst, e2).unwrap();
-            unify(subst, e1.ty, Ty::mk_unit(ctx)).unwrap();
+            unify(subst, e1.ty, common_types.unit).unwrap();
             (e2.ty, ir_typed_ast::ExprKind::Then(e1, e2))
         }
         syntax::ExprKind::Var(var) => {

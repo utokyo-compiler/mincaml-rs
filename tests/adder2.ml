@@ -3,4 +3,5 @@ let rec make_adder x =
   addx in
 let add2 = make_adder 2 in
 let add3 = make_adder 3 in
-print_int (add2 10 + add3 20)
+print_int (add2 10 + add3 20);
+print_newline ()

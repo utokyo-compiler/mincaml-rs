@@ -161,9 +161,9 @@ fn lower_expr<'ctx>(
             )
         }
         ir_knorm::ExprKind::Tuple(es) => ExprKind::Tuple(es.clone()),
-        ir_knorm::ExprKind::ArrayMake(_, _) => todo!(),
-        ir_knorm::ExprKind::Get(_, _) => todo!(),
-        ir_knorm::ExprKind::Set(_, _, _) => todo!(),
+        ir_knorm::ExprKind::ArrayMake(len, init) => ExprKind::ArrayMake(*len, *init),
+        ir_knorm::ExprKind::Get(base, index) => ExprKind::Get(*base, *index),
+        ir_knorm::ExprKind::Set(base, index, value) => ExprKind::Set(*base, *index, *value),
         ir_knorm::ExprKind::Invalid => unreachable!("invalid expression"),
     };
     ctx.new_expr(Typed::new(expr_kind, knorm_expr.ty))

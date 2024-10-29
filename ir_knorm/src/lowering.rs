@@ -83,9 +83,25 @@ fn lowering_ref<'ctx>(
                 .collect();
             ExprKind::Tuple(es)
         }
-        ir_typed_ast::ExprKind::ArrayMake(_, _) => todo!(),
-        ir_typed_ast::ExprKind::Get(_, _) => todo!(),
-        ir_typed_ast::ExprKind::Set(_, _, _) => todo!(),
+        ir_typed_ast::ExprKind::ArrayMake(len, init) => {
+            let len = insert_let(ctx, &mut binders, len);
+            let init = insert_let(ctx, &mut binders, init);
+
+            ExprKind::ArrayMake(len, init)
+        }
+        ir_typed_ast::ExprKind::Get(base, index) => {
+            let base = insert_let(ctx, &mut binders, base);
+            let index = insert_let(ctx, &mut binders, index);
+
+            ExprKind::Get(base, index)
+        }
+        ir_typed_ast::ExprKind::Set(base, index, value) => {
+            let base = insert_let(ctx, &mut binders, base);
+            let index = insert_let(ctx, &mut binders, index);
+            let value = insert_let(ctx, &mut binders, value);
+
+            ExprKind::Set(base, index, value)
+        }
     };
     binders.apply_binders(
         ctx,

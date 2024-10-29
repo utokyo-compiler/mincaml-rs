@@ -1,4 +1,6 @@
-use crate::{ApplyKind, Expr, ExprKind, FunctionDef, FunctionInstance, Ident, Program};
+use crate::{
+    ApplyKind, Expr, ExprKind, FunctionDef, FunctionInstance, Ident, LetBinding, Pattern, Program,
+};
 
 use data_structure::interning::Interned;
 
@@ -51,7 +53,8 @@ macro_rules! declare_visitor {
                         self.visit_expr(then);
                         self.visit_expr(els);
                     }
-                    ExprKind::Let(_binding, e) => {
+                    ExprKind::Let(binding, e) => {
+                        self.visit_binding(binding);
                         self.visit_expr(e);
                     }
                     ExprKind::Var(ident) => {
@@ -102,6 +105,31 @@ macro_rules! declare_visitor {
             }
 
             fn super_ident(&mut self, _ident: & $($mutability)? Ident<'ctx>) {}
+
+            fn visit_binding(&mut self, binding: & $($mutability)? LetBinding<'ctx>) {
+                self.super_binding(binding);
+            }
+
+            fn super_binding(&mut self, binding: & $($mutability)? LetBinding<'ctx>) {
+                self.visit_pattern(& $($mutability)? binding.pattern);
+                self.visit_expr(& $($mutability)? binding.value);
+            }
+
+            fn visit_pattern(&mut self, ident: & $($mutability)? Pattern<'ctx>) {
+                self.super_pattern(ident);
+            }
+
+            fn super_pattern(&mut self, pattern: & $($mutability)? Pattern<'ctx>) {
+                match pattern {
+                    Pattern::Unit => (),
+                    Pattern::Var(ident) => self.visit_ident(ident),
+                    Pattern::Tuple(idents) => {
+                        for ident in idents {
+                            self.visit_ident(ident);
+                        }
+                    }
+                }
+            }
 
             fn visit_function_instance(&mut self, instance: & $($mutability)? FunctionInstance<'ctx>) {
                 self.super_function_instance(instance);

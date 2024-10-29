@@ -139,7 +139,10 @@ impl PlaceBinder {
                         state.builder.terminate_block(TerminatorKind::Call {
                             calling_conv,
                             args,
-                            branch: Branch::no_args(target),
+                            branch: Branch {
+                                target,
+                                args: index_vec![call_result],
+                            },
                         });
                         state.builder.set_args_to_current(index_vec![call_result]);
                         ctx.new_expr(Typed::new(ExprKind::Read(Place::Local(call_result)), ty))
