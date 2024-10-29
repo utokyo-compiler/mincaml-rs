@@ -155,10 +155,6 @@ impl<'ctx> LocalDef<'ctx> {
             ident: None,
         })
     }
-
-    pub fn get_decl(&self, index: LocalIdx) -> &LocalDecl {
-        &self.local_decls[index]
-    }
 }
 
 // helper functions
