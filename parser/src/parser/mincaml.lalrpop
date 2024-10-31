@@ -12,7 +12,6 @@ extern {
     enum Token<'input> {
         "(" => Token::LPar,
         ")" => Token::RPar,
-        "not" => Token::Not,
         Bool => Token::Bool(<bool>),
         Int => Token::Int(<i32>),
         Float => Token::Float(<f32>),
@@ -88,7 +87,7 @@ SimpleExpr: Expr<'ctx> = {
     <l:@L> <s:SimpleExpr> "." "(" <x:Expr> ")" <r:@R> => alloc.spanned(Get(s, x), (l, r)),
 }
 
-pub Expr: Expr<'ctx> = {
+ExprPrec5: Expr<'ctx> = {
     #[precedence(level="0")]
     SimpleExpr,
 
@@ -96,61 +95,92 @@ pub Expr: Expr<'ctx> = {
     #[precedence(level="1")]
     <l:@L> <e1:SimpleExpr> <e2:ActualArgs> <r:@R>
         => alloc.spanned(App(e1, e2), (l, r)),
-    <l:@L> "Array.make" <e1:SimpleExpr> <e2:Expr> <r:@R>
+    <l:@L> "Array.make" <e1:SimpleExpr> <e2:ExprPrec5> <r:@R>
         => alloc.spanned(ArrayMake(e1, e2), (l, r)),
-    <l:@L> "not" <e1:SimpleExpr> <r:@R>
-        => alloc.spanned(Unary(Not, e1), (l, r)),
 
     // -
     #[precedence(level="2")]
-    <l:@L> "-" <e1:Expr> <r:@R>
+    <l:@L> "-" <e1:ExprPrec5> <r:@R>
         => alloc.spanned(Unary(Neg, e1), (l, r)),
 
     // -.
-    <l:@L> "-." <e1:Expr> <r:@R>
+    <l:@L> "-." <e1:ExprPrec5> <r:@R>
         => alloc.spanned(Unary(FNeg, e1), (l, r)),
 
     // * *. /.
     #[precedence(level="3")]
     #[assoc(side="left")]
-    <l:@L> <e1:Expr> <op:FactorOp> <e2:Expr> <r:@R>
+    <l:@L> <e1:ExprPrec5> <op:FactorOp> <e2:ExprPrec5> <r:@R>
         => alloc.spanned(Binary(op, e1, e2), (l, r)),
 
     // + - +. -.
     #[precedence(level="4")]
     #[assoc(side="left")]
-    <l:@L> <e1:Expr> <op:TermOp> <e2:Expr> <r:@R>
+    <l:@L> <e1:ExprPrec5> <op:TermOp> <e2:ExprPrec5> <r:@R>
         => alloc.spanned(Binary(op, e1, e2), (l, r)),
 
     // = <> < > <= >=
     #[precedence(level="5")]
     #[assoc(side="left")]
-    <l:@L> <e1:Expr> <op:RelationBinOp> <e2:Expr> <r:@R>
+    <l:@L> <e1:ExprPrec5> <op:RelationBinOp> <e2:ExprPrec5> <r:@R>
         => alloc.spanned(Binary(op, e1, e2), (l, r)),
+}
 
-    // .() <-
-    #[precedence(level="6")]
-    <l:@L> <e1:SimpleExpr> "<-" <e2:Expr> <r:@R>
+ArraySet<AfterArrow>: Expr<'ctx> = {
+    <l:@L> <e1:SimpleExpr> "<-" <e2:AfterArrow> <r:@R>
         => alloc.spanned(Set(e1, e2), (l, r)),
+}
 
+// min-caml allows semicolon in then branch
+AfterThen = Expr;
+
+// Expression that starts with if
+If<AfterElse>: Expr<'ctx> = {
     // if
-    #[precedence(level="7")]
-    <l:@L> "if" <e1:Expr> "then" <e2:Expr> "else" <e3:Expr> <r:@R>
+    <l:@L> "if" <e1:Expr> "then" <e2:AfterThen> "else" <e3:AfterElse> <r:@R>
         => alloc.spanned(If(e1, e2, e3), (l, r)),
+}
 
-    // semicolon
-    #[precedence(level="8")]
-    #[assoc(side="right")]
-    <l:@L> <e1:Expr> ";" <e2:Expr> <r:@R> => alloc.spanned(
-        Then(e1, e2),
-        (l, r)
-    ),
+NoSemi = ExprPrec5;
 
+// Expression that does not start with let
+Semi: Expr<'ctx> = {
+    // if and let.
+    // Looking ahead the semicolon after the second expression (e:ExprPrec9) in `Let` should trigger the shift action to OptionalSemi rule within `ExprPrec9` in `Let`,
+    // not the reduce action here.
+    If<Let>,
+
+    // if inside of if. continue.
+    If<Semi>,
+
+    ArraySet<Let>,
+    ArraySet<Semi>,
+
+    // optional semicolon
+    <l:@L> <e1:NoSemi> <e2:OptionalSemi?> <r:@R> => match e2 {
+        Some(e2) => alloc.spanned(Then(e1, e2), (l, r)),
+        None => e1,
+    },
+}
+
+#[inline]
+OptionalSemi: Expr<'ctx> = {
+    ";" <e2:ExprPrec9> => e2,
+}
+
+// Expression that starts with let
+Let: Expr<'ctx> = {
     // let
-    #[precedence(level="9")]
-    <l:@L> "let" <binder:LetBinder> "in" <e:Expr> <r:@R>
+    <l:@L> "let" <binder:LetBinder> "in" <e:ExprPrec9> <r:@R>
         => alloc.spanned(Let(binder, e), (l, r)),
 }
+
+ExprPrec9: Expr<'ctx> = {
+    Let,
+    Semi,
+}
+
+pub Expr = ExprPrec9;
 
 LetBinder: LetBinder<'ctx> = {
     <x:SpannedIdent> "=" <val:Expr>

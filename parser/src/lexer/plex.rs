@@ -34,7 +34,6 @@ lexer! {
     r"\)" => LexState::Token(Token::RPar),
     r"true" => LexState::Token(Token::Bool(true)),
     r"false" => LexState::Token(Token::Bool(false)),
-    r"not" => LexState::Token(Token::Not),
     r"[0-9]+" => {
         if text.starts_with('0') && text.len() > 1 {
             LexState::Error(ErrorKind::IllegalIntegerConstant(text, ParseIntegerErr::LeadingZero))

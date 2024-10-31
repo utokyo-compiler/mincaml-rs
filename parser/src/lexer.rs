@@ -35,7 +35,6 @@ pub enum Token<'input> {
     Ident(&'input str),
     StringLiteral,
     ItemAttr,
-    Not,
     Hyphen,
     Plus,
     Ast,
