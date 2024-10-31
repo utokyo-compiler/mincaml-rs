@@ -141,13 +141,7 @@ If<AfterElse>: Expr<'ctx> = {
         => alloc.spanned(If(e1, e2, e3), (l, r)),
 }
 
-// Expression that does not contain `;`
-NoSemi: Expr<'ctx> = {
-    // if without semicolon.
-    If<NoSemi>,
-
-    ExprPrec6,
-}
+NoSemi = ExprPrec6;
 
 // Expression that does not start with let
 Semi: Expr<'ctx> = {
@@ -155,6 +149,9 @@ Semi: Expr<'ctx> = {
     // Looking ahead the semicolon after the second expression (e:ExprPrec9) in `Let` should trigger the shift action to OptionalSemi rule within `ExprPrec9` in `Let`,
     // not the reduce action here.
     If<Let>,
+
+    // if inside of if. continue.
+    If<Semi>,
 
     // optional semicolon
     <l:@L> <e1:NoSemi> <e2:OptionalSemi?> <r:@R> => match e2 {
