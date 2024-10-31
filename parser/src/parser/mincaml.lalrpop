@@ -12,7 +12,6 @@ extern {
     enum Token<'input> {
         "(" => Token::LPar,
         ")" => Token::RPar,
-        "not" => Token::Not,
         Bool => Token::Bool(<bool>),
         Int => Token::Int(<i32>),
         Float => Token::Float(<f32>),
