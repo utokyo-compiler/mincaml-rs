@@ -134,20 +134,10 @@ ExprPrec6: Expr<'ctx> = {
 
 ExprPrec7: Expr<'ctx> = {
     // if
-    <l:@L> "if" <e1:ExprPrec7> "then" <e2:ExprPrec7> "else" <e3:ExprPrec7> <r:@R>
+    <l:@L> "if" <e1:Expr> "then" <e2:ExprPrec7> "else" <e3:ExprPrec7> <r:@R>
         => alloc.spanned(If(e1, e2, e3), (l, r)),
 
     ExprPrec6,
-}
-
-ExprPrec8: Expr<'ctx> = {
-    // semicolon
-    <l:@L> <e1:ExprPrec7> ";" <e2:ExprPrec8> <r:@R> => alloc.spanned(
-        Then(e1, e2),
-        (l, r)
-    ),
-
-    ExprPrec7,
 }
 
 ExprPrec9: Expr<'ctx> = {
@@ -155,7 +145,13 @@ ExprPrec9: Expr<'ctx> = {
     <l:@L> "let" <binder:LetBinder> "in" <e:ExprPrec9> <r:@R>
         => alloc.spanned(Let(binder, e), (l, r)),
 
-    ExprPrec8,
+    // semicolon
+    <l:@L> <e1:ExprPrec7> ";" <e2:ExprPrec9> <r:@R> => alloc.spanned(
+        Then(e1, e2),
+        (l, r)
+    ),
+
+    ExprPrec7,
 }
 
 pub Expr = ExprPrec9;
