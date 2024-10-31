@@ -87,7 +87,7 @@ SimpleExpr: Expr<'ctx> = {
     <l:@L> <s:SimpleExpr> "." "(" <x:Expr> ")" <r:@R> => alloc.spanned(Get(s, x), (l, r)),
 }
 
-ExprPrec6: Expr<'ctx> = {
+ExprPrec5: Expr<'ctx> = {
     #[precedence(level="0")]
     SimpleExpr,
 
@@ -95,39 +95,39 @@ ExprPrec6: Expr<'ctx> = {
     #[precedence(level="1")]
     <l:@L> <e1:SimpleExpr> <e2:ActualArgs> <r:@R>
         => alloc.spanned(App(e1, e2), (l, r)),
-    <l:@L> "Array.make" <e1:SimpleExpr> <e2:ExprPrec6> <r:@R>
+    <l:@L> "Array.make" <e1:SimpleExpr> <e2:ExprPrec5> <r:@R>
         => alloc.spanned(ArrayMake(e1, e2), (l, r)),
 
     // -
     #[precedence(level="2")]
-    <l:@L> "-" <e1:ExprPrec6> <r:@R>
+    <l:@L> "-" <e1:ExprPrec5> <r:@R>
         => alloc.spanned(Unary(Neg, e1), (l, r)),
 
     // -.
-    <l:@L> "-." <e1:ExprPrec6> <r:@R>
+    <l:@L> "-." <e1:ExprPrec5> <r:@R>
         => alloc.spanned(Unary(FNeg, e1), (l, r)),
 
     // * *. /.
     #[precedence(level="3")]
     #[assoc(side="left")]
-    <l:@L> <e1:ExprPrec6> <op:FactorOp> <e2:ExprPrec6> <r:@R>
+    <l:@L> <e1:ExprPrec5> <op:FactorOp> <e2:ExprPrec5> <r:@R>
         => alloc.spanned(Binary(op, e1, e2), (l, r)),
 
     // + - +. -.
     #[precedence(level="4")]
     #[assoc(side="left")]
-    <l:@L> <e1:ExprPrec6> <op:TermOp> <e2:ExprPrec6> <r:@R>
+    <l:@L> <e1:ExprPrec5> <op:TermOp> <e2:ExprPrec5> <r:@R>
         => alloc.spanned(Binary(op, e1, e2), (l, r)),
 
     // = <> < > <= >=
     #[precedence(level="5")]
     #[assoc(side="left")]
-    <l:@L> <e1:ExprPrec6> <op:RelationBinOp> <e2:ExprPrec6> <r:@R>
+    <l:@L> <e1:ExprPrec5> <op:RelationBinOp> <e2:ExprPrec5> <r:@R>
         => alloc.spanned(Binary(op, e1, e2), (l, r)),
+}
 
-    // .() <-
-    #[precedence(level="6")]
-    <l:@L> <e1:SimpleExpr> "<-" <e2:ExprPrec6> <r:@R>
+ArraySet<AfterArrow>: Expr<'ctx> = {
+    <l:@L> <e1:SimpleExpr> "<-" <e2:AfterArrow> <r:@R>
         => alloc.spanned(Set(e1, e2), (l, r)),
 }
 
@@ -141,7 +141,7 @@ If<AfterElse>: Expr<'ctx> = {
         => alloc.spanned(If(e1, e2, e3), (l, r)),
 }
 
-NoSemi = ExprPrec6;
+NoSemi = ExprPrec5;
 
 // Expression that does not start with let
 Semi: Expr<'ctx> = {
@@ -152,6 +152,9 @@ Semi: Expr<'ctx> = {
 
     // if inside of if. continue.
     If<Semi>,
+
+    ArraySet<Let>,
+    ArraySet<Semi>,
 
     // optional semicolon
     <l:@L> <e1:NoSemi> <e2:OptionalSemi?> <r:@R> => match e2 {
