@@ -132,26 +132,53 @@ ExprPrec6: Expr<'ctx> = {
         => alloc.spanned(Set(e1, e2), (l, r)),
 }
 
-ExprPrec7: Expr<'ctx> = {
+// min-caml allows semicolon in then branch
+AfterThen = Expr;
+
+// Expression that starts with if
+If<AfterElse>: Expr<'ctx> = {
     // if
-    <l:@L> "if" <e1:Expr> "then" <e2:ExprPrec7> "else" <e3:ExprPrec7> <r:@R>
+    <l:@L> "if" <e1:Expr> "then" <e2:AfterThen> "else" <e3:AfterElse> <r:@R>
         => alloc.spanned(If(e1, e2, e3), (l, r)),
+}
+
+// Expression that does not contain `;`
+NoSemi: Expr<'ctx> = {
+    // if without semicolon.
+    If<NoSemi>,
 
     ExprPrec6,
 }
 
-ExprPrec9: Expr<'ctx> = {
+// Expression that does not start with let
+Semi: Expr<'ctx> = {
+    // if and let.
+    // Looking ahead the semicolon after the second expression (e:ExprPrec9) in `Let` should trigger the shift action to OptionalSemi rule within `ExprPrec9` in `Let`,
+    // not the reduce action here.
+    If<Let>,
+
+    // optional semicolon
+    <l:@L> <e1:NoSemi> <e2:OptionalSemi?> <r:@R> => match e2 {
+        Some(e2) => alloc.spanned(Then(e1, e2), (l, r)),
+        None => e1,
+    },
+}
+
+#[inline]
+OptionalSemi: Expr<'ctx> = {
+    ";" <e2:ExprPrec9> => e2,
+}
+
+// Expression that starts with let
+Let: Expr<'ctx> = {
     // let
     <l:@L> "let" <binder:LetBinder> "in" <e:ExprPrec9> <r:@R>
         => alloc.spanned(Let(binder, e), (l, r)),
+}
 
-    // semicolon
-    <l:@L> <e1:ExprPrec7> ";" <e2:ExprPrec9> <r:@R> => alloc.spanned(
-        Then(e1, e2),
-        (l, r)
-    ),
-
-    ExprPrec7,
+ExprPrec9: Expr<'ctx> = {
+    Let,
+    Semi,
 }
 
 pub Expr = ExprPrec9;
