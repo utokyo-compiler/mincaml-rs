@@ -88,7 +88,7 @@ SimpleExpr: Expr<'ctx> = {
     <l:@L> <s:SimpleExpr> "." "(" <x:Expr> ")" <r:@R> => alloc.spanned(Get(s, x), (l, r)),
 }
 
-pub Expr: Expr<'ctx> = {
+ExprPrec6: Expr<'ctx> = {
     #[precedence(level="0")]
     SimpleExpr,
 
@@ -96,61 +96,69 @@ pub Expr: Expr<'ctx> = {
     #[precedence(level="1")]
     <l:@L> <e1:SimpleExpr> <e2:ActualArgs> <r:@R>
         => alloc.spanned(App(e1, e2), (l, r)),
-    <l:@L> "Array.make" <e1:SimpleExpr> <e2:Expr> <r:@R>
+    <l:@L> "Array.make" <e1:SimpleExpr> <e2:ExprPrec6> <r:@R>
         => alloc.spanned(ArrayMake(e1, e2), (l, r)),
-    <l:@L> "not" <e1:SimpleExpr> <r:@R>
-        => alloc.spanned(Unary(Not, e1), (l, r)),
 
     // -
     #[precedence(level="2")]
-    <l:@L> "-" <e1:Expr> <r:@R>
+    <l:@L> "-" <e1:ExprPrec6> <r:@R>
         => alloc.spanned(Unary(Neg, e1), (l, r)),
 
     // -.
-    <l:@L> "-." <e1:Expr> <r:@R>
+    <l:@L> "-." <e1:ExprPrec6> <r:@R>
         => alloc.spanned(Unary(FNeg, e1), (l, r)),
 
     // * *. /.
     #[precedence(level="3")]
     #[assoc(side="left")]
-    <l:@L> <e1:Expr> <op:FactorOp> <e2:Expr> <r:@R>
+    <l:@L> <e1:ExprPrec6> <op:FactorOp> <e2:ExprPrec6> <r:@R>
         => alloc.spanned(Binary(op, e1, e2), (l, r)),
 
     // + - +. -.
     #[precedence(level="4")]
     #[assoc(side="left")]
-    <l:@L> <e1:Expr> <op:TermOp> <e2:Expr> <r:@R>
+    <l:@L> <e1:ExprPrec6> <op:TermOp> <e2:ExprPrec6> <r:@R>
         => alloc.spanned(Binary(op, e1, e2), (l, r)),
 
     // = <> < > <= >=
     #[precedence(level="5")]
     #[assoc(side="left")]
-    <l:@L> <e1:Expr> <op:RelationBinOp> <e2:Expr> <r:@R>
+    <l:@L> <e1:ExprPrec6> <op:RelationBinOp> <e2:ExprPrec6> <r:@R>
         => alloc.spanned(Binary(op, e1, e2), (l, r)),
 
     // .() <-
     #[precedence(level="6")]
-    <l:@L> <e1:SimpleExpr> "<-" <e2:Expr> <r:@R>
+    <l:@L> <e1:SimpleExpr> "<-" <e2:ExprPrec6> <r:@R>
         => alloc.spanned(Set(e1, e2), (l, r)),
+}
 
+ExprPrec7: Expr<'ctx> = {
     // if
-    #[precedence(level="7")]
-    <l:@L> "if" <e1:Expr> "then" <e2:Expr> "else" <e3:Expr> <r:@R>
+    <l:@L> "if" <e1:ExprPrec7> "then" <e2:ExprPrec7> "else" <e3:ExprPrec7> <r:@R>
         => alloc.spanned(If(e1, e2, e3), (l, r)),
 
+    ExprPrec6,
+}
+
+ExprPrec8: Expr<'ctx> = {
     // semicolon
-    #[precedence(level="8")]
-    #[assoc(side="right")]
-    <l:@L> <e1:Expr> ";" <e2:Expr> <r:@R> => alloc.spanned(
+    <l:@L> <e1:ExprPrec7> ";" <e2:ExprPrec8> <r:@R> => alloc.spanned(
         Then(e1, e2),
         (l, r)
     ),
 
-    // let
-    #[precedence(level="9")]
-    <l:@L> "let" <binder:LetBinder> "in" <e:Expr> <r:@R>
-        => alloc.spanned(Let(binder, e), (l, r)),
+    ExprPrec7,
 }
+
+ExprPrec9: Expr<'ctx> = {
+    // let
+    <l:@L> "let" <binder:LetBinder> "in" <e:ExprPrec9> <r:@R>
+        => alloc.spanned(Let(binder, e), (l, r)),
+
+    ExprPrec8,
+}
+
+pub Expr = ExprPrec9;
 
 LetBinder: LetBinder<'ctx> = {
     <x:SpannedIdent> "=" <val:Expr>
