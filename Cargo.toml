@@ -15,6 +15,8 @@ members = [
   "middleware",
   "codegen_wasm",
   "runtime",
+  "macros",
+  "errors",
 ]
 resolver = "2"
 
@@ -41,6 +43,9 @@ clap = { version = "4.5.18", features = ["derive"] }
 wasm-encoder = "0.217.0"
 wasmtime = "25.0.1"
 wasi-common = "25.0.1"
+annotate-snippets = "0.11.4"
+fluent-syntax = "0.11.1"
+fluent-bundle = "0.15.3"
 
 syntax = { path = "./syntax" }
 parser = { path = "./parser" }
@@ -55,3 +60,5 @@ ir_knorm_passes = { path = "./ir_knorm_passes" }
 data_structure = { path = "./data_structure" }
 middleware = { path = "./middleware" }
 codegen_wasm = { path = "./codegen_wasm" }
+macros.path = "./macros"
+errors.path = "./errors"
