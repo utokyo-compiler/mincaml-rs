@@ -1,0 +1,12 @@
+[package]
+name = "errors"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+sourcemap.workspace = true
+data_structure.workspace = true
+fluent-bundle.workspace = true
+annotate-snippets.workspace = true
