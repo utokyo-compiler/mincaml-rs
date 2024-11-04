@@ -40,6 +40,25 @@ impl Span {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct MultiSpan {
+    pub spans: Vec<Span>,
+}
+
+impl MultiSpan {
+    pub fn new() -> Self {
+        Self {
+            spans: Default::default(),
+        }
+    }
+}
+
+impl Default for MultiSpan {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SpanOrigin {
     UserDefined(Span),
