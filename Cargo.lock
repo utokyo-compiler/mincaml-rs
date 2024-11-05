@@ -1184,6 +1184,7 @@ dependencies = [
  "middleware",
  "parser",
  "serde",
+ "session",
  "sourcemap",
  "syntax",
  "toml",
@@ -1223,6 +1224,7 @@ dependencies = [
  "ir_typed_ast",
  "parser",
  "rustc-hash 2.0.0",
+ "session",
  "sourcemap",
  "syntax",
  "ty",
@@ -1712,6 +1714,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eb5b1b31579f3811bf615c144393417496f152e12ac8b7663bf664f4a815306d"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "session"
+version = "0.2.1"
+dependencies = [
+ "sourcemap",
 ]
 
 [[package]]

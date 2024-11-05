@@ -22,3 +22,4 @@ ir_closure.workspace = true
 codegen_wasm.workspace = true
 ir_asm_virtual.workspace = true
 middleware.workspace = true
+session.workspace = true
