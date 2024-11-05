@@ -1,17 +1,17 @@
 fn parse_input(input: &str) {
-    let input = middleware::session::InputFile::String {
+    let input = sourcemap::InputFile::String {
         content: input.to_string(),
     };
-    let mut ml_input = middleware::session::MultipleInput::new();
+    let mut ml_input = sourcemap::MultipleInput::new();
     ml_input.add_file(input);
-    let mli_input = middleware::session::MultipleInput::default();
+    let mli_input = sourcemap::MultipleInput::default();
 
     let arena = middleware::Arena::default();
-    let session = middleware::session::Session::new(
+    let session = session::Session::new(
         ml_input,
         mli_input,
         None,
-        middleware::session::CompilerOption::default(),
+        session::CompilerOption::default(),
     );
     let global_ctxt = middleware::GlobalContext::new(&arena, session);
 
@@ -25,19 +25,19 @@ fn test_parse_input() {
 }
 
 fn parse_input_mli(input: &str) {
-    let input = middleware::session::InputFile::String {
+    let input = sourcemap::InputFile::String {
         content: input.to_string(),
     };
-    let ml_input = middleware::session::MultipleInput::new();
-    let mut mli_input = middleware::session::MultipleInput::default();
+    let ml_input = sourcemap::MultipleInput::new();
+    let mut mli_input = sourcemap::MultipleInput::default();
     mli_input.add_file(input);
 
     let arena = middleware::Arena::default();
-    let session = middleware::session::Session::new(
+    let session = session::Session::new(
         ml_input,
         mli_input,
         None,
-        middleware::session::CompilerOption::default(),
+        session::CompilerOption::default(),
     );
     let global_ctxt = middleware::GlobalContext::new(&arena, session);
 

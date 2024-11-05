@@ -54,15 +54,15 @@ fn main() {
         .output
         .unwrap_or_else(|| exit_missing_args("output file is required"));
 
-    let mut ml_input = middleware::session::MultipleInput::new();
-    let mut mli_input = middleware::session::MultipleInput::new();
+    let mut ml_input = sourcemap::MultipleInput::new();
+    let mut mli_input = sourcemap::MultipleInput::new();
     for path in input_pathes {
         match path.extension().and_then(|ext| ext.to_str()) {
-            Some("ml") => ml_input.add_file(middleware::session::InputFile::File {
+            Some("ml") => ml_input.add_file(sourcemap::InputFile::File {
                 content: fs::read_to_string(&path).unwrap(),
                 path,
             }),
-            Some("mli") => mli_input.add_file(middleware::session::InputFile::File {
+            Some("mli") => mli_input.add_file(sourcemap::InputFile::File {
                 content: fs::read_to_string(&path).unwrap(),
                 path,
             }),
@@ -70,11 +70,10 @@ fn main() {
         }
     }
 
-    let compiler_option = middleware::session::CompilerOption {
+    let compiler_option = session::CompilerOption {
         inline_size_limit: config.inline_size_limit,
     };
-    let session =
-        middleware::session::Session::new(ml_input, mli_input, Some(output_path), compiler_option);
+    let session = session::Session::new(ml_input, mli_input, Some(output_path), compiler_option);
 
     compiler::run(session);
 }

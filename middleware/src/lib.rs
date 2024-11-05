@@ -1,5 +1,3 @@
-pub mod session;
-
 pub use data_structure::{FxHashMap, FxHashSet};
 
 use data_structure::arena::TypedArena;

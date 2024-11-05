@@ -18,6 +18,7 @@ members = [
   "runtime",
   "macros",
   "errors",
+  "session",
 ]
 resolver = "2"
 
@@ -65,3 +66,4 @@ middleware = { path = "./middleware" }
 codegen_wasm = { path = "./codegen_wasm" }
 macros.path = "./macros"
 errors.path = "./errors"
+session.path = "./session"

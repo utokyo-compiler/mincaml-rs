@@ -1,6 +1,7 @@
 use std::io::Write;
 
-use middleware::{session::Session, Arena, GlobalContext};
+use middleware::{Arena, GlobalContext};
+use session::Session;
 
 pub fn run(session: Session) {
     let arena = Arena::default();

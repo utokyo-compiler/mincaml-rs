@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 rustc-hash.workspace = true
 data_structure.workspace = true
+session.workspace = true
 parser.workspace = true
 sourcemap.workspace = true
 syntax.workspace = true

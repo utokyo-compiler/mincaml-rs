@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::path::PathBuf;
 
 pub type LocSize = usize;
 
@@ -106,6 +107,61 @@ impl<T> Spanned<T> {
         Self {
             node,
             span: SpanOrigin::UserDefined(Span { start, end }),
+        }
+    }
+}
+
+pub struct MultipleInput {
+    files: Vec<InputFile>,
+    offsets: Vec<usize>,
+    offset_accumulated: usize,
+}
+
+impl MultipleInput {
+    pub fn new() -> Self {
+        Self {
+            files: Vec::new(),
+            offsets: Vec::new(),
+            offset_accumulated: 0,
+        }
+    }
+
+    pub fn add_file(&mut self, file: InputFile) {
+        self.offsets.push(self.offset_accumulated);
+        self.offset_accumulated += file.content().chars().count();
+        self.files.push(file);
+    }
+
+    pub fn concatenated_string(&self) -> String {
+        let vec: Vec<_> = self.files.iter().map(|file| file.content()).collect();
+        vec.concat()
+    }
+
+    pub fn get(&self, loc: Loc) -> Option<(&'_ InputFile, Loc)> {
+        let idx = self
+            .offsets
+            .binary_search(&loc.char_pos)
+            .unwrap_or_else(|idx| idx - 1);
+        Some((&self.files[idx], Loc::new(loc.char_pos - self.offsets[idx])))
+    }
+}
+
+impl Default for MultipleInput {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub enum InputFile {
+    File { path: PathBuf, content: String },
+    String { content: String },
+}
+
+impl InputFile {
+    pub fn content(&self) -> &str {
+        match self {
+            InputFile::File { content, .. } => content,
+            InputFile::String { content } => content,
         }
     }
 }
