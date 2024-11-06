@@ -50,6 +50,9 @@ fluent-syntax = "0.11.1"
 fluent-bundle = "0.15.3"
 anstream = "0.6.18"
 indexmap = { version = "2.6.0", features = ["std"] }
+proc-macro2 = "1.0.89"
+quote = "1.0.37"
+syn = "2.0.87"
 
 syntax = { path = "./syntax" }
 parser = { path = "./parser" }
