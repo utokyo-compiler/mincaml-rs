@@ -1,11 +1,11 @@
 use crate::{DiagInner, DiagnosticEmitter};
 
-pub struct DiagContext {
-    emitter: DiagnosticEmitter,
+pub struct DiagContext<'dcx> {
+    emitter: DiagnosticEmitter<'dcx>,
 }
 
-impl DiagContext {
-    pub fn new(emitter: DiagnosticEmitter) -> Self {
+impl<'gcx> DiagContext<'gcx> {
+    pub fn new(emitter: DiagnosticEmitter<'gcx>) -> Self {
         Self { emitter }
     }
 
