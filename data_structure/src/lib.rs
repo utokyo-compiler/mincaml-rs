@@ -8,7 +8,11 @@ pub mod set_like_vec;
 
 pub use bitvec::array::BitArray;
 pub use bitvec::vec::BitVec;
-pub use rustc_hash::FxHashMap;
-pub use rustc_hash::FxHashSet;
+pub use rustc_hash::{FxHashMap, FxHashSet, FxHasher};
 
 pub use set_like_vec::SetLikeVec;
+
+use std::hash::BuildHasherDefault;
+
+pub type FxIndexMap<K, V> = indexmap::IndexMap<K, V, BuildHasherDefault<FxHasher>>;
+pub type FxIndexSet<V> = indexmap::IndexSet<V, BuildHasherDefault<FxHasher>>;
