@@ -1,5 +1,9 @@
-use std::fmt::Display;
-use std::path::PathBuf;
+use std::{fmt::Display, borrow::Cow, path::PathBuf};
+
+use data_structure::index::{
+    vec::{Idx, IndexVec},
+    Indexable,
+};
 
 pub type LocSize = usize;
 
@@ -30,6 +34,10 @@ impl Span {
     pub fn new(start: Loc, end: Loc) -> Self {
         Self { start, end }
     }
+
+    pub fn into_range(self) -> core::ops::Range<usize> {
+        self.start.char_pos..self.end.char_pos
+    }
 }
 
 impl Span {
@@ -38,25 +46,6 @@ impl Span {
         LocSize: std::ops::Add + Copy,
     {
         self.start.char_pos..self.end.char_pos
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct MultiSpan {
-    pub spans: Vec<Span>,
-}
-
-impl MultiSpan {
-    pub fn new() -> Self {
-        Self {
-            spans: Default::default(),
-        }
-    }
-}
-
-impl Default for MultiSpan {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -112,15 +101,30 @@ impl<T> Spanned<T> {
 }
 
 pub struct MultipleInput {
-    files: Vec<InputFile>,
+    files: IndexVec<InputIndex, InputFile>,
     offsets: Vec<usize>,
     offset_accumulated: usize,
 }
 
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+pub struct InputIndex(usize);
+
+impl Idx for InputIndex {
+    fn new(idx: usize) -> Self {
+        Self(idx)
+    }
+
+    fn index(self) -> usize {
+        self.0
+    }
+}
+
+impl Indexable<InputIndex> for InputFile {}
+
 impl MultipleInput {
     pub fn new() -> Self {
         Self {
-            files: Vec::new(),
+            files: IndexVec::new(),
             offsets: Vec::new(),
             offset_accumulated: 0,
         }
@@ -133,17 +137,35 @@ impl MultipleInput {
     }
 
     pub fn concatenated_string(&self) -> String {
-        let vec: Vec<_> = self.files.iter().map(|file| file.content()).collect();
-        vec.concat()
+        self.files.iter().map(InputFile::content).collect()
     }
 
-    pub fn get(&self, loc: Loc) -> Option<(&'_ InputFile, Loc)> {
-        let idx = self
-            .offsets
-            .binary_search(&loc.char_pos)
-            .unwrap_or_else(|idx| idx - 1);
-        Some((&self.files[idx], Loc::new(loc.char_pos - self.offsets[idx])))
+    fn get(&self, loc: Loc) -> InputIndex {
+        InputIndex(
+            self.offsets
+                .binary_search(&loc.char_pos)
+                .unwrap_or_else(|idx| idx - 1),
+        )
     }
+
+    pub fn get_span_index(&self, span: Span) -> Option<InputIndex> {
+        let start_index = self.get(span.start);
+        let end_index = self.get(span.end);
+        (start_index == end_index).then_some(start_index)
+    }
+
+    pub fn files(&self) -> &IndexVec<InputIndex, InputFile> {
+        &self.files
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub struct LocalLoc(pub Loc);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct LocalSpan {
+    pub start: LocalLoc,
+    pub end: LocalLoc,
 }
 
 impl Default for MultipleInput {
@@ -162,6 +184,12 @@ impl InputFile {
         match self {
             InputFile::File { content, .. } => content,
             InputFile::String { content } => content,
+        }
+    }
+    pub fn origin_string(&self) -> Cow<'_, str> {
+        match self {
+            InputFile::File { path, .. } => path.to_string_lossy(),
+            InputFile::String { .. } => Cow::Borrowed("<input>"),
         }
     }
 }

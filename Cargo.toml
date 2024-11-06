@@ -45,10 +45,11 @@ clap = { version = "4.5.18", features = ["derive"] }
 wasm-encoder = "0.217.0"
 wasmtime = "25.0.1"
 wasi-common = "25.0.1"
-indexmap = "2.6.0"
 annotate-snippets = "0.11.4"
 fluent-syntax = "0.11.1"
 fluent-bundle = "0.15.3"
+anstream = "0.6.18"
+indexmap = { version = "2.6.0", features = ["std"] }
 
 syntax = { path = "./syntax" }
 parser = { path = "./parser" }

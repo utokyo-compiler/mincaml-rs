@@ -9,5 +9,4 @@ pub use bitvec::array::BitArray;
 pub use bitvec::vec::BitVec;
 pub type FxIndexSet<T> = indexmap::IndexSet<T, rustc_hash::FxBuildHasher>;
 pub type FxIndexMap<K, V> = indexmap::IndexMap<K, V, rustc_hash::FxBuildHasher>;
-pub use rustc_hash::FxHashMap;
-pub use rustc_hash::FxHashSet;
+pub use rustc_hash::{FxHashMap, FxHashSet};

@@ -10,3 +10,4 @@ sourcemap.workspace = true
 data_structure.workspace = true
 fluent-bundle.workspace = true
 annotate-snippets.workspace = true
+anstream.workspace = true
