@@ -1,6 +1,8 @@
 #![feature(negative_impls)]
 #![feature(error_reporter)]
 
+use macros::counterpart;
+
 mod annotate_snippets_emitter;
 mod context;
 mod translation;
@@ -25,6 +27,7 @@ pub trait Diagnostic {
     fn into_diag<'dcx>(self, dcx: &'dcx context::DiagContext<'dcx>, level: Level) -> Diag<'dcx>;
 }
 
+#[counterpart(rustc_errors::Diag)]
 #[must_use]
 pub struct Diag<'dcx> {
     pub dcx: &'dcx context::DiagContext<'dcx>,
