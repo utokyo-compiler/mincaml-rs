@@ -18,6 +18,7 @@ members = [
   "macros",
   "errors",
   "session",
+  "driver",
 ]
 resolver = "2"
 
@@ -70,3 +71,4 @@ codegen_wasm = { path = "./codegen_wasm" }
 macros.path = "./macros"
 errors.path = "./errors"
 session.path = "./session"
+driver.path = "./driver"

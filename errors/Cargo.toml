@@ -12,3 +12,4 @@ fluent-bundle.workspace = true
 annotate-snippets.workspace = true
 anstream.workspace = true
 macros.workspace = true
+unic-langid.workspace = true

@@ -10,16 +10,4 @@ clap.workspace = true
 serde.workspace = true
 toml.workspace = true
 
-data_structure.workspace = true
-parser.workspace = true
-sourcemap.workspace = true
-syntax.workspace = true
-ty.workspace = true
-typing.workspace = true
-ir_typed_ast.workspace = true
-ir_knorm.workspace = true
-ir_closure.workspace = true
-codegen_wasm.workspace = true
-ir_asm_virtual.workspace = true
-middleware.workspace = true
-session.workspace = true
+driver.workspace = true

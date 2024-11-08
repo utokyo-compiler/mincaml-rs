@@ -3,7 +3,13 @@ use std::io::Write;
 use middleware::{Arena, GlobalContext};
 use session::Session;
 
-pub fn run(session: Session) {
+macros::fluent_messages! { "../messages.ftl" }
+
+pub static DEFAULT_LOCALE_RESOURCES: &[&str] = &[
+    crate::DEFAULT_LOCALE_RESOURCE,
+];
+
+pub fn run_compiler(session: Session) {
     let arena = Arena::default();
     let global_ctxt = GlobalContext::new(&arena, session);
 
