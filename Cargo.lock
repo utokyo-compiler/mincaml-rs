@@ -653,6 +653,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "driver"
+version = "0.2.0"
+dependencies = [
+ "codegen_wasm",
+ "errors",
+ "ir_asm_virtual",
+ "ir_closure",
+ "ir_knorm",
+ "ir_typed_ast",
+ "macros",
+ "middleware",
+ "parser",
+ "session",
+ "sourcemap",
+ "syntax",
+ "ty",
+ "typing",
+]
+
+[[package]]
 name = "either"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -714,6 +734,7 @@ dependencies = [
  "fluent-bundle",
  "macros",
  "sourcemap",
+ "unic-langid",
 ]
 
 [[package]]
@@ -1186,21 +1207,9 @@ name = "main"
 version = "0.2.1"
 dependencies = [
  "clap",
- "codegen_wasm",
- "data_structure",
- "ir_asm_virtual",
- "ir_closure",
- "ir_knorm",
- "ir_typed_ast",
- "middleware",
- "parser",
+ "driver",
  "serde",
- "session",
- "sourcemap",
- "syntax",
  "toml",
- "ty",
- "typing",
 ]
 
 [[package]]
@@ -1229,6 +1238,7 @@ name = "middleware"
 version = "0.2.1"
 dependencies = [
  "data_structure",
+ "errors",
  "ir_asm_virtual",
  "ir_closure",
  "ir_knorm",

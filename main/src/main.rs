@@ -3,8 +3,6 @@ use std::{fs, path::PathBuf};
 use clap::Parser;
 use serde::Deserialize;
 
-mod compiler;
-
 #[derive(Parser, Debug)]
 struct CommandLine {
     #[clap(flatten)]
@@ -47,7 +45,7 @@ fn main() {
         Config::default()
     };
     let config = command_line.command_line.merge(config);
-    let input_pathes = config
+    let input_paths = config
         .input
         .unwrap_or_else(|| exit_missing_args("input files are required"));
     let output_path = config
@@ -56,7 +54,7 @@ fn main() {
 
     let mut ml_input = sourcemap::MultipleInput::new();
     let mut mli_input = sourcemap::MultipleInput::new();
-    for path in input_pathes {
+    for path in input_paths {
         match path.extension().and_then(|ext| ext.to_str()) {
             Some("ml") => ml_input.add_file(sourcemap::InputFile::File {
                 content: fs::read_to_string(&path).unwrap(),
@@ -75,7 +73,7 @@ fn main() {
     };
     let session = session::Session::new(ml_input, mli_input, Some(output_path), compiler_option);
 
-    compiler::run(session);
+    driver::run_compiler(session);
 }
 
 fn exit_missing_args(message: &'static str) -> ! {
