@@ -1,4 +1,7 @@
 fn parse_input(input: &str) {
+    let early_dcx = errors::EarlyDiagContext::new(errors::EarlyDiagnosticEmitter::new(
+        errors::new_fluent_bundle(driver::DEFAULT_LOCALE_RESOURCES.to_vec()),
+    ));
     let input = sourcemap::InputFile::String {
         content: input.to_string(),
     };
@@ -13,7 +16,7 @@ fn parse_input(input: &str) {
         None,
         session::CompilerOption::default(),
     );
-    let global_ctxt = middleware::GlobalContext::new(&arena, session);
+    let global_ctxt = middleware::GlobalContext::new(&arena, &session, early_dcx);
 
     let input = global_ctxt.session().input.concatenated_string();
     let _parsed_tree = parser::lex_and_parse(global_ctxt.parsing_context(), &input).unwrap();
@@ -25,6 +28,9 @@ fn test_parse_input() {
 }
 
 fn parse_input_mli(input: &str) {
+    let early_dcx = errors::EarlyDiagContext::new(errors::EarlyDiagnosticEmitter::new(
+        errors::new_fluent_bundle(driver::DEFAULT_LOCALE_RESOURCES.to_vec()),
+    ));
     let input = sourcemap::InputFile::String {
         content: input.to_string(),
     };
@@ -39,7 +45,7 @@ fn parse_input_mli(input: &str) {
         None,
         session::CompilerOption::default(),
     );
-    let global_ctxt = middleware::GlobalContext::new(&arena, session);
+    let global_ctxt = middleware::GlobalContext::new(&arena, &session, early_dcx);
 
     let input = global_ctxt.session().input_interface.concatenated_string();
     let _parsed_tree = parser::lex_and_parse_mli(global_ctxt.parsing_context(), &input).unwrap();

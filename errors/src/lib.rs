@@ -1,15 +1,25 @@
 #![feature(negative_impls)]
 #![feature(error_reporter)]
+#![feature(trait_alias)]
+#![feature(exitcode_exit_method)]
 
+use context::{Early, Late};
 use macros::counterpart;
 
 mod annotate_snippets_emitter;
 mod context;
+mod diagnostic_impls;
 mod translation;
 
-pub use context::DiagContext;
+#[counterpart(rustc_session::session::EarlyDiagCtxt)]
+pub type EarlyDiagContext = context::DiagContext<Early<'static>>;
+#[counterpart(rustc_errors::DiagCtxt)]
+pub type DiagContext<'dcx> = context::DiagContext<Late<'dcx>>;
 
-pub(crate) type DiagnosticEmitter<'dcx> = annotate_snippets_emitter::AnnotateSnippetEmitter<'dcx>;
+pub(crate) type SelectedEmitter<T> = annotate_snippets_emitter::AnnotateSnippetEmitter<T>;
+
+pub type EarlyDiagnosticEmitter = annotate_snippets_emitter::AnnotateSnippetEmitter<Early<'static>>;
+pub type DiagnosticEmitter<'dcx> = annotate_snippets_emitter::AnnotateSnippetEmitter<Late<'dcx>>;
 
 pub type FluentBundle = fluent_bundle::FluentBundle<fluent_bundle::FluentResource>;
 pub type FluentIdentifier = Cow<'static, str>;
@@ -23,25 +33,35 @@ use data_structure::{FxHashMap, FxHashSet};
 use fluent_bundle::FluentValue;
 use sourcemap::Span;
 
+#[counterpart(rustc_errors::diagnostic::Diagnostic)]
 pub trait Diagnostic {
-    fn into_diag<'dcx>(self, dcx: &'dcx context::DiagContext<'dcx>, level: Level) -> Diag<'dcx>;
+    fn into_diag<'dcx>(self, dcx: &'dcx DiagContext<'dcx>, level: Level) -> Diag<'dcx>;
 }
 
 #[counterpart(rustc_errors::Diag)]
 #[must_use]
 pub struct Diag<'dcx> {
-    pub dcx: &'dcx context::DiagContext<'dcx>,
+    pub dcx: &'dcx DiagContext<'dcx>,
 
     /// Why the `Option`? It is always `Some` until the `Diag` is consumed via
     /// `emit`, `cancel`, etc. At that point it is consumed and replaced with
     /// `None`. Then `drop` checks that it is `None`; if not, it panics because
     /// a diagnostic was built but not used.
-    diag: Option<DiagInner<'dcx>>,
+    ///
+    /// Why the Box? `DiagInner` is a large type, and `Diag` is often used as a
+    /// return value, especially within the frequently-used `PResult` type. In
+    /// theory, return value optimization (RVO) should avoid unnecessary
+    /// copying. In practice, it does not (at the time of writing).
+    diag: Option<Box<DiagInner<'dcx>>>,
 }
 
 impl<'dcx> Diag<'dcx> {
     pub fn emit(mut self) {
-        self.dcx.emit_diagnostic(self.diag.take().unwrap());
+        self.dcx.emit_diagnostic(*self.diag.take().unwrap());
+    }
+
+    pub fn cancel(mut self) {
+        self.diag.take();
     }
 }
 
@@ -72,7 +92,54 @@ impl Drop for Diag<'_> {
                 Level::Bug,
                 DiagMessage::from("the following error was constructed but not emitted"),
             ));
-            self.dcx.emit_diagnostic(diag);
+            self.dcx.emit_diagnostic(*diag);
+            panic!("error was constructed but not emitted");
+        }
+    }
+}
+
+/// `Early` version of [`Diag`].
+#[must_use]
+pub struct EarlyDiag<'dcx> {
+    pub early_dcx: &'dcx EarlyDiagContext,
+    diag: Option<Box<DiagInner<'dcx>>>,
+}
+
+impl<'dcx> EarlyDiag<'dcx> {
+    pub fn emit(mut self) {
+        self.early_dcx
+            .early_emit_diagnostic(*self.diag.take().unwrap());
+    }
+
+    pub fn cancel(mut self) {
+        self.diag.take();
+    }
+}
+
+impl !Clone for EarlyDiag<'_> {}
+
+impl<'dcx> Deref for EarlyDiag<'dcx> {
+    type Target = DiagInner<'dcx>;
+
+    fn deref(&self) -> &DiagInner<'dcx> {
+        self.diag.as_ref().unwrap()
+    }
+}
+
+impl<'dcx> DerefMut for EarlyDiag<'dcx> {
+    fn deref_mut(&mut self) -> &mut DiagInner<'dcx> {
+        self.diag.as_mut().unwrap()
+    }
+}
+
+impl Drop for EarlyDiag<'_> {
+    fn drop(&mut self) {
+        if let Some(diag) = self.diag.take() {
+            self.early_dcx.early_emit_diagnostic(DiagInner::new(
+                Level::Bug,
+                DiagMessage::from("the following error was constructed but not emitted"),
+            ));
+            self.early_dcx.early_emit_diagnostic(*diag);
             panic!("error was constructed but not emitted");
         }
     }
@@ -121,6 +188,8 @@ impl<'dcx> DiagContent<'dcx> {
 pub enum Level {
     Error,
     Info,
+    Note,
+    Help,
     Bug,
 }
 
@@ -158,6 +227,30 @@ impl<'dcx> DiagMessage<'dcx> {
         DiagMessage::FluentIdentifier {
             identifier: identifier.into(),
             attribute: Some(attribute.into()),
+        }
+    }
+
+    /// Given a `SubdiagMessage` which may contain a Fluent attribute, create a new
+    /// `DiagMessage` that combines that attribute with the Fluent identifier of `self`.
+    ///
+    /// - If the `SubdiagMessage` is non-translatable then return the message as a `DiagMessage`.
+    /// - If `self` is non-translatable then return `self`'s message.
+    pub fn with_subdiagnostic_message(&self, sub: SubdiagMessage<'dcx>) -> Self {
+        let attr = match sub {
+            SubdiagMessage::Str(s) => return DiagMessage::Str(s),
+            SubdiagMessage::Translated(s) => return DiagMessage::Translated(s),
+            SubdiagMessage::FluentIdentifier(id) => {
+                return DiagMessage::identifier(id);
+            }
+            SubdiagMessage::FluentAttr(attr) => attr,
+        };
+
+        match self {
+            DiagMessage::Str(s) => DiagMessage::Str(s.clone()),
+            DiagMessage::Translated(s) => DiagMessage::Translated(s.clone()),
+            DiagMessage::FluentIdentifier { identifier, .. } => {
+                DiagMessage::attribute(identifier.clone(), attr)
+            }
         }
     }
 }
@@ -320,6 +413,22 @@ impl<'bundle> MultiSpan<'bundle> {
     }
 }
 
+pub fn new_fluent_bundle(resources: Vec<&'static str>) -> FluentBundle {
+    use unic_langid::langid;
+    let mut fluent_bundle = FluentBundle::new(vec![langid!("en-US")]);
+
+    // See comment in `fluent_bundle`.
+    fluent_bundle.set_use_isolating(false);
+
+    for resource in resources {
+        let resource = fluent_bundle::FluentResource::try_new(resource.to_string())
+            .expect("failed to parse fallback fluent resource");
+        fluent_bundle.add_resource_overriding(resource);
+    }
+
+    fluent_bundle
+}
+
 pub type DiagArg<'a> = (&'a DiagArgName, &'a DiagArgValue);
 pub type DiagArgMap = FxHashMap<DiagArgName, DiagArgValue>;
 
@@ -401,7 +510,26 @@ macro_rules! with_fn {
     };
 }
 
+#[counterpart(rustc_errors::diagnostic::Diag)]
 impl<'dcx> Diag<'dcx> {
+    #[track_caller]
+    pub fn new(
+        dcx: &'dcx DiagContext<'dcx>,
+        level: Level,
+        message: impl Into<DiagMessage<'dcx>>,
+    ) -> Self {
+        Self::new_diagnostic(dcx, DiagInner::new(level, message))
+    }
+
+    /// Creates a new `Diag` with an already constructed diagnostic.
+    #[track_caller]
+    pub(crate) fn new_diagnostic(dcx: &'dcx DiagContext<'dcx>, diag: DiagInner<'dcx>) -> Self {
+        Self {
+            dcx,
+            diag: Some(Box::new(diag)),
+        }
+    }
+
     with_fn! { with_arg,
     /// Add an argument.
     pub fn arg(&mut self, name: impl Into<DiagArgName>, arg: impl IntoDiagArg) -> &mut Self {
@@ -410,12 +538,65 @@ impl<'dcx> Diag<'dcx> {
     } }
 }
 
+pub struct DiagArgsMacro(pub Vec<(&'static str, DiagArgValue)>);
+
+impl IntoIterator for DiagArgsMacro {
+    type Item = (&'static str, DiagArgValue);
+
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        todo!()
+    }
+}
+
+impl<'dcx> EarlyDiag<'dcx> {
+    #[track_caller]
+    pub fn new(
+        early_dcx: &'dcx EarlyDiagContext,
+        level: Level,
+        message: impl Into<DiagMessage<'dcx>>,
+    ) -> Self {
+        Self::new_diagnostic(early_dcx, DiagInner::new(level, message))
+    }
+
+    /// Creates a new `EarlyDiag` with an already constructed diagnostic.
+    #[track_caller]
+    pub(crate) fn new_diagnostic(early_dcx: &'dcx EarlyDiagContext, diag: DiagInner<'dcx>) -> Self {
+        Self {
+            early_dcx,
+            diag: Some(Box::new(diag)),
+        }
+    }
+
+    with_fn! { with_arg,
+    /// Add an argument.
+    pub fn arg(&mut self, name: impl Into<DiagArgName>, arg: impl IntoDiagArg) -> &mut Self {
+        self.deref_mut().arg(name, arg);
+        self
+    } }
+
+    with_fn! { with_note,
+    /// Add a note attached to this diagnostic.
+    pub fn note(&mut self, msg: impl Into<SubdiagMessage<'dcx>>) -> &mut Self {
+        self.sub(Level::Note, msg, MultiSpan::new());
+        self
+    } }
+
+    with_fn! { with_help,
+    /// Add a help attached to this diagnostic.
+    pub fn help(&mut self, msg: impl Into<SubdiagMessage<'dcx>>) -> &mut Self {
+        self.sub(Level::Help, msg, MultiSpan::new());
+        self
+    } }
+}
+
 impl<'dcx> DiagInner<'dcx> {
-    pub fn new(level: Level, message: impl Into<DiagMessage<'dcx>>) -> Self {
+    pub(crate) fn new(level: Level, message: impl Into<DiagMessage<'dcx>>) -> Self {
         Self::new_with_messages(level, vec![message.into()])
     }
 
-    pub fn new_with_messages(level: Level, messages: Vec<DiagMessage<'dcx>>) -> Self {
+    pub(crate) fn new_with_messages(level: Level, messages: Vec<DiagMessage<'dcx>>) -> Self {
         Self {
             args: Default::default(),
             content: DiagContent {
@@ -429,5 +610,31 @@ impl<'dcx> DiagInner<'dcx> {
 
     pub(crate) fn arg(&mut self, name: impl Into<DiagArgName>, arg: impl IntoDiagArg) {
         self.args.insert(name.into(), arg.into_diag_arg());
+    }
+
+    pub(crate) fn sub(
+        &mut self,
+        level: Level,
+        message: impl Into<SubdiagMessage<'dcx>>,
+        span: MultiSpan<'dcx>,
+    ) {
+        let sub = DiagContent {
+            level,
+            messages: vec![self.subdiagnostic_message_to_diagnostic_message(message)],
+            span,
+        };
+        self.children.push(sub);
+    }
+
+    pub(crate) fn subdiagnostic_message_to_diagnostic_message(
+        &self,
+        attr: impl Into<SubdiagMessage<'dcx>>,
+    ) -> DiagMessage<'dcx> {
+        let msg = self
+            .content
+            .messages
+            .first()
+            .expect("diagnostic with no messages");
+        msg.with_subdiagnostic_message(attr.into())
     }
 }

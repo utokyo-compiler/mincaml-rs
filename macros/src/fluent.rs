@@ -251,9 +251,10 @@ pub(crate) fn fluent_messages(input: proc_macro::TokenStream) -> proc_macro::Tok
             constants.extend(quote! {
                 #[doc = #docstr]
                 pub const #snake_name: errors::DiagMessage =
-                    errors::DiagMessage::identifier(
-                        std::borrow::Cow::Borrowed(#name),
-                    );
+                    errors::DiagMessage::FluentIdentifier{
+                        identifier: std::borrow::Cow::Borrowed(#name),
+                        attribute: None,
+                    };
             });
 
             for Attribute {
