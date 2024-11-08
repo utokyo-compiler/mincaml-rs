@@ -1,6 +1,7 @@
 pub use data_structure::{FxHashMap, FxHashSet};
 
 use data_structure::arena::TypedArena;
+use errors::{DiagContext, EarlyDiagContext};
 use session::Session;
 use sourcemap::Spanned;
 use ty::{context::CommonTypes, TyKind};
@@ -27,11 +28,16 @@ pub struct GlobalContext<'ctx> {
     asm_virtual_context: ir_asm_virtual::Context<'ctx>,
     typed_interface: Mli<'ctx>,
     pub common_types: CommonTypes<'ctx>,
-    session: Session,
+    session: &'ctx Session,
+    dcx: DiagContext<'ctx>,
 }
 
 impl<'ctx> GlobalContext<'ctx> {
-    pub fn new(arena: &'ctx Arena<'ctx>, session: Session) -> Self {
+    pub fn new(
+        arena: &'ctx Arena<'ctx>,
+        session: &'ctx Session,
+        early_dcx: EarlyDiagContext,
+    ) -> Self {
         let parsing_context = parser::Context::new(&arena.ident, &arena.expr);
         let typing_context =
             typing::Context::new(&arena.type_, &arena.typed_ident, &arena.typed_expr);
@@ -48,6 +54,7 @@ impl<'ctx> GlobalContext<'ctx> {
             closure_context,
             asm_virtual_context,
             session,
+            dcx: DiagContext::from_early(early_dcx, &session.input),
         }
     }
 
@@ -72,7 +79,11 @@ impl<'ctx> GlobalContext<'ctx> {
     }
 
     pub fn session(&self) -> &Session {
-        &self.session
+        self.session
+    }
+
+    pub fn dcx(&self) -> &DiagContext<'ctx> {
+        &self.dcx
     }
 
     pub fn typed_interface(&self) -> &Mli<'ctx> {

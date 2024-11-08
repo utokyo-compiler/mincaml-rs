@@ -1,6 +1,7 @@
-use std::{fs, path::PathBuf};
+use std::{fs, path::PathBuf, process::ExitCode};
 
 use clap::Parser;
+use driver::IntoArgs;
 use serde::Deserialize;
 
 #[derive(Parser, Debug)]
@@ -35,7 +36,17 @@ impl Config {
     }
 }
 
-fn main() {
+impl IntoArgs for Config {
+    fn into_args(self) -> driver::CompilerArgs {
+        driver::CompilerArgs {
+            input: self.input,
+            output: self.output,
+            inline_size_limit: self.inline_size_limit,
+        }
+    }
+}
+
+fn main() -> ExitCode {
     let command_line = CommandLine::parse();
 
     let config = if let Some(path) = command_line.config {
@@ -45,39 +56,6 @@ fn main() {
         Config::default()
     };
     let config = command_line.command_line.merge(config);
-    let input_paths = config
-        .input
-        .unwrap_or_else(|| exit_missing_args("input files are required"));
-    let output_path = config
-        .output
-        .unwrap_or_else(|| exit_missing_args("output file is required"));
 
-    let mut ml_input = sourcemap::MultipleInput::new();
-    let mut mli_input = sourcemap::MultipleInput::new();
-    for path in input_paths {
-        match path.extension().and_then(|ext| ext.to_str()) {
-            Some("ml") => ml_input.add_file(sourcemap::InputFile::File {
-                content: fs::read_to_string(&path).unwrap(),
-                path,
-            }),
-            Some("mli") => mli_input.add_file(sourcemap::InputFile::File {
-                content: fs::read_to_string(&path).unwrap(),
-                path,
-            }),
-            _ => panic!("unsupported file extension or missing extension"),
-        }
-    }
-
-    let compiler_option = session::CompilerOption {
-        inline_size_limit: config.inline_size_limit,
-    };
-    let session = session::Session::new(ml_input, mli_input, Some(output_path), compiler_option);
-
-    driver::run_compiler(session);
-}
-
-fn exit_missing_args(message: &'static str) -> ! {
-    <CommandLine as clap::CommandFactory>::command()
-        .error(clap::error::ErrorKind::MissingRequiredArgument, message)
-        .exit();
+    driver::run_compiler(config.into_args())
 }

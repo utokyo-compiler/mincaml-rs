@@ -151,6 +151,10 @@ impl MultipleInput {
     pub fn files(&self) -> &IndexVec<InputIndex, InputFile> {
         &self.files
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.files.is_empty()
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
