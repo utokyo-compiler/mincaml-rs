@@ -190,6 +190,7 @@ pub enum Level {
     Info,
     Note,
     Help,
+    Warning,
     Bug,
 }
 
@@ -467,6 +468,136 @@ impl From<DiagArgValue> for FluentValue<'static> {
     }
 }
 
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` cannot be a primary span",
+    label = "this type cannot be used as a primary span",
+    note = "consider using `Span` or `IntoIterator` of it"
+)]
+pub trait PrimarySpan {
+    fn primary_spans(self) -> impl Iterator<Item = Span>;
+}
+
+impl PrimarySpan for Span {
+    fn primary_spans(self) -> impl Iterator<Item = Span> {
+        std::iter::once(self)
+    }
+}
+
+impl PrimarySpan for Option<Span> {
+    fn primary_spans(self) -> impl Iterator<Item = Span> {
+        self.into_iter()
+    }
+}
+
+impl PrimarySpan for Vec<Span> {
+    fn primary_spans(self) -> impl Iterator<Item = Span> {
+        self.into_iter()
+    }
+}
+
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` cannot be used as a type of #[label], #[help], etc.",
+    label = "`#[label], #[help], #[note] and #[warning] does not recognize this type",
+    note = "consider using `Span`, `()`, `Option<()>`"
+)]
+pub trait TryIntoMultiSpan<'dcx> {
+    fn try_into_spans(self) -> Option<MultiSpan<'dcx>>;
+}
+
+impl<'dcx> TryIntoMultiSpan<'dcx> for Span {
+    fn try_into_spans(self) -> Option<MultiSpan<'dcx>> {
+        let mut multi_span = MultiSpan::default();
+        multi_span.add_primary_span(self);
+        Some(multi_span)
+    }
+}
+
+impl<'dcx> TryIntoMultiSpan<'dcx> for () {
+    fn try_into_spans(self) -> Option<MultiSpan<'dcx>> {
+        Some(MultiSpan::default())
+    }
+}
+
+/// A `Span` that may be missing. This is useful when a span is optional, but
+/// we want to emit the subdiagnostic anyway.
+///
+/// This example shows how this type differs from `Option<Span>`:
+///
+/// ```ignore (illustrative)
+/// SomeError {
+///     #[warn]
+///     span: AllowMissingSpan::Exist(span),
+///     ..
+/// }.into_diag().emit(); // emits the subdiagnostic with the span
+///
+/// SomeError {
+///     #[warn]
+///     span: AllowMissingSpan::Missing,
+///     ..
+/// }.into_diag().emit(); // emits the subdiagnostic without a span
+///
+/// SomeError {
+///     #[warn]
+///     span: Some(span),
+///     ..
+/// }.into_diag().emit(); // emits the subdiagnostic with the span
+///
+/// SomeError {
+///     #[warn]
+///     span: None,
+///     ..
+/// }.into_diag().emit(); // does not emit the subdiagnostic
+/// ```
+pub enum AllowMissingSpan {
+    Exist(Span),
+    Missing,
+}
+
+impl AllowMissingSpan {
+    /// Converts from an `Option<Span>`.
+    pub fn show_if_missing(opt: Option<Span>) -> Self {
+        match opt {
+            Some(span) => AllowMissingSpan::Exist(span),
+            None => AllowMissingSpan::Missing,
+        }
+    }
+
+    /// Converts back into an `Option<Span>`.
+    pub fn hide_if_none(self) -> Option<Span> {
+        match self {
+            AllowMissingSpan::Exist(span) => Some(span),
+            AllowMissingSpan::Missing => None,
+        }
+    }
+}
+
+impl From<Option<Span>> for AllowMissingSpan {
+    fn from(opt: Option<Span>) -> Self {
+        AllowMissingSpan::show_if_missing(opt)
+    }
+}
+
+impl From<AllowMissingSpan> for Option<Span> {
+    fn from(ams: AllowMissingSpan) -> Self {
+        ams.hide_if_none()
+    }
+}
+
+impl<'dcx> TryIntoMultiSpan<'dcx> for AllowMissingSpan {
+    fn try_into_spans(self) -> Option<MultiSpan<'dcx>> {
+        match self {
+            AllowMissingSpan::Exist(span) => span.try_into_spans(),
+            AllowMissingSpan::Missing => ().try_into_spans(),
+        }
+    }
+}
+
+impl<'dcx, T: TryIntoMultiSpan<'dcx>> TryIntoMultiSpan<'dcx> for Option<T> {
+    fn try_into_spans(self) -> Option<MultiSpan<'dcx>> {
+        self.and_then(TryIntoMultiSpan::try_into_spans)
+    }
+}
+
 /// `Diag` impls many `&mut self -> &mut Self` methods. Each one modifies an
 /// existing diagnostic, either in a standalone fashion, e.g.
 /// `err.code(code);`, or in a chained fashion to make multiple modifications,
@@ -536,18 +667,54 @@ impl<'dcx> Diag<'dcx> {
         self.deref_mut().arg(name, arg);
         self
     } }
-}
 
-pub struct DiagArgsMacro(pub Vec<(&'static str, DiagArgValue)>);
+    with_fn! { with_primary_span,
+    /// Add a primary span.
+    pub fn primary_span(&mut self, span: impl PrimarySpan) -> &mut Self {
+        for span in span.primary_spans() {
+            self.content.span.add_primary_span(span);
+        }
+        self
+    } }
 
-impl IntoIterator for DiagArgsMacro {
-    type Item = (&'static str, DiagArgValue);
+    with_fn! { with_label,
+    /// Add a label to span.
+    pub fn label(&mut self, label: impl Into<DiagMessage<'dcx>>, span: Span) -> &mut Self {
+        self.content.span.add_label(span, label.into());
+        self
+    } }
 
-    type IntoIter = std::vec::IntoIter<Self::Item>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        todo!()
+    pub fn may_add_sub(
+        &mut self,
+        level: Level,
+        message: impl Into<SubdiagMessage<'dcx>>,
+        span: impl TryIntoMultiSpan<'dcx>,
+    ) {
+        if let Some(span) = span.try_into_spans() {
+            self.deref_mut().sub(level, message, span);
+        }
     }
+
+    with_fn! { with_note,
+    /// Add a note attached to this diagnostic.
+    pub fn note(&mut self, msg: impl Into<SubdiagMessage<'dcx>>, span: impl TryIntoMultiSpan<'dcx>) -> &mut Self {
+        self.may_add_sub(Level::Note, msg, span);
+        self
+    } }
+
+    with_fn! { with_help,
+    /// Add a help attached to this diagnostic.
+    pub fn help(&mut self, msg: impl Into<SubdiagMessage<'dcx>>, span: impl TryIntoMultiSpan<'dcx>) -> &mut Self {
+        self.may_add_sub(Level::Help, msg, span);
+        self
+    } }
+
+    with_fn! { with_warn,
+    /// Add a warning attached to this diagnostic.
+    pub fn warn(&mut self, msg: impl Into<SubdiagMessage<'dcx>>, span: impl TryIntoMultiSpan<'dcx>) -> &mut Self {
+        self.may_add_sub(Level::Warning, msg, span);
+        self
+    } }
 }
 
 impl<'dcx> EarlyDiag<'dcx> {

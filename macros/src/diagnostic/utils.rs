@@ -1,6 +1,6 @@
 use super::error::{invalid_attr, throw_invalid_attr, throw_span_err, DeriveError};
 use proc_macro2::{Ident, Span, TokenStream};
-use quote::{format_ident, quote, ToTokens};
+use quote::{format_ident, quote};
 use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap};
 use std::fmt;
@@ -8,8 +8,8 @@ use std::str::FromStr;
 use syn::meta::ParseNestedMeta;
 use syn::punctuated::Punctuated;
 use syn::{parenthesized, LitStr, Path, Token};
-use syn::{spanned::Spanned, Attribute, Field, Meta, Type, TypeTuple};
-use synstructure::{BindingInfo, VariantInfo};
+use syn::{spanned::Spanned, Attribute, Field, Meta};
+use synstructure::VariantInfo;
 
 use crate::util::{is_doc_comment, span_err};
 
@@ -24,163 +24,6 @@ pub(crate) fn new_code_ident() -> syn::Ident {
         *count.borrow_mut() += 1;
         ident
     })
-}
-
-/// Checks whether the type name of `ty` matches `name`.
-///
-/// Given some struct at `a::b::c::Foo`, this will return true for `c::Foo`, `b::c::Foo`, or
-/// `a::b::c::Foo`. This reasonably allows qualified names to be used in the macro.
-pub(crate) fn type_matches_path(ty: &Type, name: &[&str]) -> bool {
-    if let Type::Path(ty) = ty {
-        ty.path
-            .segments
-            .iter()
-            .map(|s| s.ident.to_string())
-            .rev()
-            .zip(name.iter().rev())
-            .all(|(x, y)| &x.as_str() == y)
-    } else {
-        false
-    }
-}
-
-/// Checks whether the type `ty` is `()`.
-pub(crate) fn type_is_unit(ty: &Type) -> bool {
-    if let Type::Tuple(TypeTuple { elems, .. }) = ty {
-        elems.is_empty()
-    } else {
-        false
-    }
-}
-
-/// Checks whether the type `ty` is `bool`.
-pub(crate) fn type_is_bool(ty: &Type) -> bool {
-    type_matches_path(ty, &["bool"])
-}
-
-/// Reports a type error for field with `attr`.
-pub(crate) fn report_type_error(attr: &Attribute, ty_name: &str) -> Result<!, DeriveError> {
-    let name = attr.path().segments.last().unwrap().ident.to_string();
-    let meta = &attr.meta;
-
-    throw_span_err!(
-        attr,
-        format!(
-            "the `#[{name}{}]` attribute can only be applied to fields of type {ty_name}",
-            match meta {
-                Meta::Path(_) => "",
-                Meta::NameValue(_) => " = ...",
-                Meta::List(_) => "(...)",
-            },
-        )
-    );
-}
-
-/// Reports an error if the field's type is not `Span`.
-pub(crate) fn report_error_if_not_applied_to_span(
-    attr: &Attribute,
-    info: &FieldInfo<'_>,
-) -> Result<(), DeriveError> {
-    if !type_matches_path(info.ty.inner_type(), &["rustc_span", "Span"])
-        && !type_matches_path(info.ty.inner_type(), &["rustc_errors", "MultiSpan"])
-    {
-        report_type_error(attr, "`Span` or `MultiSpan`")?;
-    }
-
-    Ok(())
-}
-
-/// Inner type of a field and type of wrapper.
-#[derive(Copy, Clone)]
-pub(crate) enum FieldInnerTy<'ty> {
-    /// Field is wrapped in a `Option<$inner>`.
-    Option(&'ty Type),
-    /// Field is wrapped in a `Vec<$inner>`.
-    Vec(&'ty Type),
-    /// Field isn't wrapped in an outer type.
-    Plain(&'ty Type),
-}
-
-impl<'ty> FieldInnerTy<'ty> {
-    /// Returns inner type for a field, if there is one.
-    ///
-    /// - If `ty` is an `Option<Inner>`, returns `FieldInnerTy::Option(Inner)`.
-    /// - If `ty` is a `Vec<Inner>`, returns `FieldInnerTy::Vec(Inner)`.
-    /// - Otherwise returns `FieldInnerTy::Plain(ty)`.
-    pub(crate) fn from_type(ty: &'ty Type) -> Self {
-        fn single_generic_type(ty: &Type) -> &Type {
-            let Type::Path(ty_path) = ty else {
-                panic!("expected path type");
-            };
-
-            let path = &ty_path.path;
-            let ty = path.segments.iter().last().unwrap();
-            let syn::PathArguments::AngleBracketed(bracketed) = &ty.arguments else {
-                panic!("expected bracketed generic arguments");
-            };
-
-            assert_eq!(bracketed.args.len(), 1);
-
-            let syn::GenericArgument::Type(ty) = &bracketed.args[0] else {
-                panic!("expected generic parameter to be a type generic");
-            };
-
-            ty
-        }
-
-        if type_matches_path(ty, &["std", "option", "Option"]) {
-            FieldInnerTy::Option(single_generic_type(ty))
-        } else if type_matches_path(ty, &["std", "vec", "Vec"]) {
-            FieldInnerTy::Vec(single_generic_type(ty))
-        } else {
-            FieldInnerTy::Plain(ty)
-        }
-    }
-
-    /// Returns the inner type.
-    pub(crate) fn inner_type(&self) -> &'ty Type {
-        match self {
-            FieldInnerTy::Option(inner) | FieldInnerTy::Vec(inner) | FieldInnerTy::Plain(inner) => {
-                inner
-            }
-        }
-    }
-
-    /// Surrounds `inner` with destructured wrapper type, exposing inner type as `binding`.
-    pub(crate) fn with(&self, binding: impl ToTokens, inner: impl ToTokens) -> TokenStream {
-        match self {
-            FieldInnerTy::Option(..) => quote! {
-                if let Some(#binding) = #binding {
-                    #inner
-                }
-            },
-            FieldInnerTy::Vec(..) => quote! {
-                for #binding in #binding {
-                    #inner
-                }
-            },
-            FieldInnerTy::Plain(t) if type_is_bool(t) => quote! {
-                if #binding {
-                    #inner
-                }
-            },
-            FieldInnerTy::Plain(..) => quote! { #inner },
-        }
-    }
-
-    pub(crate) fn span(&self) -> proc_macro2::Span {
-        match self {
-            FieldInnerTy::Option(ty) | FieldInnerTy::Vec(ty) | FieldInnerTy::Plain(ty) => ty.span(),
-        }
-    }
-}
-
-/// Field information passed to the builder. Deliberately omits attrs to discourage the
-/// `generate_*` methods from walking the attributes themselves.
-pub(crate) struct FieldInfo<'a> {
-    pub(crate) binding: &'a BindingInfo<'a>,
-    pub(crate) ty: FieldInnerTy<'a>,
-    pub(crate) span: &'a proc_macro2::Span,
 }
 
 /// Small helper trait for abstracting over `Option` fields that contain a value and a `Span`
@@ -470,6 +313,7 @@ impl fmt::Display for SuggestionKind {
 }
 
 impl SuggestionKind {
+    #[allow(unused)]
     pub(crate) fn to_suggestion_style(self) -> TokenStream {
         match self {
             SuggestionKind::Normal => {
