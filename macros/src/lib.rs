@@ -1,11 +1,14 @@
 #![feature(extend_one)]
 #![feature(proc_macro_diagnostic)]
 #![feature(proc_macro_span)]
+#![feature(never_type)]
 
 use proc_macro::TokenStream;
 
+mod diagnostic;
 mod doc;
 mod fluent;
+mod util;
 
 #[proc_macro_attribute]
 pub fn counterpart(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -62,7 +65,28 @@ pub fn counterpart(attr: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// Note: any crate using this macro must also have a dependency on
 /// `errors`, because the generated code refers to things from that crate.
+///
+/// See also the `rustc` counterpart: `rustc_fluent_macro::fluent_messages`.
 #[proc_macro]
 pub fn fluent_messages(input: TokenStream) -> TokenStream {
     fluent::fluent_messages(input)
 }
+
+synstructure::decl_derive!([Diagnostic, attributes(
+    // struct attributes
+    diag,
+    help,
+    help_once,
+    note,
+    note_once,
+    warning,
+    // field attributes
+    skip_arg,
+    primary_span,
+    label,
+    subdiagnostic,
+    suggestion,
+    suggestion_short,
+    suggestion_hidden,
+    suggestion_verbose)] => diagnostic::diagnostic_macro_derive
+);

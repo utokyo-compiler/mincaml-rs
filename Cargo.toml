@@ -54,6 +54,7 @@ indexmap = { version = "2.6.0", features = ["std"] }
 proc-macro2 = "1.0.89"
 quote = "1.0.37"
 syn = { version = "2.0.87", features = ["full"] }
+synstructure = "0.13.1"
 unic-langid = { version = "0.9.5", features = ["unic-langid-macros"] }
 
 syntax = { path = "./syntax" }

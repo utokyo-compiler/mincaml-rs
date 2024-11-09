@@ -638,3 +638,49 @@ impl<'dcx> DiagInner<'dcx> {
         msg.with_subdiagnostic_message(attr.into())
     }
 }
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[counterpart(rustc_errors::SuggestionStyle)]
+pub enum SuggestionStyle {
+    /// Hide the suggested code when displaying this suggestion inline.
+    HideCodeInline,
+    /// Always hide the suggested code but display the message.
+    HideCodeAlways,
+    /// Do not display this suggestion in the cli output, it is only meant for tools.
+    CompletelyHidden,
+    /// Always show the suggested code.
+    /// This will *not* show the code if the suggestion is inline *and* the suggested code is
+    /// empty.
+    ShowCode,
+    /// Always show the suggested code independently.
+    ShowAlways,
+}
+
+/// Indicates the confidence in the correctness of a suggestion.
+///
+/// All suggestions are marked with an `Applicability`. Tools use the applicability of a suggestion
+/// to determine whether it should be automatically applied or if the user should be consulted
+/// before applying the suggestion.
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[counterpart(rustc_lint_defs::Applicability)]
+pub enum Applicability {
+    /// The suggestion is definitely what the user intended, or maintains the exact meaning of the code.
+    /// This suggestion should be automatically applied.
+    ///
+    /// In case of multiple `MachineApplicable` suggestions (whether as part of
+    /// the same `multipart_suggestion` or not), all of them should be
+    /// automatically applied.
+    MachineApplicable,
+
+    /// The suggestion may be what the user intended, but it is uncertain. The suggestion should
+    /// result in valid code if it is applied.
+    MaybeIncorrect,
+
+    /// The suggestion contains placeholders like `(...)` or `{ /* fields */ }`. The suggestion
+    /// cannot be applied automatically because it will not result in valid code. The user
+    /// will need to fill in the placeholders.
+    HasPlaceholders,
+
+    /// The applicability of the suggestion is unknown.
+    Unspecified,
+}

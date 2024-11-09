@@ -2,6 +2,8 @@ use quote::quote;
 use quote::ToTokens;
 use syn::{parse_macro_input, Expr, Item, Lit, Meta, Path};
 
+use crate::util::is_doc_comment;
+
 pub fn counterpart(
     attr: proc_macro::TokenStream,
     item: proc_macro::TokenStream,
@@ -29,6 +31,9 @@ pub fn counterpart(
     };
     if let Some(attrs) = attr_mut {
         let last_comment = attrs.iter().rev().find_map(|attr| {
+            if !is_doc_comment(attr) {
+                return None;
+            };
             let Meta::NameValue(attr) = &attr.meta else {
                 return None;
             };

@@ -7,3 +7,4 @@ edition.workspace = true
 
 [dependencies]
 data_structure.workspace = true
+errors.workspace = true
