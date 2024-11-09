@@ -48,6 +48,7 @@ impl From<Level> for annotate_snippets::Level {
             Level::Info => annotate_snippets::Level::Info,
             Level::Note => annotate_snippets::Level::Note,
             Level::Help => annotate_snippets::Level::Help,
+            Level::Warning => annotate_snippets::Level::Warning,
         }
     }
 }
