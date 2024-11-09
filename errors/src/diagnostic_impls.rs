@@ -36,8 +36,8 @@ impl<'a, T: Clone + IntoDiagArg> IntoDiagArg for &'a T {
 macro_rules! into_diag_arg_using_display {
     ($( $ty:ty ),+ $(,)?) => {
         $(
-            impl IntoDiagArg for $ty {
-                fn into_diag_arg(self) -> DiagArgValue {
+            impl $crate::IntoDiagArg for $ty {
+                fn into_diag_arg(self) -> $crate::DiagArgValue {
                     self.to_string().into_diag_arg()
                 }
             }
