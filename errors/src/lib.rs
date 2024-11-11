@@ -22,7 +22,7 @@ pub type EarlyDiagnosticEmitter = annotate_snippets_emitter::AnnotateSnippetEmit
 pub type DiagnosticEmitter<'dcx> = annotate_snippets_emitter::AnnotateSnippetEmitter<Late<'dcx>>;
 
 pub type FluentBundle = fluent_bundle::FluentBundle<fluent_bundle::FluentResource>;
-pub type FluentIdentifier = Cow<'static, str>;
+pub type FluentAstIdent = Cow<'static, str>;
 
 use std::{
     borrow::Cow,
@@ -166,7 +166,6 @@ pub struct DiagContent<'dcx> {
 }
 
 impl<'dcx> DiagContent<'dcx> {
-    /// A small diagnostic becomes a footer in the parent diagnostic.  
     pub fn is_small(&self) -> Option<(Level, &[DiagMessage<'dcx>])> {
         if self.span.is_empty() {
             Some((self.level, &self.messages))
@@ -196,12 +195,29 @@ pub enum Level {
 
 #[counterpart(rustc_error_messages::DiagMessage)]
 #[derive(Clone, Debug)]
-pub enum DiagMessage<'dcx> {
+pub enum DiagStr<'dcx> {
     /// Non-translatable diagnostic message.
-    Str(Cow<'static, str>),
+    NonTranslatable(Cow<'static, str>),
 
     /// Translatable message which has been already translated.
     Translated(Cow<'dcx, str>),
+}
+
+impl<'dcx> DiagStr<'dcx> {
+    pub fn as_cow(&self) -> &Cow<'dcx, str> {
+        match self {
+            DiagStr::NonTranslatable(s) => s,
+            DiagStr::Translated(s) => s,
+        }
+    }
+}
+
+#[counterpart(rustc_error_messages::DiagMessage)]
+#[derive(Clone, Debug)]
+pub enum DiagMessage<'dcx> {
+    /// Non-translatable diagnostic message
+    /// or translatable message which has been already translated.
+    Str(DiagStr<'dcx>),
 
     /// Identifier for a Fluent message corresponding to the diagnostic
     /// message. Yet to be translated.
@@ -210,7 +226,7 @@ pub enum DiagMessage<'dcx> {
     /// <https://projectfluent.org/fluent/guide/attributes.html>
     FluentIdentifier {
         identifier: FluentIdentifier,
-        attribute: Option<FluentIdentifier>,
+        attribute: Option<FluentAttr>,
     },
 }
 
@@ -223,7 +239,7 @@ impl<'dcx> DiagMessage<'dcx> {
     }
     pub fn attribute(
         identifier: impl Into<FluentIdentifier>,
-        attribute: impl Into<FluentIdentifier>,
+        attribute: impl Into<FluentAttr>,
     ) -> Self {
         DiagMessage::FluentIdentifier {
             identifier: identifier.into(),
@@ -239,7 +255,6 @@ impl<'dcx> DiagMessage<'dcx> {
     pub fn with_subdiagnostic_message(&self, sub: SubdiagMessage<'dcx>) -> Self {
         let attr = match sub {
             SubdiagMessage::Str(s) => return DiagMessage::Str(s),
-            SubdiagMessage::Translated(s) => return DiagMessage::Translated(s),
             SubdiagMessage::FluentIdentifier(id) => {
                 return DiagMessage::identifier(id);
             }
@@ -248,7 +263,6 @@ impl<'dcx> DiagMessage<'dcx> {
 
         match self {
             DiagMessage::Str(s) => DiagMessage::Str(s.clone()),
-            DiagMessage::Translated(s) => DiagMessage::Translated(s.clone()),
             DiagMessage::FluentIdentifier { identifier, .. } => {
                 DiagMessage::attribute(identifier.clone(), attr)
             }
@@ -258,17 +272,57 @@ impl<'dcx> DiagMessage<'dcx> {
 
 impl From<String> for DiagMessage<'_> {
     fn from(s: String) -> Self {
-        DiagMessage::Str(Cow::Owned(s))
+        DiagMessage::Str(DiagStr::NonTranslatable(Cow::Owned(s)))
     }
 }
 impl From<&'static str> for DiagMessage<'_> {
     fn from(s: &'static str) -> Self {
-        DiagMessage::Str(Cow::Borrowed(s))
+        DiagMessage::Str(DiagStr::NonTranslatable(Cow::Borrowed(s)))
     }
 }
 impl From<Cow<'static, str>> for DiagMessage<'_> {
     fn from(s: Cow<'static, str>) -> Self {
-        DiagMessage::Str(s)
+        DiagMessage::Str(DiagStr::NonTranslatable(s))
+    }
+}
+
+impl From<FluentIdentifier> for DiagMessage<'_> {
+    fn from(id: FluentIdentifier) -> Self {
+        DiagMessage::identifier(id)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct FluentIdentifier(pub FluentAstIdent);
+
+impl Deref for FluentIdentifier {
+    type Target = FluentAstIdent;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl FluentIdentifier {
+    pub fn new(s: impl Into<FluentAstIdent>) -> Self {
+        Self(s.into())
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct FluentAttr(pub FluentAstIdent);
+
+impl Deref for FluentAttr {
+    type Target = FluentAstIdent;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl FluentAttr {
+    pub fn new(s: impl Into<FluentAstIdent>) -> Self {
+        Self(s.into())
     }
 }
 
@@ -281,39 +335,45 @@ impl From<Cow<'static, str>> for DiagMessage<'_> {
 /// the `Subdiagnostic` derive refer to Fluent identifiers directly.
 #[counterpart(rustc_error_messages::SubdiagMessage)]
 pub enum SubdiagMessage<'dcx> {
-    /// Non-translatable diagnostic message.
-    Str(Cow<'static, str>),
-    /// Translatable message which has already been translated eagerly.
-    ///
-    /// Some diagnostics have repeated subdiagnostics where the same interpolated variables would
-    /// be instantiated multiple times with different values. These subdiagnostics' messages
-    /// are translated when they are added to the parent diagnostic, producing this variant of
-    /// `DiagMessage`.
-    Translated(Cow<'dcx, str>),
+    /// Non-translatable diagnostic message
+    /// or translatable message which has been already translated.
+    Str(DiagStr<'dcx>),
+
     /// Identifier of a Fluent message. Instances of this variant are generated by the
     /// `Subdiagnostic` derive.
     FluentIdentifier(FluentIdentifier),
+
     /// Attribute of a Fluent message. Needs to be combined with a Fluent identifier to produce an
     /// actual translated message. Instances of this variant are generated by the `fluent_messages`
     /// macro.
     ///
     /// <https://projectfluent.org/fluent/guide/attributes.html>
-    FluentAttr(FluentIdentifier),
+    FluentAttr(FluentAttr),
 }
 
 impl From<String> for SubdiagMessage<'_> {
     fn from(s: String) -> Self {
-        SubdiagMessage::Str(Cow::Owned(s))
+        SubdiagMessage::Str(DiagStr::NonTranslatable(Cow::Owned(s)))
     }
 }
 impl From<&'static str> for SubdiagMessage<'_> {
     fn from(s: &'static str) -> Self {
-        SubdiagMessage::Str(Cow::Borrowed(s))
+        SubdiagMessage::Str(DiagStr::NonTranslatable(Cow::Borrowed(s)))
     }
 }
 impl From<Cow<'static, str>> for SubdiagMessage<'_> {
     fn from(s: Cow<'static, str>) -> Self {
-        SubdiagMessage::Str(s)
+        SubdiagMessage::Str(DiagStr::NonTranslatable(s))
+    }
+}
+impl From<FluentIdentifier> for SubdiagMessage<'_> {
+    fn from(id: FluentIdentifier) -> Self {
+        SubdiagMessage::FluentIdentifier(id)
+    }
+}
+impl From<FluentAttr> for SubdiagMessage<'_> {
+    fn from(id: FluentAttr) -> Self {
+        SubdiagMessage::FluentAttr(id)
     }
 }
 
@@ -679,8 +739,9 @@ impl<'dcx> Diag<'dcx> {
 
     with_fn! { with_label,
     /// Add a label to span.
-    pub fn label(&mut self, label: impl Into<DiagMessage<'dcx>>, span: Span) -> &mut Self {
-        self.content.span.add_label(span, label.into());
+    pub fn label(&mut self, label: impl Into<SubdiagMessage<'dcx>>, span: Span) -> &mut Self {
+        let msg = self.subdiagnostic_message_to_diagnostic_message(label);
+        self.content.span.add_label(span, msg);
         self
     } }
 
