@@ -142,7 +142,7 @@ pub trait Translate {
         args: &'args FluentArgs<'args>,
     ) -> Result<Cow<'dcx, str>, TranslateError<'args>> {
         let (identifier, attribute) = match message {
-            DiagMessage::Str(cow) | DiagMessage::Translated(cow) => return Ok(cow.clone()),
+            DiagMessage::Str(cow) => return Ok(cow.as_cow().clone()),
             DiagMessage::FluentIdentifier {
                 identifier,
                 attribute,

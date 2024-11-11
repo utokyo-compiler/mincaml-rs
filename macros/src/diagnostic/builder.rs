@@ -315,15 +315,15 @@ impl DiagnosticDeriveVariantBuilder {
         }
     }
 
-    /// Delegates to `diag.$kind` calls with the given `fluent_attr_identifier` and optional `arg`.
+    /// Delegates to `diag.$kind` calls with the given `fluent_identifier` and optional `arg`.
     fn delegate_call(
         &self,
         kind: &Ident,
-        fluent_attr_identifier: Path,
+        fluent_identifier: Path,
         arg: Option<TokenStream>,
     ) -> TokenStream {
         quote! {
-            diag.#kind(crate::fluent_generated::#fluent_attr_identifier, #arg);
+            diag.#kind(crate::fluent_generated::#fluent_identifier, #arg);
         }
     }
 }
