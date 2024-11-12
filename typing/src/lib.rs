@@ -1,4 +1,6 @@
 #![feature(iterator_try_collect)]
+#![feature(if_let_guard)]
+
 use data_structure::index::vec::IndexVec;
 use sourcemap::Spanned;
 use ty::{context::CommonTypes, Ty, TyKind, TyVarId, Typed};
@@ -329,25 +331,24 @@ fn unify<'ctx>(
     lhs: Ty<'ctx>,
     rhs: Ty<'ctx>,
 ) -> Result<(), Error<'ctx>> {
-    // N.B. This comparison covers the case
+    // N.B., This comparison covers the case
     // where both `lhs` and `rhs` are the same type variable
     // so as not to cause an error in `occurck`.
-    if lhs == rhs {
+    //
+    // `lhs == rhs` will not properly compare the type variables, because
+    // the different type variables can be equated with each other after `Ty` is interned.
+    if lhs.kind() == rhs.kind() {
         return Ok(());
     }
     match (lhs.kind(), rhs.kind()) {
+        (TyKind::TyVar(v), _) if let Some(ty) = subst.get(*v) => unify(subst, ty, rhs),
+        (_, TyKind::TyVar(v)) if let Some(ty) = subst.get(*v) => unify(subst, lhs, ty),
         (TyKind::TyVar(v), _) => {
-            if let Some(ty) = subst.get(*v) {
-                return unify(subst, ty, rhs);
-            }
             occurck(subst, *v, rhs).unwrap();
             subst.merge(*v, rhs);
             Ok(())
         }
         (_, TyKind::TyVar(v)) => {
-            if let Some(ty) = subst.get(*v) {
-                return unify(subst, lhs, ty);
-            }
             occurck(subst, *v, lhs).unwrap();
             subst.merge(*v, lhs);
             Ok(())
