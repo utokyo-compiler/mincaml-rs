@@ -1,13 +1,20 @@
-use std::{fs, io::Write, process::ExitCode};
+use std::{
+    fs,
+    io::Write,
+    process::{ExitCode, Termination},
+};
 
-use errors::{DiagMessage, EarlyDiagContext, EarlyDiagnosticEmitter};
+use errors::{EarlyDiagContext, EarlyDiagnosticEmitter, FluentIdentifier};
 use middleware::{Arena, GlobalContext};
 
 use fluent_generated as fluent;
 
 macros::fluent_messages! { "../messages.ftl" }
 
-pub static DEFAULT_LOCALE_RESOURCES: &[&str] = &[crate::DEFAULT_LOCALE_RESOURCE];
+pub static DEFAULT_LOCALE_RESOURCES: &[&str] = &[
+    crate::DEFAULT_LOCALE_RESOURCE,
+    typing::DEFAULT_LOCALE_RESOURCE,
+];
 
 pub struct CompilerArgs {
     pub input: Option<Vec<std::path::PathBuf>>,
@@ -19,12 +26,12 @@ pub trait IntoArgs {
     fn into_args(self) -> CompilerArgs;
 }
 
-pub fn run_compiler(at_args: CompilerArgs) -> ExitCode {
+pub fn run_compiler(at_args: CompilerArgs) -> impl Termination {
     let fluent_bundle = errors::new_fluent_bundle(DEFAULT_LOCALE_RESOURCES.to_vec());
     let early_dcx = EarlyDiagContext::new(EarlyDiagnosticEmitter::new(fluent_bundle));
 
     let mut fatal_errs = 0;
-    let mut fatal = |msg: DiagMessage<'static>| {
+    let mut fatal = |msg: FluentIdentifier| {
         fatal_errs += 1;
         early_dcx.struct_err(msg)
     };
@@ -87,14 +94,21 @@ pub fn run_compiler(at_args: CompilerArgs) -> ExitCode {
         parser::lex_and_parse_mli(global_ctxt.parsing_context(), &input_interface).unwrap();
     let input = global_ctxt.session().input.concatenated_string();
     let parsed_tree = parser::lex_and_parse(global_ctxt.parsing_context(), &input).unwrap();
-    let typed_tree = typing::typeck(
+    let (typeck_result, _taint) = typing::typeck(
         global_ctxt.typing_context(),
+        global_ctxt.dcx(),
         &global_ctxt.common_types,
         parsed_tree,
         parsed_interface,
         global_ctxt.typed_interface(),
-    )
-    .unwrap();
+    );
+    let typed_tree = match typeck_result {
+        Ok(tree) => tree,
+        Err(err) => {
+            err.emit();
+            return ExitCode::FAILURE;
+        }
+    };
     let knorm_tree = ir_knorm::lowering(global_ctxt.knorm_context(), typed_tree);
     let closure_prog = ir_closure::lowering(global_ctxt.closure_context(), knorm_tree);
     let wasm_bytes = codegen_wasm::codegen(closure_prog, global_ctxt.typed_interface()).unwrap();

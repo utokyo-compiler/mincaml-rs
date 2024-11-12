@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf, process::ExitCode};
+use std::{fs, path::PathBuf, process::Termination};
 
 use clap::Parser;
 use driver::IntoArgs;
@@ -46,7 +46,7 @@ impl IntoArgs for Config {
     }
 }
 
-fn main() -> ExitCode {
+fn main() -> impl Termination {
     let command_line = CommandLine::parse();
 
     let config = if let Some(path) = command_line.config {

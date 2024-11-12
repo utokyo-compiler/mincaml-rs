@@ -8,6 +8,7 @@ use data_structure::{
     },
     interning::Interned,
 };
+use errors::into_diag_arg_using_display;
 
 /// Use this instead of `TyKind` whenever possible.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -144,15 +145,15 @@ impl<'ctx> std::fmt::Display for TyKind<'ctx> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TyVarId(usize);
 
-impl TyVarId {
-    pub fn new_unchecked(id: usize) -> Self {
-        Self(id)
-    }
-}
-
 impl std::fmt::Display for TyVarId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "'_weak{}", self.0)
+    }
+}
+
+impl TyVarId {
+    pub fn new_unchecked(id: usize) -> Self {
+        Self(id)
     }
 }
 
@@ -252,3 +253,5 @@ impl<'ctx, T> std::ops::DerefMut for Typed<'ctx, T> {
         &mut self.value
     }
 }
+
+into_diag_arg_using_display!(Ty<'_>, TyVarId);

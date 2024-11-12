@@ -26,9 +26,19 @@ impl<'a, T: fmt::Display> From<&'a T> for DiagArgFromDisplay<'a> {
     }
 }
 
-impl<'a, T: Clone + IntoDiagArg> IntoDiagArg for &'a T {
+impl<T: Clone + IntoDiagArg> IntoDiagArg for &'_ T {
     fn into_diag_arg(self) -> DiagArgValue {
         self.clone().into_diag_arg()
+    }
+}
+
+impl<'a, T> IntoDiagArg for data_structure::interning::Interned<'a, T>
+where
+    &'a T: IntoDiagArg,
+    T: ?Sized,
+{
+    fn into_diag_arg(self) -> DiagArgValue {
+        self.0.into_diag_arg()
     }
 }
 

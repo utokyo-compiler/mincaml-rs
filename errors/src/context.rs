@@ -1,5 +1,6 @@
 use crate::{
-    Diag, DiagInner, DiagMessage, EarlyDiag, EarlyDiagnosticEmitter, Level, SelectedEmitter,
+    Diag, DiagInner, DiagMessage, Diagnostic, EarlyDiag, EarlyDiagnosticEmitter, Level,
+    SelectedEmitter,
 };
 
 pub trait EarlySwitch {
@@ -55,5 +56,15 @@ impl<'dcx> DiagContext<Late<'dcx>> {
 
     pub fn struct_err(&'dcx self, msg: impl Into<DiagMessage<'dcx>>) -> Diag<'_> {
         Diag::new(self, Level::Error, msg)
+    }
+
+    #[track_caller]
+    pub fn create_err(&'dcx self, err: impl Diagnostic) -> Diag<'_> {
+        err.into_diag(self, Level::Error)
+    }
+
+    #[track_caller]
+    pub fn emit_err(&'dcx self, err: impl Diagnostic) {
+        self.create_err(err).emit();
     }
 }

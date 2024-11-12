@@ -8,6 +8,7 @@ use ty::{Ty, TyVarId};
 
 use crate::Context;
 
+#[derive(Clone)]
 pub struct Env<'ctx> {
     inner: FxHashMap<TyVarId, Ty<'ctx>>,
 }

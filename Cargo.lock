@@ -654,7 +654,7 @@ dependencies = [
 
 [[package]]
 name = "driver"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "codegen_wasm",
  "errors",
@@ -2053,7 +2053,9 @@ name = "typing"
 version = "0.2.1"
 dependencies = [
  "data_structure",
+ "errors",
  "ir_typed_ast",
+ "macros",
  "sourcemap",
  "syntax",
  "ty",

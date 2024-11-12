@@ -173,4 +173,13 @@ pub enum Pattern<'ctx> {
     Var(Ident<'ctx>),
     Tuple(IndexVec<TupleIndex, Ident<'ctx>>),
 }
+
+impl<'ctx> Pattern<'ctx> {
+    pub fn iter_idents(&self) -> impl Iterator<Item = &'_ Ident<'ctx>> + '_ {
+        match self {
+            Self::Var(ident) => [].iter().chain(Some(ident)),
+            Self::Tuple(tuple) => tuple.iter().chain(None),
+        }
+    }
+}
 impl Indexable<TupleIndex> for Ident<'_> {}

@@ -12,3 +12,6 @@ syntax.workspace = true
 ty.workspace = true
 sourcemap.workspace = true
 ir_typed_ast.workspace = true
+
+errors.workspace = true
+macros.workspace = true
