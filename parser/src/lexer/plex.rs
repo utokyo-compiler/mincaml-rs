@@ -18,6 +18,7 @@ lexer! {
     r"." => CommentState::Continue
 }
 
+#[derive(Debug)]
 enum LexState<'a> {
     Token(Token<'a>),
     Skip,
@@ -98,12 +99,11 @@ impl<'input> PlexLexer<'input> {
         let mut depth = 0;
         loop {
             let state = consume_comment(self.remain);
-            if state.is_none() {
+
+            let Some((state, remaining)) = state else {
                 // EOF
                 return Err(ErrorKind::UnclosedComment);
-            }
-
-            let (state, remaining) = state.unwrap();
+            };
 
             self.remain = remaining;
 
