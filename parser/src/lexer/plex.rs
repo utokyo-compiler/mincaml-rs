@@ -130,7 +130,7 @@ impl<'input> PlexLexer<'input> {
                     const CONCERN: &[char; 3] = &['(', ')', '*'];
                     self.remain = self
                         .remain
-                        .trim_matches(|c| CONCERN.binary_search(&c).is_err());
+                        .trim_start_matches(|c| CONCERN.binary_search(&c).is_err());
                     continue;
                 }
             }
