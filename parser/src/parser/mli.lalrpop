@@ -94,9 +94,8 @@ Op: mli::Operator = {
 }
 
 TypeAscription: mli::AscribedTy<'ctx> = {
-    <mut a:TypeAscription> "->" <t:Ident> => {
-        a.elements.push(alloc.ctx().intern_ident(t));
-        a
+    <mut v:(<Ident> "->")*> <t:Ident> => {
+        v.push(t);
+        mli::AscribedTy::new(v.into_iter().map(|x| alloc.ctx().intern_ident(x)).collect())
     },
-    Ident => mli::AscribedTy::new(vec![alloc.ctx().intern_ident(<>)]),
 }

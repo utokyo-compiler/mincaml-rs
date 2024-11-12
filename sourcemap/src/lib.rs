@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 pub type LocSize = usize;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
@@ -71,6 +73,12 @@ impl<T> std::ops::Deref for Spanned<T> {
 impl<T> std::ops::DerefMut for Spanned<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.node
+    }
+}
+
+impl<T: Display> Display for Spanned<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.node)
     }
 }
 
