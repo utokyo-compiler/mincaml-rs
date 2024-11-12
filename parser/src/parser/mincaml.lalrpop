@@ -2,7 +2,7 @@ use sourcemap::{Loc, Spanned};
 use syntax::{*, ExprKind::*, LitKind::*, IntBinOpKind::*, RelationBinOpKind::*, FloatBinOpKind::*, UnOp::*};
 
 use crate::lexer::{Error as LexError, Token};
-use super::Allocator;
+use super::{Allocator, CtorTranspose, CtorContinuation};
 
 grammar<'input, 'ctx>(alloc: Allocator<'ctx>);
 extern {
@@ -126,46 +126,54 @@ ExprPrec5: Expr<'ctx> = {
         => alloc.spanned(Binary(op, e1, e2), (l, r)),
 }
 
-ArraySet<AfterArrow>: Expr<'ctx> = {
-    <l:@L> <e1:SimpleExpr> "<-" <e2:AfterArrow> <r:@R>
-        => alloc.spanned(Set(e1, e2), (l, r)),
+ArraySet: CtorContinuation<'ctx> = {
+    <l:@L> <e1:SimpleExpr> "<-"
+        => CtorContinuation::DelayedSet { e1, l },
 }
 
 // min-caml allows semicolon in then branch
 AfterThen = Expr;
 
 // Expression that starts with if
-If<AfterElse>: Expr<'ctx> = {
+If: CtorContinuation<'ctx> = {
     // if
-    <l:@L> "if" <e1:Expr> "then" <e2:AfterThen> "else" <e3:AfterElse> <r:@R>
-        => alloc.spanned(If(e1, e2, e3), (l, r)),
+    <l:@L> "if" <e1:Expr> "then" <e2:AfterThen> "else"
+        => CtorContinuation::DelayedIf { e1, e2, l },
 }
 
 NoSemi = ExprPrec5;
 
-// Expression that does not start with let
-Semi: Expr<'ctx> = {
-    // if and let.
+// Expression that can follow `else` or `<-`
+AfterElseArrow: CtorTranspose<'ctx> = {
+    // `if` inside of (`if` or `set`) or `if`. continue.
+    <cont:If> <trans:AfterElseArrow> => trans.composed_left(cont),
+
+    // `set` inside of (`if` or `set`) or `set`. continue.
+    <cont:ArraySet> <trans:AfterElseArrow> => trans.composed_left(cont),
+
+    // `if e1 then e2 else let ..` or `e1 <- let ..` or `let ..`
+    //
     // Looking ahead the semicolon after the second expression (e:ExprPrec9) in `Let` should trigger the shift action to OptionalSemi rule within `ExprPrec9` in `Let`,
     // not the reduce action here.
-    If<Let>,
+    <e:Let> <r:@R> => CtorTranspose::new_eval(e, r),
 
-    // if inside of if. continue.
-    If<Semi>,
+    // `if e1 then e2 else e3; e4`
+    //                       ^ here
+    // In this case, the proper syntax tree is `(if e1 then e2 else e3); e4`.
+    Semi,
+}
 
-    ArraySet<Let>,
-    ArraySet<Semi>,
-
-    // optional semicolon
-    <l:@L> <e1:NoSemi> <e2:OptionalSemi?> <r:@R> => match e2 {
-        Some(e2) => alloc.spanned(Then(e1, e2), (l, r)),
-        None => e1,
+// Expression that can have semicolon, which is a *singularity* of the OCaml syntax.
+Semi: CtorTranspose<'ctx> = {
+    <l:@L> <e1:NoSemi> <e2:OptionalSemi?> <r2:@R> => match e2 {
+        Some((r, e2)) => CtorTranspose::new_delayed_then(e1, r, e2, l, r2),
+        None => CtorTranspose::new_eval(e1, r2),
     },
 }
 
 #[inline]
-OptionalSemi: Expr<'ctx> = {
-    ";" <e2:ExprPrec9> => e2,
+OptionalSemi: (Loc, Expr<'ctx>) = {
+    <r:@R> ";" <e2:ExprPrec9> => (r, e2),
 }
 
 // Expression that starts with let
@@ -176,8 +184,7 @@ Let: Expr<'ctx> = {
 }
 
 ExprPrec9: Expr<'ctx> = {
-    Let,
-    Semi,
+    AfterElseArrow => alloc.apply(<>),
 }
 
 pub Expr = ExprPrec9;
