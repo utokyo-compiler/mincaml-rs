@@ -329,28 +329,49 @@ pub fn codegen<'ctx>(
             let Some(inner) = base.ty.as_array() else {
                 return Err(anyhow::anyhow!("expected an array"));
             };
-            if inner.is_unit() {
+            let Some(inner_ty) = WasmTy::from_ty(inner) else {
                 // do nothing
                 return Ok(());
-            }
-            let (local_base, base_ty) = function_state.local_def.get_typed(*base).unwrap();
+            };
+            let local_base = function_state.local_def.get(*base).unwrap();
             let local_index = function_state.local_def.get(*index).unwrap();
 
-            function_state.instrs_calc_addr(local_base, local_index, base_ty);
+            function_state.instrs_calc_addr(local_base, local_index, inner_ty);
 
-            function_state.instrs.push(Instruction::I32Load(MEM_ARG));
+            match inner_ty {
+                WasmTy::I32 => {
+                    function_state.instrs.push(Instruction::I32Load(MEM_ARG));
+                }
+                WasmTy::F32 => {
+                    function_state.instrs.push(Instruction::F32Load(MEM_ARG));
+                }
+            }
         }
         ir_closure::ExprKind::Set(base, index, value) => {
-            let (local_base, base_ty) = function_state.local_def.get_typed(*base).unwrap();
+            let Some(inner) = base.ty.as_array() else {
+                return Err(anyhow::anyhow!("expected an array"));
+            };
+            let Some(inner_ty) = WasmTy::from_ty(inner) else {
+                // do nothing
+                return Ok(());
+            };
+            let local_base = function_state.local_def.get(*base).unwrap();
             let local_index = function_state.local_def.get(*index).unwrap();
             let local_value = function_state.local_def.get(*value).unwrap();
 
-            function_state.instrs_calc_addr(local_base, local_index, base_ty);
+            function_state.instrs_calc_addr(local_base, local_index, inner_ty);
 
             function_state
                 .instrs
                 .push(Instruction::LocalGet(local_value.unwrap_idx()));
-            function_state.instrs.push(Instruction::I32Store(MEM_ARG));
+            match inner_ty {
+                WasmTy::I32 => {
+                    function_state.instrs.push(Instruction::I32Store(MEM_ARG));
+                }
+                WasmTy::F32 => {
+                    function_state.instrs.push(Instruction::F32Store(MEM_ARG));
+                }
+            }
         }
     };
     // do not add code here, because the code above may early return
