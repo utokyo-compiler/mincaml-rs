@@ -28,7 +28,7 @@ pub fn codegen<'ctx>(
     let args = std::mem::take(&mut function.args);
     let args_via_closure = std::mem::take(&mut function.args_via_closure);
 
-    let mut params = Vec::new();
+    let mut params = Vec::with_capacity(args.len() + 1);
     let results = WasmTy::from_ty(function.body().ty);
 
     for arg in args {
@@ -73,6 +73,7 @@ pub fn codegen<'ctx>(
     state.instrs.push(wasm_encoder::Instruction::End);
 
     let function_def = FunctionDef {
+        arg_count: params.len(),
         local_decls: state.local_def.local_decls,
         sig: program_state
             .signature_interner
@@ -85,6 +86,7 @@ pub fn codegen<'ctx>(
 }
 
 pub struct FunctionDef<'ctx> {
+    pub arg_count: usize,
     pub local_decls: IndexVec<LocalIdx, LocalDecl<'ctx>>,
     pub sig: TypeIdx,
     pub instrs: Vec<wasm_encoder::Instruction<'static>>,

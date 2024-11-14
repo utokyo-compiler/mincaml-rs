@@ -157,6 +157,7 @@ pub fn codegen<'ctx>(
             function
                 .local_decls
                 .iter()
+                .skip(function.arg_count)
                 .map(|local_decl| local_decl.wasm_ty.into_valtype()),
         );
         for instr in &function.instrs {
