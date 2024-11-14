@@ -286,6 +286,7 @@ pub fn codegen<'ctx>(
                     .instrs
                     .push(Instruction::Loop(wasm_encoder::BlockType::Empty));
                 {
+                    // increment loop counter
                     function_state
                         .instrs
                         .push(Instruction::LocalGet(loop_counter.unwrap_idx()));
@@ -309,14 +310,14 @@ pub fn codegen<'ctx>(
                     }
                     function_state.instrs_grow_heap(wasm_ty.size_of() as i32);
 
-                    // if `loop_counter` <= `len`, continue
+                    // if `loop_counter` < `len`, continue
                     function_state
                         .instrs
                         .push(Instruction::LocalGet(loop_counter.unwrap_idx()));
                     function_state
                         .instrs
                         .push(Instruction::LocalGet(local_len.unwrap_idx()));
-                    function_state.instrs.push(Instruction::I32GeS);
+                    function_state.instrs.push(Instruction::I32LtS);
                     function_state.instrs.push(Instruction::BrIf(0));
 
                     function_state.instrs.push(Instruction::End);
