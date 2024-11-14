@@ -30,50 +30,100 @@ pub fn lowering<'ctx>(ctx: &'ctx Context<'ctx>, knorm_expr: ir_knorm::Expr<'ctx>
 
 #[derive(Default)]
 struct LoweringState<'ctx> {
-    knowledge: DirectCallKnowledge<'ctx>,
+    knowledge: FunctionKnowledge<'ctx>,
     functions: IndexVec<FnIndex, FunctionDef<'ctx>>,
-    function_resolutions: FxHashMap<Ident<'ctx>, FnIndex>,
+    function_resolutions: FxHashMap<FnName<'ctx>, FnIndex>,
+    letrec_binders: FxHashSet<FnName<'ctx>>,
 }
 
 impl<'ctx> LoweringState<'ctx> {
     fn push_function(&mut self, func: FunctionDef<'ctx>) -> FnIndex {
         let name = func.name;
         let idx = self.functions.push(func);
-        if let Some(name) = name.get_inner() {
-            self.function_resolutions.insert(name, idx);
-        }
+        self.function_resolutions.insert(name, idx);
         idx
     }
 
-    fn resolve_function(&self, fn_name: FnName<'ctx>) -> FunctionInstance<'ctx> {
-        let Some(fn_name) = fn_name.get_inner() else {
-            unreachable!("main function cannot be called")
-        };
-        match self.function_resolutions.get(&fn_name) {
+    fn resolve_function(&self, fn_name: &FnName<'ctx>) -> FunctionInstance<'ctx> {
+        match self.function_resolutions.get(fn_name) {
             Some(resolution) => FunctionInstance::Defined(*resolution),
-            None => FunctionInstance::Imported(fn_name.as_intrinsic().unwrap()),
+            None => FunctionInstance::Imported(
+                fn_name
+                    .get_inner()
+                    .expect("unbound function")
+                    .as_intrinsic()
+                    .expect("unbound non-intrinsic function"),
+            ),
         }
     }
+
+    /// Returns the function instance if the function is going to be called directly at the call site.
+    fn call_directly(&self, fn_name: &FnName<'ctx>) -> Option<FunctionInstance<'ctx>> {
+        if match self.knowledge.of(fn_name) {
+            FunctionKnowledgeKind::CallDirectly => true,
+            FunctionKnowledgeKind::MitigatedClosure {
+                mitigation: Mitigation::InsideOfSelf,
+            } => self.letrec_binders.contains(fn_name),
+            FunctionKnowledgeKind::CallViaClosure => false,
+        } {
+            Some(self.resolve_function(fn_name))
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FunctionKnowledgeKind {
+    /// The function is going to be called directly and no closure is needed.
+    CallDirectly,
+
+    /// The function needs a closure but can be called directly in certain cases.
+    ///
+    /// Why this variant needed? : This is an optimization - There is a case where a function has no free variables
+    /// but still needs a closure, e.g., the function used as a value after the function is created.
+    /// In that case, we can call *the* inner function directly where we know which function is called.
+    MitigatedClosure { mitigation: Mitigation },
+
+    /// The variable is a function and is going to be called via a closure, or the variable is a closure.
+    CallViaClosure,
+}
+
+impl FunctionKnowledgeKind {
+    fn is_closure(self) -> bool {
+        matches!(self, Self::MitigatedClosure { .. } | Self::CallViaClosure)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// See [`FunctionKnowledgeKind::MitigatedClosure`].
+enum Mitigation {
+    /// Inside of the function itself.
+    InsideOfSelf,
 }
 
 #[derive(Default)]
-struct DirectCallKnowledge<'ctx> {
-    decided_to_call_directly: FxHashSet<FnName<'ctx>>,
+struct FunctionKnowledge<'ctx> {
+    map: FxHashMap<FnName<'ctx>, FunctionKnowledgeKind>,
 }
 
-impl<'ctx> DirectCallKnowledge<'ctx> {
-    /// Returns `true` if the function is going to be called directly.
-    fn call_directly(&self, fn_name: &FnName<'ctx>) -> bool {
+impl<'ctx> FunctionKnowledge<'ctx> {
+    /// Returns the knowledge of the function.
+    fn of(&self, fn_name: &FnName<'ctx>) -> FunctionKnowledgeKind {
         if let Some(ident) = fn_name.get_inner() {
             if ident.as_intrinsic().is_some() {
-                return true;
+                // Intrinsic functions are always called directly.
+                return FunctionKnowledgeKind::CallDirectly;
             }
         }
-        self.decided_to_call_directly.contains(fn_name)
+        self.map
+            .get(fn_name)
+            .copied()
+            .unwrap_or(FunctionKnowledgeKind::CallViaClosure)
     }
 
-    fn ack_decide_to_call_directly(&mut self, fn_name: FnName<'ctx>) {
-        self.decided_to_call_directly.insert(fn_name);
+    fn ack_decision(&mut self, fn_name: FnName<'ctx>, kind: FunctionKnowledgeKind) {
+        self.map.insert(fn_name, kind);
     }
 }
 
@@ -108,42 +158,35 @@ fn lower_expr<'ctx>(
             } else {
                 // LetRec
                 let fn_name = FnName::new(pattern.as_var().unwrap());
-                let LetRecAnalysisResult {
-                    did_fn_used_as_value,
-                    fv_set,
-                } = analyze_let_rec(&state.knowledge, binding, follows);
+                let LetRecAnalysisResult { fv_set } = analyze_let_rec(state, binding, follows);
 
-                let decide_to_call_directly = !did_fn_used_as_value && fv_set.is_empty();
-
-                if decide_to_call_directly {
-                    // DO NOT call `lower_expr` on `body`
-                    // before `ack_decide_to_make_closure`.
-                    state.knowledge.ack_decide_to_call_directly(fn_name);
-                }
                 let fv_set: IndexVec<_, _> = fv_set.into_iter().collect();
                 let func = FunctionDef::new(
                     fn_name,
                     args.clone(),
                     fv_set.clone(),
-                    !state.knowledge.call_directly(&fn_name),
+                    state.knowledge.of(&fn_name).is_closure(),
                 );
                 let index = state.push_function(func);
+                state.letrec_binders.insert(fn_name);
                 let body = lower_expr(ctx, state, value);
+                state.letrec_binders.remove(&fn_name);
                 state.functions[index].set_body(body);
 
-                let follows = lower_expr(ctx, state, follows);
-
-                if state.knowledge.call_directly(&fn_name) {
-                    // The function is not used as a value and does not capture any variables
+                if !state.knowledge.of(&fn_name).is_closure() {
+                    // The function is not used as a value and does not capture any variables.
 
                     // Remove the binding. Calling this function is allowed
-                    // only if the `App` has `ApplyKind::Direct`, so we do not
+                    // iff the `App` has `ApplyKind::Direct`, so we do not
                     // need to keep the binding.
-                    return follows;
+
+                    // optimization: tail call
+                    return lower_expr(ctx, state, follows);
                 } else {
+                    let follows = lower_expr(ctx, state, follows);
                     let value = ctx.new_expr(Typed::new(
                         ExprKind::ClosureMake(Closure {
-                            function: state.resolve_function(fn_name),
+                            function: FunctionInstance::Defined(index),
                             captured_args: fv_set,
                         }),
                         value.ty,
@@ -157,10 +200,8 @@ fn lower_expr<'ctx>(
         ir_knorm::ExprKind::App(f, args) => {
             let fn_name = FnName::new(*f);
             ExprKind::App(
-                if state.knowledge.call_directly(&fn_name) {
-                    ApplyKind::Direct {
-                        function: state.resolve_function(fn_name),
-                    }
+                if let Some(function) = state.call_directly(&fn_name) {
+                    ApplyKind::Direct { function }
                 } else {
                     ApplyKind::Closure { ident: *f }
                 },
@@ -177,7 +218,6 @@ fn lower_expr<'ctx>(
 }
 
 struct LetRecAnalysisResult<'ctx> {
-    did_fn_used_as_value: bool,
     /// Free variables of the binding body.
     ///
     /// The function name and the arguments are not included
@@ -203,7 +243,7 @@ struct LetRecAnalysisResult<'ctx> {
 /// In this implementation, we know whether closure conversion
 /// will fail by analyzing in advance.
 fn analyze_let_rec<'ctx>(
-    frozen_knowledge: &DirectCallKnowledge<'ctx>,
+    state: &mut LoweringState<'ctx>,
     binding: &ir_knorm::LetBinding<'ctx>,
     follows: &ir_knorm::Expr<'ctx>,
 ) -> LetRecAnalysisResult<'ctx> {
@@ -226,14 +266,14 @@ fn analyze_let_rec<'ctx>(
     });
     {
         /// Collect free variables of the binding body.
-        struct AnalyzeBindingVisitor<'ctx, 'k, 'helper, F: ir_knorm::FvVisitor<'ctx>> {
-            frozen_knowledge: &'k DirectCallKnowledge<'ctx>,
+        struct AnalyzeBindingVisitor<'ctx, 'state, 'helper, F: ir_knorm::FvVisitor<'ctx>> {
+            frozen_state: &'state LoweringState<'ctx>,
             collect_fv: &'helper mut ir_knorm::FvVisitorHelper<'ctx, F>,
             fn_name: Ident<'ctx>,
         }
         use ir_knorm::Visitor;
         let mut binding_visitor = AnalyzeBindingVisitor {
-            frozen_knowledge,
+            frozen_state: state,
             collect_fv: &mut collect_fv,
             fn_name,
         };
@@ -241,14 +281,14 @@ fn analyze_let_rec<'ctx>(
 
         impl<'ctx, F: ir_knorm::FvVisitor<'ctx>> Visitor<'ctx> for AnalyzeBindingVisitor<'ctx, '_, '_, F> {
             fn visit_app(&mut self, e: &Ident<'ctx>, es: &IndexVec<ArgIndex, Ident<'ctx>>) {
-                // If the function `e` is the function we are analyzing or
-                // if the function `e` is going to be called directly,
-                // we do not need to collect it as a free variable.
+                // If `e` is the function we are analyzing or `e` is going to be called directly,
+                // we do not need to count it as a free occurrence.
                 //
                 // This condition cannot be merged, because:
                 // - we won't know whether `fn_name` can be called directly
                 // - a function other than `fn_name` can be called directly
-                if *e == self.fn_name || self.frozen_knowledge.call_directly(&FnName::new(*e)) {
+                if *e == self.fn_name || self.frozen_state.call_directly(&FnName::new(*e)).is_some()
+                {
                     // skip
                 } else {
                     self.visit_ident(e);
@@ -307,8 +347,25 @@ fn analyze_let_rec<'ctx>(
         }
     }
 
-    LetRecAnalysisResult {
-        did_fn_used_as_value: fv_set.remove(&fn_name).is_some(),
-        fv_set,
-    }
+    let fn_used_as_value = fv_set.remove(&fn_name).is_some();
+    let fn_name = FnName::new(fn_name);
+
+    // Make a decision.
+    let decision = if fv_set.is_empty() {
+        if !fn_used_as_value {
+            FunctionKnowledgeKind::CallDirectly
+        } else {
+            // The function is used as a value but does not capture any variables.
+            // In this case, we can call the function directly inside of itself.
+            FunctionKnowledgeKind::MitigatedClosure {
+                mitigation: Mitigation::InsideOfSelf,
+            }
+        }
+    } else {
+        FunctionKnowledgeKind::CallViaClosure
+    };
+
+    state.knowledge.ack_decision(fn_name, decision);
+
+    LetRecAnalysisResult { fv_set }
 }
