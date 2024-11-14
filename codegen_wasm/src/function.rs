@@ -46,10 +46,13 @@ pub fn codegen<'ctx>(
     if function.is_closure {
         // about parameters (arguments)
 
-        // The last argument is the thunk pointer.
-        let pointer_ty = WasmTy::I32;
+        // The last argument is the thunk pointer. For self references in `let rec`,
+        // assign a local to the thunk pointer.
+        let (local, pointer_ty) = state
+            .local_def
+            .get_typed(function.name.get_inner().unwrap())
+            .unwrap();
         params.push(pointer_ty);
-        let local = state.local_def.new_local(pointer_ty);
 
         // about locals
 
@@ -141,6 +144,11 @@ impl<'ctx> LocalDef<'ctx> {
                 Some(local)
             }
         }
+    }
+
+    /// Get the local index of the given identifier. Do not create a new local if not found.
+    pub fn get_defined(&mut self, ident: ir_closure::Ident<'ctx>) -> Option<LocalIdx> {
+        self.locals.get(&ident).copied()
     }
 
     /// Get the local index and the type of the given identifier.

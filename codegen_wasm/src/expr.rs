@@ -208,7 +208,7 @@ pub fn codegen<'ctx>(
             }
 
             // Load the closure thunk pointer.
-            let local = function_state.local_def.get(*ident).unwrap();
+            let local = function_state.local_def.get_defined(*ident).unwrap();
             function_state
                 .instrs
                 .push(Instruction::LocalGet(local.unwrap_idx()));
