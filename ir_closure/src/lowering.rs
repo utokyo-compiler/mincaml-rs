@@ -30,7 +30,7 @@ pub fn lowering<'ctx>(ctx: &'ctx Context<'ctx>, knorm_expr: ir_knorm::Expr<'ctx>
 
 #[derive(Default)]
 struct LoweringState<'ctx> {
-    decided_to_call_directly: FxHashSet<FnName<'ctx>>,
+    knowledge: DirectCallKnowledge<'ctx>,
     functions: IndexVec<FnIndex, FunctionDef<'ctx>>,
     function_resolutions: FxHashMap<Ident<'ctx>, FnIndex>,
 }
@@ -54,7 +54,14 @@ impl<'ctx> LoweringState<'ctx> {
             None => FunctionInstance::Imported(fn_name.as_intrinsic().unwrap()),
         }
     }
+}
 
+#[derive(Default)]
+struct DirectCallKnowledge<'ctx> {
+    decided_to_call_directly: FxHashSet<FnName<'ctx>>,
+}
+
+impl<'ctx> DirectCallKnowledge<'ctx> {
     /// Returns `true` if the function is going to be called directly.
     fn call_directly(&self, fn_name: &FnName<'ctx>) -> bool {
         if let Some(ident) = fn_name.get_inner() {
@@ -104,21 +111,21 @@ fn lower_expr<'ctx>(
                 let LetRecAnalysisResult {
                     did_fn_used_as_value,
                     fv_set,
-                } = analyze_let_rec(binding, follows);
+                } = analyze_let_rec(&state.knowledge, binding, follows);
 
                 let decide_to_call_directly = !did_fn_used_as_value && fv_set.is_empty();
 
                 if decide_to_call_directly {
                     // DO NOT call `lower_expr` on `body`
                     // before `ack_decide_to_make_closure`.
-                    state.ack_decide_to_call_directly(fn_name);
+                    state.knowledge.ack_decide_to_call_directly(fn_name);
                 }
                 let fv_set: IndexVec<_, _> = fv_set.into_iter().collect();
                 let func = FunctionDef::new(
                     fn_name,
                     args.clone(),
                     fv_set.clone(),
-                    !state.call_directly(&fn_name),
+                    !state.knowledge.call_directly(&fn_name),
                 );
                 let index = state.push_function(func);
                 let body = lower_expr(ctx, state, value);
@@ -126,7 +133,7 @@ fn lower_expr<'ctx>(
 
                 let follows = lower_expr(ctx, state, follows);
 
-                if state.call_directly(&fn_name) {
+                if state.knowledge.call_directly(&fn_name) {
                     // The function is not used as a value and does not capture any variables
 
                     // Remove the binding. Calling this function is allowed
@@ -150,7 +157,7 @@ fn lower_expr<'ctx>(
         ir_knorm::ExprKind::App(f, args) => {
             let fn_name = FnName::new(*f);
             ExprKind::App(
-                if state.call_directly(&fn_name) {
+                if state.knowledge.call_directly(&fn_name) {
                     ApplyKind::Direct {
                         function: state.resolve_function(fn_name),
                     }
@@ -196,6 +203,7 @@ struct LetRecAnalysisResult<'ctx> {
 /// In this implementation, we know whether closure conversion
 /// will fail by analyzing in advance.
 fn analyze_let_rec<'ctx>(
+    frozen_knowledge: &DirectCallKnowledge<'ctx>,
     binding: &ir_knorm::LetBinding<'ctx>,
     follows: &ir_knorm::Expr<'ctx>,
 ) -> LetRecAnalysisResult<'ctx> {
@@ -217,23 +225,32 @@ fn analyze_let_rec<'ctx>(
         }
     });
     {
-        /// This visitor is used to collect free variables of the binding body.
-        struct AnalyzeBindingVisitor<'ctx, 'helper, F: ir_knorm::FvVisitor<'ctx>> {
+        /// Collect free variables of the binding body.
+        struct AnalyzeBindingVisitor<'ctx, 'k, 'helper, F: ir_knorm::FvVisitor<'ctx>> {
+            frozen_knowledge: &'k DirectCallKnowledge<'ctx>,
             collect_fv: &'helper mut ir_knorm::FvVisitorHelper<'ctx, F>,
             fn_name: Ident<'ctx>,
         }
         use ir_knorm::Visitor;
         let mut binding_visitor = AnalyzeBindingVisitor {
+            frozen_knowledge,
             collect_fv: &mut collect_fv,
             fn_name,
         };
         binding_visitor.visit_binding(binding);
 
-        impl<'ctx, F: ir_knorm::FvVisitor<'ctx>> ir_knorm::Visitor<'ctx>
-            for AnalyzeBindingVisitor<'ctx, '_, F>
-        {
+        impl<'ctx, F: ir_knorm::FvVisitor<'ctx>> Visitor<'ctx> for AnalyzeBindingVisitor<'ctx, '_, '_, F> {
             fn visit_app(&mut self, e: &Ident<'ctx>, es: &IndexVec<ArgIndex, Ident<'ctx>>) {
-                if *e != self.fn_name {
+                // If the function `e` is the function we are analyzing or
+                // if the function `e` is going to be called directly,
+                // we do not need to collect it as a free variable.
+                //
+                // This condition cannot be merged, because:
+                // - we won't know whether `fn_name` can be called directly
+                // - a function other than `fn_name` can be called directly
+                if *e == self.fn_name || self.frozen_knowledge.call_directly(&FnName::new(*e)) {
+                    // skip
+                } else {
                     self.visit_ident(e);
                 }
                 for e in es {
@@ -249,6 +266,7 @@ fn analyze_let_rec<'ctx>(
                 self.visit_expr(&binding.value);
             }
             fn visit_pattern(&mut self, pattern: &Pattern<'ctx>) {
+                // initial binding
                 if let Some(var) = pattern.as_var() {
                     if var == self.fn_name {
                         return;
@@ -259,8 +277,7 @@ fn analyze_let_rec<'ctx>(
         }
     }
     {
-        /// This visitor is used to check whether the function is used as a value
-        /// outside of the binding.
+        /// Check whether the function is used as a value outside of the binding.
         struct AnalyzeFollowingVisitor<'ctx, 'helper, F: ir_knorm::FvVisitor<'ctx>> {
             collect_fv: &'helper mut ir_knorm::FvVisitorHelper<'ctx, F>,
             fn_name: Ident<'ctx>,
@@ -272,15 +289,10 @@ fn analyze_let_rec<'ctx>(
         };
         following_visitor.visit_expr(follows);
 
-        impl<'ctx, F: ir_knorm::FvVisitor<'ctx>> ir_knorm::Visitor<'ctx>
-            for AnalyzeFollowingVisitor<'ctx, '_, F>
-        {
-            fn visit_app(&mut self, e: &Ident<'ctx>, es: &IndexVec<ArgIndex, Ident<'ctx>>) {
-                if *e != self.fn_name {
-                    // Do nothing
-                }
-                for e in es {
-                    self.visit_ident(e);
+        impl<'ctx, F: ir_knorm::FvVisitor<'ctx>> Visitor<'ctx> for AnalyzeFollowingVisitor<'ctx, '_, F> {
+            fn visit_app(&mut self, _e: &Ident<'ctx>, args: &IndexVec<ArgIndex, Ident<'ctx>>) {
+                for arg in args {
+                    self.visit_ident(arg);
                 }
             }
             fn visit_ident(&mut self, ident: &Ident<'ctx>) {
@@ -289,6 +301,7 @@ fn analyze_let_rec<'ctx>(
                 }
             }
             fn visit_binding(&mut self, binding: &ir_knorm::LetBinding<'ctx>) {
+                // optimization: no need to visit the binder
                 self.visit_expr(&binding.value);
             }
         }
