@@ -8,3 +8,7 @@ wasi-common.workspace = true
 wasmtime.workspace = true
 
 clap.workspace = true
+
+[features]
+default = ["minrt-runtime"]
+minrt-runtime = []
