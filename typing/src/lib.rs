@@ -334,10 +334,7 @@ fn unify<'ctx>(
     // N.B., This comparison covers the case
     // where both `lhs` and `rhs` are the same type variable
     // so as not to cause an error in `occurck`.
-    //
-    // `lhs == rhs` will not properly compare the type variables, because
-    // the different type variables can be equated with each other after `Ty` is interned.
-    if lhs.kind() == rhs.kind() {
+    if lhs == rhs {
         return Ok(());
     }
     match (lhs.kind(), rhs.kind()) {

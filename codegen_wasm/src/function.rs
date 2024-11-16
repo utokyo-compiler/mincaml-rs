@@ -28,7 +28,7 @@ pub fn codegen<'ctx>(
     let args = std::mem::take(&mut function.args);
     let args_via_closure = std::mem::take(&mut function.args_via_closure);
 
-    let mut params = Vec::new();
+    let mut params = Vec::with_capacity(args.len() + 1);
     let results = WasmTy::from_ty(function.body().ty);
 
     for arg in args {
@@ -46,10 +46,13 @@ pub fn codegen<'ctx>(
     if function.is_closure {
         // about parameters (arguments)
 
-        // The last argument is the thunk pointer.
-        let pointer_ty = WasmTy::I32;
+        // The last argument is the thunk pointer. For self references in `let rec`,
+        // assign a local to the thunk pointer.
+        let (local, pointer_ty) = state
+            .local_def
+            .get_typed(function.name.get_inner().unwrap())
+            .unwrap();
         params.push(pointer_ty);
-        let local = state.local_def.new_local(pointer_ty);
 
         // about locals
 
@@ -73,6 +76,7 @@ pub fn codegen<'ctx>(
     state.instrs.push(wasm_encoder::Instruction::End);
 
     let function_def = FunctionDef {
+        arg_count: params.len(),
         local_decls: state.local_def.local_decls,
         sig: program_state
             .signature_interner
@@ -85,6 +89,7 @@ pub fn codegen<'ctx>(
 }
 
 pub struct FunctionDef<'ctx> {
+    pub arg_count: usize,
     pub local_decls: IndexVec<LocalIdx, LocalDecl<'ctx>>,
     pub sig: TypeIdx,
     pub instrs: Vec<wasm_encoder::Instruction<'static>>,
@@ -139,6 +144,11 @@ impl<'ctx> LocalDef<'ctx> {
                 Some(local)
             }
         }
+    }
+
+    /// Get the local index of the given identifier. Do not create a new local if not found.
+    pub fn get_defined(&mut self, ident: ir_closure::Ident<'ctx>) -> Option<LocalIdx> {
+        self.locals.get(&ident).copied()
     }
 
     /// Get the local index and the type of the given identifier.

@@ -2,6 +2,8 @@
 // https://docs.wasmtime.dev/examples-rust-wasi.html#invoke-the-wasm-module
 
 mod intrinsic;
+#[cfg(feature = "minrt-runtime")]
+mod mini_ml_runtime;
 
 use wasi_common::sync::WasiCtxBuilder;
 use wasmtime::{Engine, Linker, Module, Result, Store};
@@ -15,6 +17,8 @@ where
     let mut linker = Linker::new(&engine);
     wasi_common::sync::add_to_linker(&mut linker, |s| s)?;
     intrinsic::provide_intrinsic_impls(&mut linker)?;
+    #[cfg(feature = "minrt-runtime")]
+    mini_ml_runtime::provide_minrt_impls(&mut linker)?;
 
     // Create a WASI context and put it in a Store; all instances in the store
     // share this context. `WasiCtxBuilder` provides a number of ways to
