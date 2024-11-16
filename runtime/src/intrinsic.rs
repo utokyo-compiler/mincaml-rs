@@ -1,5 +1,6 @@
 use wasmtime::{Linker, Result};
 
+/// Provides intrinsic functions to the given linker.
 pub fn provide_intrinsic_impls<T>(linker: &mut Linker<T>) -> Result<()> {
     const MODULE: &str = "mincaml:runtime";
     linker.func_wrap(MODULE, "print_int", |value: i32| print!("{value}"))?;
