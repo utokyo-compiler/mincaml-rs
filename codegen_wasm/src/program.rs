@@ -110,8 +110,9 @@ pub fn codegen<'ctx>(
 
     // write memory section
     let mut memory_section = wasm_encoder::MemorySection::new();
+    // Allocate 64 pages of memory. Feel free to change this value since memory allocators are not implemented yet.
     memory_section.memory(wasm_encoder::MemoryType {
-        minimum: 1,
+        minimum: 64,
         maximum: None,
         memory64: false,
         shared: false,
