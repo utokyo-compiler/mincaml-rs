@@ -21,7 +21,7 @@ resolver = "2"
 default-members = ["main"]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 authors = ["s-ylide <71720482+s-ylide@users.noreply.github.com>"]
 license = "MIT/Apache-2.0"
