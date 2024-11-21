@@ -9,5 +9,6 @@ edition.workspace = true
 bitvec.workspace = true
 typed-arena.workspace = true
 rustc-hash.workspace = true
+indexmap.workspace = true
 
 cfg-if.workspace = true

@@ -41,6 +41,7 @@ clap = { version = "4.5.18", features = ["derive"] }
 wasm-encoder = "0.217.0"
 wasmtime = "25.0.1"
 wasi-common = "25.0.1"
+indexmap = "2.6.0"
 
 syntax = { path = "./syntax" }
 parser = { path = "./parser" }

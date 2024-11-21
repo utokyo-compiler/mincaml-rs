@@ -2,7 +2,7 @@ use core::range::Range;
 
 use data_structure::{
     index::vec::{Idx, IndexVec},
-    SetLikeVec,
+    FxIndexMap,
 };
 
 use crate::{
@@ -44,7 +44,7 @@ pub struct FunctionBuilder<'ctx> {
     args_via_closure: Range<Local>,
     basic_blocks: IndexVec<BasicBlock, BasicBlockData<'ctx>>,
 
-    seen_idents: SetLikeVec<Ident<'ctx>>,
+    ident_map: FxIndexMap<Ident<'ctx>, Local>,
     basic_block_builder: BasicBlockBuilder<'ctx>,
 
     #[cfg(debug_assertions)]
@@ -60,7 +60,7 @@ impl<'ctx> FunctionBuilder<'ctx> {
         return_ty: Ty<'ctx>,
     ) -> Self {
         let mut local_decls = IndexVec::default();
-        let mut seen_idents = SetLikeVec::default();
+        let mut ident_map = FxIndexMap::default();
 
         static COMPILER_GENERATED_COUNTER: std::sync::atomic::AtomicUsize =
             std::sync::atomic::AtomicUsize::new(0);
@@ -76,16 +76,16 @@ impl<'ctx> FunctionBuilder<'ctx> {
 
         let range_start = local_decls.len();
         for arg in args {
-            seen_idents.insert(arg);
-            local_decls.push(LocalDecl { ident: arg });
+            let local = local_decls.push(LocalDecl { ident: arg });
+            ident_map.insert(arg, local);
         }
         let range_end = local_decls.len();
         let args = Range::from(Local::new(range_start)..Local::new(range_end));
 
         let range_start = local_decls.len();
         for arg in args_via_closure {
-            seen_idents.insert(arg);
-            local_decls.push(LocalDecl { ident: arg });
+            let local = local_decls.push(LocalDecl { ident: arg });
+            ident_map.insert(arg, local);
         }
         let range_end = local_decls.len();
         let args_via_closure = Range::from(Local::new(range_start)..Local::new(range_end));
@@ -96,7 +96,7 @@ impl<'ctx> FunctionBuilder<'ctx> {
             args,
             args_via_closure,
             basic_blocks: IndexVec::default(),
-            seen_idents,
+            ident_map,
             basic_block_builder: BasicBlockBuilder::default(),
 
             #[cfg(debug_assertions)]
@@ -118,11 +118,12 @@ impl<'ctx> FunctionBuilder<'ctx> {
     /// If the identifier is not seen before, it will be added
     /// to the local declarations.
     pub fn get_local(&mut self, ident: Ident<'ctx>) -> Local {
-        if let Some(index) = self.seen_idents.get(&ident) {
-            return Local::new(index);
+        if let Some(local) = self.ident_map.get(&ident) {
+            return *local;
         }
-        self.seen_idents.insert(ident);
-        self.local_decls.push(LocalDecl { ident })
+        let local = self.local_decls.push(LocalDecl { ident });
+        self.ident_map.insert(ident, local);
+        local
     }
 
     /// Set the arguments of the current basic block.

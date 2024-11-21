@@ -1,4 +1,4 @@
-use crate::{index::vec::Idx, BitVec, SetLikeVec};
+use crate::{index::vec::Idx, BitVec};
 
 use super::{DirectedGraph, StartNode, Successors};
 
@@ -7,7 +7,7 @@ where
     G: DirectedGraph + Successors,
 {
     graph: &'graph G,
-    stack: SetLikeVec<G::Node>,
+    stack: Vec<G::Node>,
     visited: BitVec<usize>,
 }
 
@@ -18,7 +18,7 @@ where
     pub fn new(graph: &'graph G) -> Self {
         Self {
             graph,
-            stack: SetLikeVec::new(),
+            stack: Vec::new(),
             visited: BitVec::repeat(false, graph.num_nodes()),
         }
     }
@@ -41,7 +41,7 @@ where
         self.visited.set(node.index(), true);
     }
 
-    pub fn stack(&self) -> &SetLikeVec<G::Node> {
+    pub fn stack(&self) -> &Vec<G::Node> {
         &self.stack
     }
 }
