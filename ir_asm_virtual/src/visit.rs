@@ -72,7 +72,9 @@ macro_rules! declare_visitor {
                         place,
                         value,
                     } => {
-                        self.visit_place(place, LocalVisitContext::AssignLhs);
+                        if let Some(place) = place {
+                            self.visit_place(place, LocalVisitContext::AssignLhs);
+                        }
                         self.visit_expr(value);
                     }
                 }
@@ -84,7 +86,6 @@ macro_rules! declare_visitor {
 
             fn super_place(&mut self, place: & $($mutability)? Place, context: LocalVisitContext) {
                 match place {
-                    Place::Discard => (),
                     Place::Local(local) => self.visit_local(local, context),
                     Place::Projection { base, projection_kind } => {
                         self.visit_projection(base, projection_kind, context);

@@ -15,10 +15,10 @@ enum BindingPlace {
 }
 
 impl BindingPlace {
-    fn into_place(self) -> Place {
+    fn into_place(self) -> Option<Place> {
         match self {
-            Self::Discard => Place::Discard,
-            Self::Local(local) => Place::Local(local),
+            Self::Discard => None,
+            Self::Local(local) => Some(Place::Local(local)),
         }
     }
 }
@@ -267,7 +267,7 @@ impl<'builder, 'ctx> State<'builder, 'ctx> {
             expr => {
                 let local = self.new_local(ctx, name, ty);
                 self.builder.push_stmt_to_current(StmtKind::Assign {
-                    place: Place::Local(local),
+                    place: Some(Place::Local(local)),
                     value: ctx.new_expr(Typed::new(expr, ty)),
                 });
                 local
@@ -355,7 +355,7 @@ pub fn lower_expr<'ctx>(
                         for (tuple_index, var) in vars.iter_enumerated() {
                             let local = state.builder.get_local(*var);
                             state.builder.push_stmt_to_current(StmtKind::Assign {
-                                place: Place::Local(local),
+                                place: Some(Place::Local(local)),
                                 value: ctx.new_expr(Typed::new(
                                     ExprKind::Read(Place::Projection {
                                         base: tuple_assign_rhs,
@@ -379,10 +379,10 @@ pub fn lower_expr<'ctx>(
                 let displacement = state.builder.get_local(*displacement);
                 let value = state.builder.get_local(*value);
                 state.builder.push_stmt_to_current(StmtKind::Assign {
-                    place: Place::Projection {
+                    place: Some(Place::Projection {
                         base,
                         projection_kind: ProjectionKind::ArrayElem(displacement),
-                    },
+                    }),
                     value: ctx.new_expr(Typed::new(ExprKind::Read(Place::Local(value)), ty)),
                 });
                 // Result of `Set` is not a meaningful value, but

@@ -143,7 +143,10 @@ pub enum StmtKind<'ctx> {
     Nop,
 
     /// Assign a value to a place.
-    Assign { place: Place, value: Expr<'ctx> },
+    Assign {
+        place: Option<Place>,
+        value: Expr<'ctx>,
+    },
 }
 
 impl<'ctx> StmtKind<'ctx> {
@@ -155,7 +158,6 @@ impl<'ctx> StmtKind<'ctx> {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum Place {
-    Discard,
     Local(Local),
     Projection {
         base: Local,
