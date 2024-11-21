@@ -129,7 +129,7 @@ impl<'builder, 'ctx> HandlerMap<'builder, 'ctx> {
 
 #[derive(Default)]
 pub struct LabelResolution<'builder, 'ctx> {
-    map: FxHashMap<Label, BasicBlock>,
+    resolved: FxHashMap<Label, BasicBlock>,
     handlers: HandlerMap<'builder, 'ctx>,
 }
 
@@ -140,12 +140,12 @@ impl<'builder, 'ctx> LabelResolution<'builder, 'ctx> {
         label: Label,
         basic_block: BasicBlock,
     ) -> Option<Vec<ResolveHandler<'builder, 'ctx>>> {
-        self.map.insert(label, basic_block);
+        self.resolved.insert(label, basic_block);
         self.handlers.remove(label)
     }
 
     pub fn get_unchecked(&self, label: Label) -> BasicBlock {
-        *self.map.get(&label).expect("label not resolved")
+        *self.resolved.get(&label).expect("label not resolved")
     }
 
     #[inline]
