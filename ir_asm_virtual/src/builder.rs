@@ -6,8 +6,8 @@ use data_structure::{
 };
 
 use crate::{
-    ArgIndex, BasicBlock, BasicBlockData, Context, DisambiguatedIdent, FnName, FunctionDef, Ident,
-    Local, LocalDecl, StmtIndex, StmtKind, TerminatorKind, Ty, Typed,
+    ArgIndex, BasicBlock, BasicBlockData, FnName, FunctionDef, Ident, Local, LocalDecl, StmtIndex,
+    StmtKind, TerminatorKind,
 };
 
 #[derive(Default)]
@@ -53,26 +53,12 @@ pub struct FunctionBuilder<'ctx> {
 
 impl<'ctx> FunctionBuilder<'ctx> {
     pub fn new(
-        ctx: &'ctx Context<'ctx>,
         name: FnName<'ctx>,
         args: impl Iterator<Item = Ident<'ctx>>,
         args_via_closure: impl Iterator<Item = Ident<'ctx>>,
-        return_ty: Ty<'ctx>,
     ) -> Self {
         let mut local_decls = IndexVec::default();
         let mut ident_map = FxIndexMap::default();
-
-        static COMPILER_GENERATED_COUNTER: std::sync::atomic::AtomicUsize =
-            std::sync::atomic::AtomicUsize::new(0);
-        local_decls.push(LocalDecl {
-            ident: ctx.new_ident_unchecked(Typed::new(
-                DisambiguatedIdent::new_compiler_unchecked(
-                    "return_place",
-                    COMPILER_GENERATED_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
-                ),
-                return_ty,
-            )),
-        });
 
         let range_start = local_decls.len();
         for arg in args {
@@ -137,9 +123,9 @@ impl<'ctx> FunctionBuilder<'ctx> {
     }
 
     /// Obtain the next basic block. The result is always an invalid block at
-    /// the time of this call, but is useful if we are going to start a new block.
+    /// the time of this call, but is useful if we are going to create a new block.
     pub fn next_basic_block(&self) -> BasicBlock {
-        BasicBlock::new(self.basic_blocks.len())
+        BasicBlock::new(self.basic_blocks.len() + 1)
     }
 }
 

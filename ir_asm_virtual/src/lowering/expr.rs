@@ -127,32 +127,31 @@ impl PlaceBinder {
                 };
             }
             PlaceBinder::FnReturn => {
-                let return_value = match bindee {
-                    PlaceBindee::Expr { expr, ty } => ctx.new_expr(Typed::new(expr, ty)),
+                let (expr, ty) = match bindee {
+                    PlaceBindee::Expr { expr, ty } => (expr, ty),
                     PlaceBindee::Call {
                         calling_conv,
                         args,
                         ty,
                     } => {
+                        // You can do tail-call optimization by changing this branch and adding a variant to `TerminatorKind`.
                         let call_result = state.new_local(ctx, "call_result", ty);
                         let target = state.builder.next_basic_block();
                         state.builder.terminate_block(TerminatorKind::Call {
                             calling_conv,
                             args,
-                            branch: Branch {
-                                target,
-                                args: index_vec![call_result],
-                            },
+                            branch: Branch::one_arg(target, call_result),
                         });
                         state.builder.set_args_to_current(index_vec![call_result]);
-                        ctx.new_expr(Typed::new(ExprKind::Read(Place::Local(call_result)), ty))
+                        (ExprKind::Read(Place::Local(call_result)), ty)
                     }
                 };
-                state.builder.push_stmt_to_current(StmtKind::Assign {
-                    place: Place::Local(Local::RETURN_LOCAL),
-                    value: return_value,
-                });
-                state.builder.terminate_block(TerminatorKind::Return);
+                let return_local = state.evaluated_local(ctx, "return_value", expr, ty);
+                state
+                    .builder
+                    .terminate_block(TerminatorKind::Return(IndexVec::from_raw_vec(vec![
+                        return_local,
+                    ])));
             }
             PlaceBinder::Branch { target } => match bindee {
                 PlaceBindee::Expr { expr, ty } => {
@@ -217,7 +216,7 @@ impl<'builder, 'ctx> State<'builder, 'ctx> {
         self.binders.push(binder);
     }
 
-    /// Resolve the label and run the handlers if any.
+    /// Resolve the label and run the handlers if registered.
     fn resolve_label(&mut self, label: Label, basic_block: BasicBlock) {
         if let Some(handlers) = self.label_resolution.insert(label, basic_block) {
             for handler in handlers {

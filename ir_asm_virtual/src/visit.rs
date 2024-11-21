@@ -153,7 +153,11 @@ macro_rules! declare_visitor {
 
             fn super_terminator(&mut self, terminator: & $($mutability)? TerminatorKind<'ctx>) {
                 match terminator {
-                    TerminatorKind::Return => (),
+                    TerminatorKind::Return(args) => {
+                        for arg in args {
+                            self.visit_local(arg, LocalVisitContext::Use);
+                        }
+                    },
                     TerminatorKind::Branch(branch) => {
                         self.visit_branch(branch);
                     }

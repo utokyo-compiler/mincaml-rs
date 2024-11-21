@@ -53,9 +53,6 @@ pub struct FunctionDef<'ctx> {
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct Local(usize);
-impl Local {
-    pub const RETURN_LOCAL: Self = Self(0);
-}
 impl Indexable<ArgIndex> for Local {}
 impl Indexable<TupleIndex> for Local {}
 
@@ -174,8 +171,8 @@ pub enum ProjectionKind {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum TerminatorKind<'ctx> {
-    /// Return from the function.
-    Return,
+    /// Return from the function. The return value is passed as arguments.
+    Return(IndexVec<ArgIndex, Local>),
 
     /// MLIR-like branch instruction.
     ///
@@ -227,12 +224,18 @@ impl Branch {
             args: IndexVec::new(),
         }
     }
+    pub fn one_arg(target: BasicBlock, arg: Local) -> Self {
+        Self {
+            target,
+            args: IndexVec::from_raw_vec(vec![arg]),
+        }
+    }
 }
 
 impl TerminatorKind<'_> {
     pub fn successors(&self) -> impl DoubleEndedIterator<Item = BasicBlock> + '_ {
         match self {
-            Self::Return => [].iter().copied().chain(None),
+            Self::Return(..) => [].iter().copied().chain(None),
             Self::Branch(branch) | Self::Call { branch, .. } => {
                 [].iter().copied().chain(Some(branch.target))
             }
