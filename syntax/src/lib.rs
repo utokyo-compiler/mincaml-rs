@@ -1,5 +1,5 @@
 pub mod mli;
-mod prettify;
+mod pretty;
 
 use data_structure::interning::Interned;
 use sourcemap::Spanned;

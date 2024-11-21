@@ -3,75 +3,9 @@ use data_structure::index::vec::{Idx, IndexVec};
 use crate::syntax::*;
 use std::fmt::{self, Display, Formatter};
 
-// implement as a function because these types are actually defined in another crate
-// and we cannot implement `Display` for it.
-fn format_ty(f: &mut Formatter<'_>, ty: &Ty) -> fmt::Result {
-    match ty.0 .0 {
-        TyKind::Unit => write!(f, "()"),
-        TyKind::Bool => write!(f, "bool"),
-        TyKind::Int => write!(f, "int"),
-        TyKind::Float => write!(f, "float"),
-        TyKind::Fun(args, ret) => {
-            write!(f, "(")?;
-            args.iter().try_for_each(|arg| {
-                format_ty(f, arg)?;
-                write!(f, ",")
-            })?;
-            write!(f, ") -> ")?;
-            format_ty(f, ret)
-        }
-        TyKind::Tuple(tys) => {
-            write!(f, "(")?;
-            tys.iter().try_for_each(|ty| format_ty(f, ty))?;
-            write!(f, ")")
-        }
-        TyKind::Array(ty) => {
-            write!(f, "[")?;
-            format_ty(f, ty)?;
-            write!(f, "]")
-        }
-        TyKind::TyVar(_) => panic!("TyVar should not be appeared in this context"),
-    }
-}
-
-fn format_un_op(f: &mut Formatter<'_>, un_op: &UnOp) -> fmt::Result {
-    match un_op {
-        UnOp::Not => write!(f, "!"),
-        UnOp::Ineg => write!(f, "-"),
-        UnOp::Fneg => write!(f, "-."),
-    }
-}
-
-fn format_bin_op(f: &mut Formatter<'_>, bin_op: &BinOp) -> fmt::Result {
-    use ir_closure::{FloatBinOpKind as FOp, IntBinOpKind as IOp, RelationBinOpKind as BOp};
-    match bin_op {
-        BinOp::Relation(bin_op) => match bin_op {
-            BOp::Eq => write!(f, "=="),
-            BOp::Le => write!(f, "<="),
-            BOp::Ge => write!(f, ">="),
-            BOp::Ne => write!(f, "!="),
-            BOp::Lt => write!(f, "<"),
-            BOp::Gt => write!(f, ">"),
-        },
-        BinOp::Int(bin_op) => match bin_op {
-            IOp::Add => write!(f, "+"),
-            IOp::Sub => write!(f, "-"),
-            IOp::Mul => write!(f, "*"),
-            IOp::Div => write!(f, "/"),
-        },
-        BinOp::Float(bin_op) => match bin_op {
-            FOp::FAdd => write!(f, "+."),
-            FOp::FSub => write!(f, "-."),
-            FOp::FMul => write!(f, "*."),
-            FOp::FDiv => write!(f, "/."),
-        },
-    }
-}
-
 impl Display for LocalDecl<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}: ", self.ident.value)?;
-        format_ty(f, &self.ident.ty)
+        write!(f, "{}: {}", self.ident.value, self.ident.ty)
     }
 }
 
@@ -94,7 +28,6 @@ impl BasicBlockPrinter<'_, '_> {
 
     fn format_place(&self, f: &mut Formatter<'_>, place: &Place) -> fmt::Result {
         match place {
-            Place::Discard => write!(f, "_"),
             Place::Local(x) => write!(f, "{}", self.locals[*x].ident.value),
             Place::Projection {
                 base,
@@ -129,15 +62,16 @@ impl BasicBlockPrinter<'_, '_> {
 
     fn format_expr_kind(&self, f: &mut Formatter<'_>, expr_kind: &ExprKind) -> fmt::Result {
         match expr_kind {
-            ExprKind::Const(lit_kind) => write!(f, "{}", lit_kind),
+            ExprKind::Const(lit_kind) => write!(f, "{lit_kind}"),
             ExprKind::Unary(un_op, x) => {
-                format_un_op(f, un_op)?;
-                write!(f, "{}", self.locals[*x].ident.value)
+                write!(f, "{un_op} {}", self.locals[*x].ident.value)
             }
             ExprKind::Binary(bin_op, x, y) => {
-                write!(f, "{} ", self.locals[*x].ident.value)?;
-                format_bin_op(f, bin_op)?;
-                write!(f, " {}", self.locals[*y].ident.value)
+                write!(
+                    f,
+                    "{} {bin_op} {}",
+                    self.locals[*x].ident.value, self.locals[*y].ident.value
+                )
             }
             ExprKind::ClosureMake(closure) => {
                 write!(f, "Closure.make ")?;
@@ -165,7 +99,11 @@ impl BasicBlockPrinter<'_, '_> {
             StmtKind::Nop => write!(f, "\tnop"),
             StmtKind::Assign { place, value } => {
                 write!(f, "\t")?;
-                self.format_place(f, place)?;
+                if let Some(place) = place {
+                    self.format_place(f, place)?;
+                } else {
+                    write!(f, "_")?;
+                }
                 write!(f, " := ")?;
                 self.format_expr_kind(f, &value.value)
             }

@@ -1,7 +1,5 @@
 pub mod context;
 
-use std::fmt::Debug;
-
 use context::TypingContext;
 use data_structure::{
     index::{
@@ -20,6 +18,12 @@ impl<'ctx> std::ops::Deref for Ty<'ctx> {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl<'ctx> std::fmt::Display for Ty<'ctx> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
     }
 }
 
@@ -92,6 +96,50 @@ impl<'ctx> TyKind<'ctx> {
     }
 }
 
+impl<'ctx> std::fmt::Display for TyKind<'ctx> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fn into_safe(ty: String) -> String {
+            if (ty.contains("->") || ty.contains("*")) && !ty.starts_with("(") {
+                format!("({ty})")
+            } else {
+                ty
+            }
+        }
+        match self {
+            TyKind::Unit => write!(f, "()"),
+            TyKind::Bool => write!(f, "bool"),
+            TyKind::Int => write!(f, "int"),
+            TyKind::Float => write!(f, "float"),
+            TyKind::Fun(args, ret) => {
+                let mut first = true;
+                for arg in args {
+                    if first {
+                        first = false;
+                    } else {
+                        write!(f, " -> ")?;
+                    }
+                    write!(f, "{}", into_safe(arg.to_string()))?;
+                }
+                write!(f, " -> {ret}")
+            }
+            TyKind::Tuple(types) => {
+                let mut first = true;
+                for ty in types {
+                    if first {
+                        first = false;
+                    } else {
+                        write!(f, " * ")?;
+                    }
+                    write!(f, "{}", into_safe(ty.to_string()))?;
+                }
+                Ok(())
+            }
+            TyKind::Array(ty) => write!(f, "{} array", into_safe(ty.to_string())),
+            TyKind::TyVar(ty_var_id) => write!(f, "{ty_var_id}"),
+        }
+    }
+}
+
 /// Used in type checking.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TyVarId(usize);
@@ -99,6 +147,12 @@ pub struct TyVarId(usize);
 impl TyVarId {
     pub fn new_unchecked(id: usize) -> Self {
         Self(id)
+    }
+}
+
+impl std::fmt::Display for TyVarId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "'_weak{}", self.0)
     }
 }
 
