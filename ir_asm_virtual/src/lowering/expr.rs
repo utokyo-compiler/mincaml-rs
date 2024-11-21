@@ -134,7 +134,7 @@ impl PlaceBinder {
                         args,
                         ty,
                     } => {
-                        let call_result = new_local(ctx, state, "call_result", ty);
+                        let call_result = state.new_local(ctx, "call_result", ty);
                         let target = state.builder.next_basic_block();
                         state.builder.terminate_block(TerminatorKind::Call {
                             calling_conv,
@@ -156,7 +156,7 @@ impl PlaceBinder {
             }
             PlaceBinder::Branch { target } => match bindee {
                 PlaceBindee::Expr { expr, ty } => {
-                    let branch_arg = evaluated_local(ctx, state, "branch_arg", expr, ty);
+                    let branch_arg = state.evaluated_local(ctx, "branch_arg", expr, ty);
                     state.defer_terminate_block(
                         TerminatorCtor::Branch {
                             target,
@@ -170,7 +170,7 @@ impl PlaceBinder {
                     args,
                     ty,
                 } => {
-                    let call_result = new_local(ctx, state, "call_result", ty);
+                    let call_result = state.new_local(ctx, "call_result", ty);
                     state.defer_terminate_block(
                         TerminatorCtor::Call {
                             calling_conv,
@@ -182,47 +182,6 @@ impl PlaceBinder {
                     );
                 }
             },
-        }
-    }
-}
-
-fn new_local<'ctx>(
-    ctx: &'ctx Context<'ctx>,
-    state: &mut State<'_, 'ctx>,
-    name: &'static str,
-    ty: Ty<'ctx>,
-) -> Local {
-    static COMPILER_GENERATED_COUNTER: std::sync::atomic::AtomicUsize =
-        std::sync::atomic::AtomicUsize::new(0);
-    let ident = ctx.new_ident_unchecked(Typed::new(
-        DisambiguatedIdent::new_compiler_unchecked(
-            name,
-            COMPILER_GENERATED_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
-        ),
-        ty,
-    ));
-    state.builder.get_local(ident)
-}
-
-fn evaluated_local<'ctx>(
-    ctx: &'ctx Context<'ctx>,
-    state: &mut State<'_, 'ctx>,
-    name: &'static str,
-    expr: ExprKind<'ctx>,
-    ty: Ty<'ctx>,
-) -> Local {
-    match expr {
-        ExprKind::Read(Place::Local(ident)) => {
-            // if the expression is a variable, we can reuse the variable name
-            ident
-        }
-        expr => {
-            let local = new_local(ctx, state, name, ty);
-            state.builder.push_stmt_to_current(StmtKind::Assign {
-                place: Place::Local(local),
-                value: ctx.new_expr(Typed::new(expr, ty)),
-            });
-            local
         }
     }
 }
@@ -274,11 +233,47 @@ impl<'builder, 'ctx> State<'builder, 'ctx> {
     /// # Arguments
     ///
     /// * `ctor` - The constructor of the terminator.
-    /// * `until_resolve` - The label of the latest created basic block.
+    /// * `until_resolve` - The label of the latest basic block to be created.
     fn defer_terminate_block(&mut self, ctor: TerminatorCtor<'ctx>, until_resolve: Label) {
         let deferred = self.builder.defer_terminate_block();
         self.label_resolution
             .register(until_resolve, ResolveHandler::new(deferred, ctor));
+    }
+
+    fn new_local(&mut self, ctx: &'ctx Context<'ctx>, name: &'static str, ty: Ty<'ctx>) -> Local {
+        static COMPILER_GENERATED_COUNTER: std::sync::atomic::AtomicUsize =
+            std::sync::atomic::AtomicUsize::new(0);
+        let ident = ctx.new_ident_unchecked(Typed::new(
+            DisambiguatedIdent::new_compiler_unchecked(
+                name,
+                COMPILER_GENERATED_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+            ),
+            ty,
+        ));
+        self.builder.get_local(ident)
+    }
+
+    fn evaluated_local(
+        &mut self,
+        ctx: &'ctx Context<'ctx>,
+        name: &'static str,
+        expr: ExprKind<'ctx>,
+        ty: Ty<'ctx>,
+    ) -> Local {
+        match expr {
+            ExprKind::Read(Place::Local(ident)) => {
+                // if the expression is a variable, we can reuse the variable name
+                ident
+            }
+            expr => {
+                let local = self.new_local(ctx, name, ty);
+                self.builder.push_stmt_to_current(StmtKind::Assign {
+                    place: Place::Local(local),
+                    value: ctx.new_expr(Typed::new(expr, ty)),
+                });
+                local
+            }
+        }
     }
 }
 
@@ -353,7 +348,7 @@ pub fn lower_expr<'ctx>(
                         lower_expr(value, ctx, state);
                     }
                     ir_closure::Pattern::Tuple(vars) => {
-                        let tuple_assign_rhs = new_local(ctx, state, "tuple_assign_rhs", ty);
+                        let tuple_assign_rhs = state.new_local(ctx, "tuple_assign_rhs", ty);
                         state.push_binder(PlaceBinder::LetBinding {
                             place: BindingPlace::Local(tuple_assign_rhs),
                         });
