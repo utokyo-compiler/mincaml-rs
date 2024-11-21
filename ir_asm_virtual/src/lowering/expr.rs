@@ -347,7 +347,7 @@ pub fn lower_expr<'ctx>(
                         lower_expr(value, ctx, state);
                     }
                     ir_closure::Pattern::Tuple(vars) => {
-                        let tuple_assign_rhs = state.new_local(ctx, "tuple_assign_rhs", ty);
+                        let tuple_assign_rhs = state.new_local(ctx, "tuple_assign_rhs", value.ty);
                         state.push_binder(PlaceBinder::LetBinding {
                             place: BindingPlace::Local(tuple_assign_rhs),
                         });
@@ -361,7 +361,7 @@ pub fn lower_expr<'ctx>(
                                         base: tuple_assign_rhs,
                                         projection_kind: ProjectionKind::TupleIndex(tuple_index),
                                     }),
-                                    ty,
+                                    var.ty,
                                 )),
                             });
                         }
