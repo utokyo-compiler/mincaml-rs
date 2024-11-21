@@ -76,7 +76,7 @@ impl<'ctx> FunctionBuilder<'ctx> {
         let range_end = local_decls.len();
         let args_via_closure = Range::from(Local::new(range_start)..Local::new(range_end));
 
-        Self {
+        let mut this = Self {
             name,
             local_decls,
             args,
@@ -87,7 +87,13 @@ impl<'ctx> FunctionBuilder<'ctx> {
 
             #[cfg(debug_assertions)]
             unterminated_blocks: data_structure::FxHashSet::default(),
-        }
+        };
+
+        this.set_args_to_current(IndexVec::from_iter(
+            (0..this.local_decls.len()).map(Local::new),
+        ));
+
+        this
     }
     pub fn finish_function(self) -> FunctionDef<'ctx> {
         FunctionDef {
