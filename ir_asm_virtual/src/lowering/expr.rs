@@ -123,6 +123,12 @@ impl PlaceBinder {
                                 },
                             },
                         });
+                        state.builder.set_args_to_current(match place {
+                            BindingPlace::Discard => index_vec![],
+                            BindingPlace::Local(local) => {
+                                index_vec![local]
+                            }
+                        });
                     }
                 };
             }
@@ -163,6 +169,7 @@ impl PlaceBinder {
                         }),
                         target,
                     );
+                    state.builder.set_args_to_current(index_vec![branch_arg]);
                 }
                 PlaceBindee::Call {
                     calling_conv,
@@ -181,6 +188,7 @@ impl PlaceBinder {
                         },
                         target,
                     );
+                    state.builder.set_args_to_current(index_vec![call_result]);
                 }
             },
         }
