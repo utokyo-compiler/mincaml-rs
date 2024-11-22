@@ -62,7 +62,7 @@ impl<'ctx> std::fmt::Display for DisambiguatedIdent<'ctx> {
                 name,
                 disambiguator,
             } => {
-                write!(f, "__{name}#{{{disambiguator}}}")
+                write!(f, "__{name}#{disambiguator}")
             }
             Self::Intrinsic { name } => write!(f, "{}", name.0),
         }
