@@ -165,7 +165,7 @@ macro_rules! declare_visitor {
                     TerminatorKind::ConditionalBranch { condition, targets } => {
                         self.visit_local(condition, LocalVisitContext::Use);
                         for target in targets {
-                            self.visit_basic_block(target);
+                            self.visit_branch(target);
                         }
                     }
                     TerminatorKind::Call {

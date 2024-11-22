@@ -1,5 +1,5 @@
 mod label;
-use label::{Label, LabelResolution, ResolveHandler, TerminatorCtor};
+use label::{Label, LabelBranch, LabelResolution, ResolveHandler, TerminatorCtor};
 
 use data_structure::{index::vec::IndexVec, index_vec};
 
@@ -157,10 +157,10 @@ impl PlaceBinder {
                 PlaceBindee::Expr { expr, ty } => {
                     let branch_arg = state.evaluated_local(ctx, "branch_arg", expr, ty);
                     state.defer_terminate_block(
-                        TerminatorCtor::Branch {
+                        TerminatorCtor::Branch(LabelBranch {
                             target,
                             args: index_vec![branch_arg],
-                        },
+                        }),
                         target,
                     );
                 }
@@ -174,8 +174,10 @@ impl PlaceBinder {
                         TerminatorCtor::Call {
                             calling_conv,
                             args,
-                            branch_target: target,
-                            branch_args: index_vec![call_result],
+                            branch: LabelBranch {
+                                target,
+                                args: index_vec![call_result],
+                            },
                         },
                         target,
                     );
@@ -422,7 +424,10 @@ pub fn lower_expr<'ctx>(
                 state.defer_terminate_block(
                     TerminatorCtor::ConditionalBranch {
                         condition,
-                        targets: [label_true_block, label_false_block],
+                        targets: [
+                            LabelBranch::new(label_true_block),
+                            LabelBranch::new(label_false_block),
+                        ],
                     },
                     label_false_block,
                 );

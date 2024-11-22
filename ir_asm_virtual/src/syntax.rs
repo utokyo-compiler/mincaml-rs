@@ -51,7 +51,7 @@ pub struct FunctionDef<'ctx> {
     pub basic_blocks: IndexVec<BasicBlock, BasicBlockData<'ctx>>,
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord)]
 pub struct Local(usize);
 impl Indexable<ArgIndex> for Local {}
 impl Indexable<TupleIndex> for Local {}
@@ -157,6 +157,7 @@ impl<'ctx> StmtKind<'ctx> {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
+/// Location of a value. Also known as "L-value".
 pub enum Place {
     Local(Local),
     Projection {
@@ -166,8 +167,14 @@ pub enum Place {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
+/// Projection from a value.
 pub enum ProjectionKind {
+    /// Projection from a tuple, like `x.0`.
     TupleIndex(TupleIndex),
+
+    /// Projection from an array, like `x[i]`.
+    ///
+    /// It is useful to allow this variant to have also `Constant` as an index.
     ArrayElem(Local),
 }
 
@@ -196,7 +203,7 @@ pub enum TerminatorKind<'ctx> {
         ///
         /// Note that we have not decided how `true` and
         /// `false` are represented at this point.
-        targets: [BasicBlock; 2],
+        targets: [Branch; 2],
     },
 
     /// Call a function.
@@ -213,7 +220,7 @@ pub enum TerminatorKind<'ctx> {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-/// See [TerminatorKind::Branch].
+/// See [`TerminatorKind::Branch`].
 pub struct Branch {
     pub target: BasicBlock,
     pub args: IndexVec<ArgIndex, Local>,
@@ -236,12 +243,13 @@ impl Branch {
 
 impl TerminatorKind<'_> {
     pub fn successors(&self) -> impl DoubleEndedIterator<Item = BasicBlock> + '_ {
+        let map_target = |branch: &Branch| branch.target;
         match self {
-            Self::Return(..) => [].iter().copied().chain(None),
+            Self::Return(..) => [].iter().map(map_target).chain(None),
             Self::Branch(branch) | Self::Call { branch, .. } => {
-                [].iter().copied().chain(Some(branch.target))
+                [].iter().map(map_target).chain(Some(branch.target))
             }
-            Self::ConditionalBranch { targets, .. } => targets.iter().copied().chain(None),
+            Self::ConditionalBranch { targets, .. } => targets.iter().map(map_target).chain(None),
         }
     }
 }
