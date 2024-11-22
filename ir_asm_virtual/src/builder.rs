@@ -128,6 +128,12 @@ impl<'ctx> FunctionBuilder<'ctx> {
         self.basic_block_builder.push_stmt(value)
     }
 
+    /// Obtain the current basic block. The result is always an invalid block at
+    /// the time of this call, but is useful if we are going to terminate the block.
+    pub fn current_basic_block(&self) -> BasicBlock {
+        BasicBlock::new(self.basic_blocks.len())
+    }
+
     /// Obtain the next basic block. The result is always an invalid block at
     /// the time of this call, but is useful if we are going to create a new block.
     pub fn next_basic_block(&self) -> BasicBlock {

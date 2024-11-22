@@ -443,13 +443,13 @@ pub fn lower_expr<'ctx>(
                 let binder_of_if = state.pop_innermost_binder();
                 let new_binder = binder_of_if.to_if_arms_binder(label_after_if);
 
-                let bb_true_block = state.builder.next_basic_block();
+                let bb_true_block = state.builder.current_basic_block();
                 state.resolve_label(label_true_block, bb_true_block);
 
                 state.push_binder(new_binder);
                 lower_expr(e2, ctx, state);
 
-                let bb_false_block = state.builder.next_basic_block();
+                let bb_false_block = state.builder.current_basic_block();
                 // This call will fire the deferred terminator creation.
                 state.resolve_label(label_false_block, bb_false_block);
 
