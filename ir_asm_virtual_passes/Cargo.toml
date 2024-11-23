@@ -1,0 +1,11 @@
+[package]
+name = "ir_asm_virtual_passes"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+ir_asm_virtual.workspace = true
+middleware.workspace = true
+data_structure.workspace = true

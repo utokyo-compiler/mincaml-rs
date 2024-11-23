@@ -52,13 +52,29 @@ macro_rules! declare_visitor {
             }
 
             fn super_block_data(&mut self, block: & $($mutability)? BasicBlockData<'ctx>) {
-                for arg in & $($mutability)? block.args {
+                self.visit_block_arg(& $($mutability)? block.args);
+                self.visit_stmts(& $($mutability)? block.stmts);
+                self.visit_terminator(overload_mut!(block, [terminator], $($mutability)?));
+            }
+
+            fn visit_block_arg(&mut self, args: & $($mutability)? IndexVec<ArgIndex, Local>) {
+                self.super_block_arg(args);
+            }
+
+            fn super_block_arg(&mut self, args: & $($mutability)? IndexVec<ArgIndex, Local>) {
+                for arg in args {
                     self.visit_local(arg, LocalVisitContext::AssignLhs);
                 }
-                for stmt in & $($mutability)? block.stmts {
+            }
+
+            fn visit_stmts(&mut self, stmts: & $($mutability)? IndexVec<StmtIndex, StmtKind<'ctx>>) {
+                self.super_stmts(stmts);
+            }
+
+            fn super_stmts(&mut self, stmts: & $($mutability)? IndexVec<StmtIndex, StmtKind<'ctx>>) {
+                for stmt in stmts {
                     self.visit_stmt(stmt);
                 }
-                self.visit_terminator(overload_mut!(block, [terminator], $($mutability)?));
             }
 
             fn visit_stmt(&mut self, stmt: & $($mutability)? StmtKind<'ctx>) {
@@ -122,10 +138,8 @@ macro_rules! declare_visitor {
                     ExprKind::ClosureMake(closure) => {
                         self.visit_closure_make(closure);
                     }
-                    ExprKind::Tuple(es) => {
-                        for e in es {
-                            self.visit_local(e, LocalVisitContext::Use);
-                        }
+                    ExprKind::Tuple(elems) => {
+                        self.visit_tuple(elems);
                     }
                     ExprKind::ArrayMake(e1, e2) => {
                         self.visit_local(e1, LocalVisitContext::Use);
@@ -145,6 +159,16 @@ macro_rules! declare_visitor {
                 self.visit_function(& $($mutability)? closure.function);
                 for captured_arg in & $($mutability)? closure.captured_args {
                     self.visit_local(captured_arg, LocalVisitContext::Use);
+                }
+            }
+
+            fn visit_tuple(&mut self, elems: & $($mutability)? IndexVec<TupleIndex, Local>) {
+                self.super_tuple(elems);
+            }
+
+            fn super_tuple(&mut self, elems: & $($mutability)? IndexVec<TupleIndex, Local>) {
+                for elem in elems {
+                    self.visit_local(elem, LocalVisitContext::Use);
                 }
             }
 
@@ -199,11 +223,20 @@ macro_rules! declare_visitor {
 
             fn super_basic_block(&mut self, _basic_block: & $($mutability)? BasicBlock) {}
 
-            fn visit_calling_conv(&mut self, calling_conv: & $($mutability)? AbsCallingConv) {
+            fn visit_calling_conv(&mut self, calling_conv: & $($mutability)? AbsCallingConv<'ctx>) {
                 self.super_calling_conv(calling_conv);
             }
 
-            fn super_calling_conv(&mut self, _calling_conv: & $($mutability)? AbsCallingConv) {}
+            fn super_calling_conv(&mut self, calling_conv: & $($mutability)? AbsCallingConv<'ctx>) {
+                match calling_conv {
+                    AbsCallingConv::Direct {
+                        function,
+                    } => self.visit_function(function),
+                    AbsCallingConv::Closure {
+                        local,
+                    } => self.visit_local(local, LocalVisitContext::Use),
+                }
+            }
         }
     };
 }

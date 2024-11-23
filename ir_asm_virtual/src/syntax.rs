@@ -70,6 +70,13 @@ impl Idx for Local {
 pub struct LocalDecl<'ctx> {
     pub ident: Ident<'ctx>,
 }
+
+impl<'ctx> LocalDecl<'ctx> {
+    pub fn ty(&self) -> Ty<'ctx> {
+        self.ident.ty
+    }
+}
+
 impl Indexable<Local> for LocalDecl<'_> {}
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
@@ -144,7 +151,9 @@ pub enum StmtKind<'ctx> {
 
     /// Assign a value to a place.
     Assign {
+        /// The place to assign the value. if `None`, the value is discarded.
         place: Option<Place>,
+
         value: Expr<'ctx>,
     },
 }
@@ -153,6 +162,30 @@ impl<'ctx> StmtKind<'ctx> {
     /// Remove the statement without changing the `StmtIndex`.
     pub fn make_nop(&mut self) {
         *self = Self::Nop;
+    }
+
+    /// Check if the statement has any effect. Assumes SSA form.
+    pub fn has_effect(&self) -> bool {
+        matches!(
+            self,
+            Self::Assign {
+                place: Some(Place::Projection { .. }),
+                ..
+            }
+        )
+    }
+
+    pub fn local(&self) -> Option<Local> {
+        let Self::Assign {
+            place: Some(place), ..
+        } = self
+        else {
+            return None;
+        };
+        Some(match place {
+            Place::Local(local) => *local,
+            Place::Projection { base, .. } => *base,
+        })
     }
 }
 
@@ -285,6 +318,14 @@ pub enum ExprKind<'ctx> {
 impl ExprKind<'_> {
     pub fn kind(&self) -> &Self {
         self
+    }
+
+    pub fn is_unit(&self) -> bool {
+        match self {
+            ExprKind::Const(LitKind::Unit) => true,
+            ExprKind::Tuple(elems) => elems.is_empty(),
+            _ => false,
+        }
     }
 }
 

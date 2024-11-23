@@ -876,6 +876,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ir_asm_virtual_passes"
+version = "0.2.1"
+dependencies = [
+ "data_structure",
+ "ir_asm_virtual",
+ "middleware",
+]
+
+[[package]]
 name = "ir_closure"
 version = "0.2.1"
 dependencies = [
@@ -1081,6 +1090,7 @@ dependencies = [
  "codegen_wasm",
  "data_structure",
  "ir_asm_virtual",
+ "ir_asm_virtual_passes",
  "ir_closure",
  "ir_knorm",
  "ir_typed_ast",
