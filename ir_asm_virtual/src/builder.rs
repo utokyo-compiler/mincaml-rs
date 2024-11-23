@@ -55,7 +55,7 @@ impl<'ctx> FunctionBuilder<'ctx> {
     pub fn new(
         name: FnName<'ctx>,
         args: impl Iterator<Item = Ident<'ctx>>,
-        args_via_closure: impl Iterator<Item = Ident<'ctx>>,
+        args_via_closure: impl ExactSizeIterator<Item = Ident<'ctx>>,
     ) -> Self {
         let mut local_decls = IndexVec::default();
         let mut ident_map = FxIndexMap::default();
@@ -69,9 +69,17 @@ impl<'ctx> FunctionBuilder<'ctx> {
         let args = Range::from(Local::new(range_start)..Local::new(range_end));
 
         let range_start = local_decls.len();
+        let args_via_closure_is_empty = args_via_closure.is_empty();
         for arg in args_via_closure {
             let local = local_decls.push(LocalDecl { ident: arg });
             ident_map.insert(arg, local);
+        }
+        if !args_via_closure_is_empty {
+            let closure_self = name.get_inner().unwrap();
+            let local = local_decls.push(LocalDecl {
+                ident: closure_self,
+            });
+            ident_map.insert(closure_self, local);
         }
         let range_end = local_decls.len();
         let args_via_closure = Range::from(Local::new(range_start)..Local::new(range_end));
