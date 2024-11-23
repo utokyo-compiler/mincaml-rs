@@ -26,6 +26,12 @@ impl<I: Idx, T: Indexable<I>> std::ops::Deref for IndexVec<I, T> {
     }
 }
 
+impl<I: Idx, T: Indexable<I>> std::ops::DerefMut for IndexVec<I, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.data
+    }
+}
+
 impl<I: Idx, T: Indexable<I>> FromIterator<T> for IndexVec<I, T> {
     fn from_iter<Iter: IntoIterator<Item = T>>(iter: Iter) -> Self {
         Self::from_raw_vec(Vec::from_iter(iter))
@@ -147,6 +153,22 @@ impl Idx for usize {
 
     fn index(self) -> usize {
         self
+    }
+}
+
+impl<I: Idx> Indexable<I> for bool {}
+impl<I: Idx, T: Indexable<I>> Indexable<I> for Option<T> {}
+
+// map like functions
+
+impl<I: Idx> IndexVec<I, bool> {
+    pub fn contains(&self, index: I) -> bool {
+        self[index]
+    }
+}
+impl<I: Idx, T: Indexable<I>> IndexVec<I, Option<T>> {
+    pub fn contains(&self, index: I) -> bool {
+        self[index].is_some()
     }
 }
 
