@@ -11,6 +11,7 @@ members = [
   "ir_closure",
   "ir_asm_virtual",
   "ir_knorm_passes",
+  "ir_asm_virtual_passes",
   "data_structure",
   "middleware",
   "codegen_wasm",
@@ -41,6 +42,7 @@ clap = { version = "4.5.18", features = ["derive"] }
 wasm-encoder = "0.217.0"
 wasmtime = "25.0.1"
 wasi-common = "25.0.1"
+indexmap = "2.6.0"
 
 syntax = { path = "./syntax" }
 parser = { path = "./parser" }
@@ -52,6 +54,7 @@ ir_knorm = { path = "./ir_knorm" }
 ir_closure = { path = "./ir_closure" }
 ir_asm_virtual = { path = "./ir_asm_virtual" }
 ir_knorm_passes = { path = "./ir_knorm_passes" }
+ir_asm_virtual_passes = { path = "./ir_asm_virtual_passes" }
 data_structure = { path = "./data_structure" }
 middleware = { path = "./middleware" }
 codegen_wasm = { path = "./codegen_wasm" }

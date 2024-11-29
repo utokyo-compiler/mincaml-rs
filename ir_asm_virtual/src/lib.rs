@@ -6,6 +6,8 @@
 //! or even a well-known IR like LLVM IR or MLIR.
 
 #![feature(new_range_api)]
+#![feature(exact_size_is_empty)]
+
 pub(crate) mod builder;
 mod context;
 mod graph;

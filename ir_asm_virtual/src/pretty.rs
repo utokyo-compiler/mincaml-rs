@@ -3,75 +3,15 @@ use data_structure::index::vec::{Idx, IndexVec};
 use crate::syntax::*;
 use std::fmt::{self, Display, Formatter};
 
-// implement as a function because these types are actually defined in another crate
-// and we cannot implement `Display` for it.
-fn format_ty(f: &mut Formatter<'_>, ty: &Ty) -> fmt::Result {
-    match ty.0 .0 {
-        TyKind::Unit => write!(f, "()"),
-        TyKind::Bool => write!(f, "bool"),
-        TyKind::Int => write!(f, "int"),
-        TyKind::Float => write!(f, "float"),
-        TyKind::Fun(args, ret) => {
-            write!(f, "(")?;
-            args.iter().try_for_each(|arg| {
-                format_ty(f, arg)?;
-                write!(f, ",")
-            })?;
-            write!(f, ") -> ")?;
-            format_ty(f, ret)
-        }
-        TyKind::Tuple(tys) => {
-            write!(f, "(")?;
-            tys.iter().try_for_each(|ty| format_ty(f, ty))?;
-            write!(f, ")")
-        }
-        TyKind::Array(ty) => {
-            write!(f, "[")?;
-            format_ty(f, ty)?;
-            write!(f, "]")
-        }
-        TyKind::TyVar(_) => panic!("TyVar should not be appeared in this context"),
-    }
-}
-
-fn format_un_op(f: &mut Formatter<'_>, un_op: &UnOp) -> fmt::Result {
-    match un_op {
-        UnOp::Not => write!(f, "!"),
-        UnOp::Ineg => write!(f, "-"),
-        UnOp::Fneg => write!(f, "-."),
-    }
-}
-
-fn format_bin_op(f: &mut Formatter<'_>, bin_op: &BinOp) -> fmt::Result {
-    use ir_closure::{FloatBinOpKind as FOp, IntBinOpKind as IOp, RelationBinOpKind as BOp};
-    match bin_op {
-        BinOp::Relation(bin_op) => match bin_op {
-            BOp::Eq => write!(f, "=="),
-            BOp::Le => write!(f, "<="),
-            BOp::Ge => write!(f, ">="),
-            BOp::Ne => write!(f, "!="),
-            BOp::Lt => write!(f, "<"),
-            BOp::Gt => write!(f, ">"),
-        },
-        BinOp::Int(bin_op) => match bin_op {
-            IOp::Add => write!(f, "+"),
-            IOp::Sub => write!(f, "-"),
-            IOp::Mul => write!(f, "*"),
-            IOp::Div => write!(f, "/"),
-        },
-        BinOp::Float(bin_op) => match bin_op {
-            FOp::FAdd => write!(f, "+."),
-            FOp::FSub => write!(f, "-."),
-            FOp::FMul => write!(f, "*."),
-            FOp::FDiv => write!(f, "/."),
-        },
+impl Display for BasicBlock {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "^bb{}", self.index())
     }
 }
 
 impl Display for LocalDecl<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}: ", self.ident.value)?;
-        format_ty(f, &self.ident.ty)
+        write!(f, "{}: {}", self.ident.value, self.ident.ty)
     }
 }
 
@@ -94,7 +34,6 @@ impl BasicBlockPrinter<'_, '_> {
 
     fn format_place(&self, f: &mut Formatter<'_>, place: &Place) -> fmt::Result {
         match place {
-            Place::Discard => write!(f, "_"),
             Place::Local(x) => write!(f, "{}", self.locals[*x].ident.value),
             Place::Projection {
                 base,
@@ -103,6 +42,19 @@ impl BasicBlockPrinter<'_, '_> {
                 write!(f, "{}", self.locals[*base].ident.value)?;
                 self.format_projection_kind(f, projection_kind)
             }
+        }
+    }
+
+    fn format_branch(&self, f: &mut Formatter<'_>, branch: &Branch) -> fmt::Result {
+        let args: Vec<_> = branch
+            .args
+            .iter()
+            .map(|arg| self.locals[*arg].to_string())
+            .collect();
+        if args.is_empty() {
+            write!(f, "{}", branch.target)
+        } else {
+            write!(f, "{}({})", branch.target, args.join(", "))
         }
     }
 
@@ -118,36 +70,41 @@ impl BasicBlockPrinter<'_, '_> {
     }
 
     fn format_closure(&self, f: &mut Formatter<'_>, closure: &Closure) -> fmt::Result {
+        write!(f, "(")?;
         self.format_function_instance(f, &closure.function)?;
-        write!(f, "{{")?;
-        closure
+        write!(f, ")")?;
+        let args = closure
             .captured_args
             .iter()
-            .try_for_each(|arg| write!(f, "{}, ", self.locals[*arg].ident.value))?;
-        write!(f, "}}")
+            .map(|arg| self.locals[*arg].to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        write!(f, " {{{args}}}")
     }
 
-    fn format_expr_kind(&self, f: &mut Formatter<'_>, expr_kind: &ExprKind) -> fmt::Result {
+    fn format_expr(&self, f: &mut Formatter<'_>, expr_kind: &ExprKind) -> fmt::Result {
         match expr_kind {
-            ExprKind::Const(lit_kind) => write!(f, "{}", lit_kind),
+            ExprKind::Const(lit_kind) => write!(f, "{lit_kind}"),
             ExprKind::Unary(un_op, x) => {
-                format_un_op(f, un_op)?;
-                write!(f, "{}", self.locals[*x].ident.value)
+                write!(f, "{un_op} {}", self.locals[*x].ident.value)
             }
             ExprKind::Binary(bin_op, x, y) => {
-                write!(f, "{} ", self.locals[*x].ident.value)?;
-                format_bin_op(f, bin_op)?;
-                write!(f, " {}", self.locals[*y].ident.value)
+                write!(
+                    f,
+                    "{} {bin_op} {}",
+                    self.locals[*x].ident.value, self.locals[*y].ident.value
+                )
             }
             ExprKind::ClosureMake(closure) => {
                 write!(f, "Closure.make ")?;
                 self.format_closure(f, closure)
             }
-            ExprKind::Tuple(xs) => {
-                write!(f, "(")?;
-                xs.iter()
-                    .try_for_each(|x| write!(f, "{}, ", self.locals[*x].ident.value))?;
-                write!(f, ")")
+            ExprKind::Tuple(elems) => {
+                let elems: Vec<_> = elems
+                    .iter()
+                    .map(|x| self.locals[*x].ident.to_string())
+                    .collect();
+                write!(f, "({})", elems.join(", "))
             }
             ExprKind::ArrayMake(len, base) => {
                 write!(
@@ -160,14 +117,67 @@ impl BasicBlockPrinter<'_, '_> {
         }
     }
 
-    fn format_stmt_kind(&self, f: &mut Formatter<'_>, stmt_kind: &StmtKind) -> fmt::Result {
+    fn format_stmt(&self, f: &mut Formatter<'_>, stmt_kind: &StmtKind) -> fmt::Result {
         match stmt_kind {
-            StmtKind::Nop => write!(f, "\tnop"),
+            StmtKind::Nop => write!(f, "nop"),
             StmtKind::Assign { place, value } => {
-                write!(f, "\t")?;
-                self.format_place(f, place)?;
+                if let Some(place) = place {
+                    self.format_place(f, place)?;
+                } else {
+                    write!(f, "_")?;
+                }
                 write!(f, " := ")?;
-                self.format_expr_kind(f, &value.value)
+                self.format_expr(f, &value.value)
+            }
+        }
+    }
+
+    fn format_terminator(&self, f: &mut Formatter<'_>, terminator: &TerminatorKind) -> fmt::Result {
+        match terminator {
+            TerminatorKind::Return(args) => {
+                write!(f, "return")?;
+                if !args.is_empty() {
+                    let args: Vec<_> = args
+                        .iter()
+                        .map(|arg| self.locals[*arg].to_string())
+                        .collect();
+                    write!(f, " ({})", args.join(", "))?;
+                }
+                Ok(())
+            }
+            TerminatorKind::Branch(branch) => {
+                write!(f, "br {}", branch.target)
+            }
+            TerminatorKind::ConditionalBranch {
+                condition,
+                targets: [true_target, false_target],
+            } => {
+                write!(f, "if {} {{ br ", self.locals[*condition].ident.value,)?;
+                self.format_branch(f, true_target)?;
+                write!(f, " }} else {{ br ")?;
+                self.format_branch(f, false_target)?;
+                write!(f, " }}")
+            }
+            TerminatorKind::Call {
+                calling_conv,
+                args,
+                branch,
+            } => {
+                match calling_conv {
+                    AbsCallingConv::Direct { function } => {
+                        self.format_function_instance(f, function)?;
+                    }
+                    AbsCallingConv::Closure { local } => {
+                        write!(f, "Closure.call ({})", self.locals[*local].ident.value)?;
+                    }
+                }
+                let args = args
+                    .iter()
+                    .map(|arg| self.locals[*arg].to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(f, " ({args}) -> ")?;
+                self.format_branch(f, branch)
             }
         }
     }
@@ -178,47 +188,74 @@ impl BasicBlockPrinter<'_, '_> {
         bb: BasicBlock,
         data: &BasicBlockData,
     ) -> fmt::Result {
-        write!(f, "\tbb{}", bb.index())?;
+        write!(f, "\t{bb}")?;
         if !data.args.is_empty() {
-            write!(f, " (")?;
-            data.args
+            let args: Vec<_> = data
+                .args
                 .iter()
-                .try_for_each(|arg| write!(f, "{}, ", self.locals[*arg]))?;
-            write!(f, ") ")?;
+                .map(|arg| self.locals[*arg].to_string())
+                .collect();
+            write!(f, "({})", args.join(", "))?;
         }
         writeln!(f, ":")?;
         data.stmts.iter().try_for_each(|stmt| {
-            write!(f, "\t")?;
-            self.format_stmt_kind(f, stmt)?;
-            writeln!(f)
-        })
+            write!(f, "\t\t")?;
+            self.format_stmt(f, stmt)?;
+            writeln!(f, ";")
+        })?;
+        write!(f, "\t\t")?;
+        self.format_terminator(f, data.terminator())?;
+        writeln!(f, ";")
     }
 }
 
 fn format_function_def(
     f: &mut Formatter<'_>,
     func_names: &IndexVec<FnIndex, FnName<'_>>,
-    function: &FunctionDef,
+    FunctionDef {
+        name,
+        local_decls,
+        args,
+        args_via_closure,
+        basic_blocks,
+    }: &FunctionDef,
 ) -> fmt::Result {
-    write!(f, "{} {{", function.name)?;
-    function.local_decls[function.args_via_closure]
+    write!(f, "fn {name}")?;
+
+    if !args_via_closure.is_empty() {
+        let args_via_closure: Vec<_> = local_decls[*args_via_closure]
+            .iter()
+            .map(|arg| arg.to_string())
+            .collect();
+        write!(f, " {{{}}}", args_via_closure.join(", "))?;
+    }
+
+    let args: Vec<_> = local_decls[*args]
         .iter()
-        .try_for_each(|arg| write!(f, "{arg}, "))?;
-    write!(f, "}} (")?;
-    function.local_decls[function.args]
-        .iter()
-        .try_for_each(|arg| write!(f, "{arg}, "))?;
-    writeln!(f, ") {{")?;
-    function
-        .basic_blocks
-        .iter_enumerated()
-        .try_for_each(|(bb, data)| {
-            BasicBlockPrinter {
-                func_names,
-                locals: &function.local_decls,
+        .map(|arg| arg.to_string())
+        .collect();
+    write!(f, " ({})", args.join(", "))?;
+
+    if let Some(ident) = name.get_inner() {
+        let (_, ret_ty) = ident.ty.as_fun_ty().unwrap();
+        if !ret_ty.is_unit() {
+            let ret_ty = ret_ty.to_string();
+            if ret_ty.starts_with("(") || !ret_ty.contains("->") {
+                write!(f, ": {ret_ty}")?;
+            } else {
+                write!(f, ": ({ret_ty})")?;
             }
-            .format_basic_block(f, bb, data)
-        })?;
+        }
+    }
+
+    writeln!(f, " {{")?;
+    basic_blocks.iter_enumerated().try_for_each(|(bb, data)| {
+        BasicBlockPrinter {
+            func_names,
+            locals: local_decls,
+        }
+        .format_basic_block(f, bb, data)
+    })?;
     writeln!(f, "}}")
 }
 

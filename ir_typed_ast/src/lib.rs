@@ -1,3 +1,4 @@
+mod pretty;
 mod syntax;
 mod visit;
 

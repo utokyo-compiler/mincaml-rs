@@ -51,11 +51,8 @@ pub struct FunctionDef<'ctx> {
     pub basic_blocks: IndexVec<BasicBlock, BasicBlockData<'ctx>>,
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord)]
 pub struct Local(usize);
-impl Local {
-    pub const RETURN_LOCAL: Self = Self(0);
-}
 impl Indexable<ArgIndex> for Local {}
 impl Indexable<TupleIndex> for Local {}
 
@@ -73,6 +70,13 @@ impl Idx for Local {
 pub struct LocalDecl<'ctx> {
     pub ident: Ident<'ctx>,
 }
+
+impl<'ctx> LocalDecl<'ctx> {
+    pub fn ty(&self) -> Ty<'ctx> {
+        self.ident.ty
+    }
+}
+
 impl Indexable<Local> for LocalDecl<'_> {}
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
@@ -146,7 +150,12 @@ pub enum StmtKind<'ctx> {
     Nop,
 
     /// Assign a value to a place.
-    Assign { place: Place, value: Expr<'ctx> },
+    Assign {
+        /// The place to assign the value. if `None`, the value is discarded.
+        place: Option<Place>,
+
+        value: Expr<'ctx>,
+    },
 }
 
 impl<'ctx> StmtKind<'ctx> {
@@ -154,11 +163,35 @@ impl<'ctx> StmtKind<'ctx> {
     pub fn make_nop(&mut self) {
         *self = Self::Nop;
     }
+
+    /// Check if the statement has any effect. Assumes SSA form.
+    pub fn has_effect(&self) -> bool {
+        matches!(
+            self,
+            Self::Assign {
+                place: Some(Place::Projection { .. }),
+                ..
+            }
+        )
+    }
+
+    pub fn local(&self) -> Option<Local> {
+        let Self::Assign {
+            place: Some(place), ..
+        } = self
+        else {
+            return None;
+        };
+        Some(match place {
+            Place::Local(local) => *local,
+            Place::Projection { base, .. } => *base,
+        })
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
+/// Location of a value. Also known as "L-value".
 pub enum Place {
-    Discard,
     Local(Local),
     Projection {
         base: Local,
@@ -167,15 +200,21 @@ pub enum Place {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
+/// Projection from a value.
 pub enum ProjectionKind {
+    /// Projection from a tuple, like `x.0`.
     TupleIndex(TupleIndex),
+
+    /// Projection from an array, like `x[i]`.
+    ///
+    /// It is useful to allow this variant to have also `Constant` as an index.
     ArrayElem(Local),
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum TerminatorKind<'ctx> {
-    /// Return from the function.
-    Return,
+    /// Return from the function. The return value is passed as arguments.
+    Return(IndexVec<ArgIndex, Local>),
 
     /// MLIR-like branch instruction.
     ///
@@ -197,7 +236,7 @@ pub enum TerminatorKind<'ctx> {
         ///
         /// Note that we have not decided how `true` and
         /// `false` are represented at this point.
-        targets: [BasicBlock; 2],
+        targets: [Branch; 2],
     },
 
     /// Call a function.
@@ -214,7 +253,7 @@ pub enum TerminatorKind<'ctx> {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-/// See [TerminatorKind::Branch].
+/// See [`TerminatorKind::Branch`].
 pub struct Branch {
     pub target: BasicBlock,
     pub args: IndexVec<ArgIndex, Local>,
@@ -227,16 +266,23 @@ impl Branch {
             args: IndexVec::new(),
         }
     }
+    pub fn one_arg(target: BasicBlock, arg: Local) -> Self {
+        Self {
+            target,
+            args: IndexVec::from_raw_vec(vec![arg]),
+        }
+    }
 }
 
 impl TerminatorKind<'_> {
     pub fn successors(&self) -> impl DoubleEndedIterator<Item = BasicBlock> + '_ {
+        let map_target = |branch: &Branch| branch.target;
         match self {
-            Self::Return => [].iter().copied().chain(None),
+            Self::Return(..) => [].iter().map(map_target).chain(None),
             Self::Branch(branch) | Self::Call { branch, .. } => {
-                [].iter().copied().chain(Some(branch.target))
+                [].iter().map(map_target).chain(Some(branch.target))
             }
-            Self::ConditionalBranch { targets, .. } => targets.iter().copied().chain(None),
+            Self::ConditionalBranch { targets, .. } => targets.iter().map(map_target).chain(None),
         }
     }
 }
@@ -272,6 +318,14 @@ pub enum ExprKind<'ctx> {
 impl ExprKind<'_> {
     pub fn kind(&self) -> &Self {
         self
+    }
+
+    pub fn is_unit(&self) -> bool {
+        match self {
+            ExprKind::Const(LitKind::Unit) => true,
+            ExprKind::Tuple(elems) => elems.is_empty(),
+            _ => false,
+        }
     }
 }
 

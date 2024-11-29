@@ -15,6 +15,13 @@ impl<'ctx> State<'_, 'ctx> {
     fn resolved_block(&self, label: Label) -> BasicBlock {
         self.label_resolution.get_unchecked(label)
     }
+
+    fn resolved_branch(&self, branch: LabelBranch) -> Branch {
+        Branch {
+            target: self.resolved_block(branch.target),
+            args: branch.args,
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -30,40 +37,57 @@ impl Label {
     }
 }
 
+#[derive(PartialEq, Eq, Hash)]
+/// See [`TerminatorKind::Branch`], [`Branch`]
+pub struct LabelBranch {
+    pub target: Label,
+    pub args: IndexVec<ArgIndex, Local>,
+}
+
+impl LabelBranch {
+    pub fn new(target: Label) -> Self {
+        Self {
+            target,
+            args: IndexVec::new(),
+        }
+    }
+}
+
 /// The constructor of a terminator used in the lowering process. This is a
 /// defunctionalized version of `FnOnce<fn(State) -> TerminatorKind>`.
 ///
 /// Instead of using this, you can make `TerminatorKind` (and `Branch`) generic over
 /// `Target = BasicBlock` so that it can be instantiated also with `Label`.
 pub enum TerminatorCtor<'ctx> {
-    Branch {
-        target: Label,
-        args: IndexVec<ArgIndex, Local>,
-    },
+    Branch(LabelBranch),
     Call {
         calling_conv: AbsCallingConv<'ctx>,
         args: IndexVec<ArgIndex, Local>,
-        branch_target: Label,
-        branch_args: IndexVec<ArgIndex, Local>,
+        branch: LabelBranch,
     },
     ConditionalBranch {
         condition: Local,
-        targets: [Label; 2],
+        targets: [LabelBranch; 2],
     },
 }
 
 impl<'ctx> TerminatorCtor<'ctx> {
     fn construct(self, state: &mut State<'_, '_>) -> TerminatorKind<'ctx> {
         match self {
-            TerminatorCtor::Branch { target, args } => TerminatorKind::Branch(Branch {
-                target: state.resolved_block(target),
-                args,
-            }),
+            TerminatorCtor::Branch(LabelBranch { target, args }) => {
+                TerminatorKind::Branch(Branch {
+                    target: state.resolved_block(target),
+                    args,
+                })
+            }
             TerminatorCtor::Call {
                 calling_conv,
                 args,
-                branch_target,
-                branch_args,
+                branch:
+                    LabelBranch {
+                        target: branch_target,
+                        args: branch_args,
+                    },
             } => TerminatorKind::Call {
                 calling_conv,
                 args,
@@ -75,10 +99,7 @@ impl<'ctx> TerminatorCtor<'ctx> {
             TerminatorCtor::ConditionalBranch { condition, targets } => {
                 TerminatorKind::ConditionalBranch {
                     condition,
-                    targets: [
-                        state.resolved_block(targets[0]),
-                        state.resolved_block(targets[1]),
-                    ],
+                    targets: targets.map(|target| state.resolved_branch(target)),
                 }
             }
         }
@@ -129,7 +150,7 @@ impl<'builder, 'ctx> HandlerMap<'builder, 'ctx> {
 
 #[derive(Default)]
 pub struct LabelResolution<'builder, 'ctx> {
-    map: FxHashMap<Label, BasicBlock>,
+    resolved: FxHashMap<Label, BasicBlock>,
     handlers: HandlerMap<'builder, 'ctx>,
 }
 
@@ -140,12 +161,12 @@ impl<'builder, 'ctx> LabelResolution<'builder, 'ctx> {
         label: Label,
         basic_block: BasicBlock,
     ) -> Option<Vec<ResolveHandler<'builder, 'ctx>>> {
-        self.map.insert(label, basic_block);
+        self.resolved.insert(label, basic_block);
         self.handlers.remove(label)
     }
 
     pub fn get_unchecked(&self, label: Label) -> BasicBlock {
-        *self.map.get(&label).expect("label not resolved")
+        *self.resolved.get(&label).expect("label not resolved")
     }
 
     #[inline]

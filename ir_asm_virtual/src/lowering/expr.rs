@@ -1,5 +1,5 @@
 mod label;
-use label::{Label, LabelResolution, ResolveHandler, TerminatorCtor};
+use label::{Label, LabelBranch, LabelResolution, ResolveHandler, TerminatorCtor};
 
 use data_structure::{index::vec::IndexVec, index_vec};
 
@@ -15,10 +15,10 @@ enum BindingPlace {
 }
 
 impl BindingPlace {
-    fn into_place(self) -> Place {
+    fn into_place(self) -> Option<Place> {
         match self {
-            Self::Discard => Place::Discard,
-            Self::Local(local) => Place::Local(local),
+            Self::Discard => None,
+            Self::Local(local) => Some(Place::Local(local)),
         }
     }
 }
@@ -123,106 +123,74 @@ impl PlaceBinder {
                                 },
                             },
                         });
+                        state.builder.set_args_to_current(match place {
+                            BindingPlace::Discard => index_vec![],
+                            BindingPlace::Local(local) => {
+                                index_vec![local]
+                            }
+                        });
                     }
                 };
             }
             PlaceBinder::FnReturn => {
-                let return_value = match bindee {
-                    PlaceBindee::Expr { expr, ty } => ctx.new_expr(Typed::new(expr, ty)),
+                let (expr, ty) = match bindee {
+                    PlaceBindee::Expr { expr, ty } => (expr, ty),
                     PlaceBindee::Call {
                         calling_conv,
                         args,
                         ty,
                     } => {
-                        let call_result = new_local(ctx, state, "call_result", ty);
+                        // You can do tail-call optimization by changing this branch and adding a variant to `TerminatorKind`.
+                        let call_result = state.new_local(ctx, "call_result", ty);
                         let target = state.builder.next_basic_block();
                         state.builder.terminate_block(TerminatorKind::Call {
                             calling_conv,
                             args,
-                            branch: Branch {
-                                target,
-                                args: index_vec![call_result],
-                            },
+                            branch: Branch::one_arg(target, call_result),
                         });
                         state.builder.set_args_to_current(index_vec![call_result]);
-                        ctx.new_expr(Typed::new(ExprKind::Read(Place::Local(call_result)), ty))
+                        (ExprKind::Read(Place::Local(call_result)), ty)
                     }
                 };
-                state.builder.push_stmt_to_current(StmtKind::Assign {
-                    place: Place::Local(Local::RETURN_LOCAL),
-                    value: return_value,
-                });
-                state.builder.terminate_block(TerminatorKind::Return);
+                let return_local = state.evaluated_local(ctx, "return_value", expr, ty);
+                state
+                    .builder
+                    .terminate_block(TerminatorKind::Return(IndexVec::from_raw_vec(vec![
+                        return_local,
+                    ])));
             }
             PlaceBinder::Branch { target } => match bindee {
                 PlaceBindee::Expr { expr, ty } => {
-                    let branch_arg = evaluated_local(ctx, state, "branch_arg", expr, ty);
+                    let branch_arg = state.evaluated_local(ctx, "branch_arg", expr, ty);
                     state.defer_terminate_block(
-                        TerminatorCtor::Branch {
+                        TerminatorCtor::Branch(LabelBranch {
                             target,
                             args: index_vec![branch_arg],
-                        },
+                        }),
                         target,
                     );
+                    state.builder.set_args_to_current(index_vec![branch_arg]);
                 }
                 PlaceBindee::Call {
                     calling_conv,
                     args,
                     ty,
                 } => {
-                    let call_result = new_local(ctx, state, "call_result", ty);
+                    let call_result = state.new_local(ctx, "call_result", ty);
                     state.defer_terminate_block(
                         TerminatorCtor::Call {
                             calling_conv,
                             args,
-                            branch_target: target,
-                            branch_args: index_vec![call_result],
+                            branch: LabelBranch {
+                                target,
+                                args: index_vec![call_result],
+                            },
                         },
                         target,
                     );
+                    state.builder.set_args_to_current(index_vec![call_result]);
                 }
             },
-        }
-    }
-}
-
-fn new_local<'ctx>(
-    ctx: &'ctx Context<'ctx>,
-    state: &mut State<'_, 'ctx>,
-    name: &'static str,
-    ty: Ty<'ctx>,
-) -> Local {
-    static COMPILER_GENERATED_COUNTER: std::sync::atomic::AtomicUsize =
-        std::sync::atomic::AtomicUsize::new(0);
-    let ident = ctx.new_ident_unchecked(Typed::new(
-        DisambiguatedIdent::new_compiler_unchecked(
-            name,
-            COMPILER_GENERATED_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
-        ),
-        ty,
-    ));
-    state.builder.get_local(ident)
-}
-
-fn evaluated_local<'ctx>(
-    ctx: &'ctx Context<'ctx>,
-    state: &mut State<'_, 'ctx>,
-    name: &'static str,
-    expr: ExprKind<'ctx>,
-    ty: Ty<'ctx>,
-) -> Local {
-    match expr {
-        ExprKind::Read(Place::Local(ident)) => {
-            // if the expression is a variable, we can reuse the variable name
-            ident
-        }
-        expr => {
-            let local = new_local(ctx, state, name, ty);
-            state.builder.push_stmt_to_current(StmtKind::Assign {
-                place: Place::Local(local),
-                value: ctx.new_expr(Typed::new(expr, ty)),
-            });
-            local
         }
     }
 }
@@ -258,7 +226,7 @@ impl<'builder, 'ctx> State<'builder, 'ctx> {
         self.binders.push(binder);
     }
 
-    /// Resolve the label and run the handlers if any.
+    /// Resolve the label and run the handlers if registered.
     fn resolve_label(&mut self, label: Label, basic_block: BasicBlock) {
         if let Some(handlers) = self.label_resolution.insert(label, basic_block) {
             for handler in handlers {
@@ -274,11 +242,47 @@ impl<'builder, 'ctx> State<'builder, 'ctx> {
     /// # Arguments
     ///
     /// * `ctor` - The constructor of the terminator.
-    /// * `until_resolve` - The label of the latest created basic block.
+    /// * `until_resolve` - The label of the latest basic block to be created.
     fn defer_terminate_block(&mut self, ctor: TerminatorCtor<'ctx>, until_resolve: Label) {
         let deferred = self.builder.defer_terminate_block();
         self.label_resolution
             .register(until_resolve, ResolveHandler::new(deferred, ctor));
+    }
+
+    fn new_local(&mut self, ctx: &'ctx Context<'ctx>, name: &'static str, ty: Ty<'ctx>) -> Local {
+        static COMPILER_GENERATED_COUNTER: std::sync::atomic::AtomicUsize =
+            std::sync::atomic::AtomicUsize::new(0);
+        let ident = ctx.new_ident_unchecked(Typed::new(
+            DisambiguatedIdent::new_compiler_unchecked(
+                name,
+                COMPILER_GENERATED_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+            ),
+            ty,
+        ));
+        self.builder.get_local(ident)
+    }
+
+    fn evaluated_local(
+        &mut self,
+        ctx: &'ctx Context<'ctx>,
+        name: &'static str,
+        expr: ExprKind<'ctx>,
+        ty: Ty<'ctx>,
+    ) -> Local {
+        match expr {
+            ExprKind::Read(Place::Local(ident)) => {
+                // if the expression is a variable, we can reuse the variable name
+                ident
+            }
+            expr => {
+                let local = self.new_local(ctx, name, ty);
+                self.builder.push_stmt_to_current(StmtKind::Assign {
+                    place: Some(Place::Local(local)),
+                    value: ctx.new_expr(Typed::new(expr, ty)),
+                });
+                local
+            }
+        }
     }
 }
 
@@ -353,7 +357,7 @@ pub fn lower_expr<'ctx>(
                         lower_expr(value, ctx, state);
                     }
                     ir_closure::Pattern::Tuple(vars) => {
-                        let tuple_assign_rhs = new_local(ctx, state, "tuple_assign_rhs", ty);
+                        let tuple_assign_rhs = state.new_local(ctx, "tuple_assign_rhs", value.ty);
                         state.push_binder(PlaceBinder::LetBinding {
                             place: BindingPlace::Local(tuple_assign_rhs),
                         });
@@ -361,13 +365,13 @@ pub fn lower_expr<'ctx>(
                         for (tuple_index, var) in vars.iter_enumerated() {
                             let local = state.builder.get_local(*var);
                             state.builder.push_stmt_to_current(StmtKind::Assign {
-                                place: Place::Local(local),
+                                place: Some(Place::Local(local)),
                                 value: ctx.new_expr(Typed::new(
                                     ExprKind::Read(Place::Projection {
                                         base: tuple_assign_rhs,
                                         projection_kind: ProjectionKind::TupleIndex(tuple_index),
                                     }),
-                                    ty,
+                                    var.ty,
                                 )),
                             });
                         }
@@ -385,10 +389,10 @@ pub fn lower_expr<'ctx>(
                 let displacement = state.builder.get_local(*displacement);
                 let value = state.builder.get_local(*value);
                 state.builder.push_stmt_to_current(StmtKind::Assign {
-                    place: Place::Projection {
+                    place: Some(Place::Projection {
                         base,
                         projection_kind: ProjectionKind::ArrayElem(displacement),
-                    },
+                    }),
                     value: ctx.new_expr(Typed::new(ExprKind::Read(Place::Local(value)), ty)),
                 });
                 // Result of `Set` is not a meaningful value, but
@@ -428,7 +432,10 @@ pub fn lower_expr<'ctx>(
                 state.defer_terminate_block(
                     TerminatorCtor::ConditionalBranch {
                         condition,
-                        targets: [label_true_block, label_false_block],
+                        targets: [
+                            LabelBranch::new(label_true_block),
+                            LabelBranch::new(label_false_block),
+                        ],
                     },
                     label_false_block,
                 );
@@ -436,13 +443,13 @@ pub fn lower_expr<'ctx>(
                 let binder_of_if = state.pop_innermost_binder();
                 let new_binder = binder_of_if.to_if_arms_binder(label_after_if);
 
-                let bb_true_block = state.builder.next_basic_block();
+                let bb_true_block = state.builder.current_basic_block();
                 state.resolve_label(label_true_block, bb_true_block);
 
                 state.push_binder(new_binder);
                 lower_expr(e2, ctx, state);
 
-                let bb_false_block = state.builder.next_basic_block();
+                let bb_false_block = state.builder.current_basic_block();
                 // This call will fire the deferred terminator creation.
                 state.resolve_label(label_false_block, bb_false_block);
 

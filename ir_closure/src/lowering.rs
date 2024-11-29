@@ -1,4 +1,4 @@
-use data_structure::{index::vec::IndexVec, FxHashMap, FxHashSet, SetLikeVec};
+use data_structure::{index::vec::IndexVec, FxHashMap, FxHashSet, FxIndexSet};
 
 use crate::{
     context::Context, ApplyKind, ArgIndex, Closure, Expr, ExprKind, FnIndex, FnName, FunctionDef,
@@ -232,7 +232,7 @@ struct LetRecAnalysisResult<'ctx> {
     /// expression of `KNormal.t` in terms of the original reference.
     ///
     /// This variable corresponds to `zts` defined in `Closure.g`.
-    fv_set: SetLikeVec<Ident<'ctx>>,
+    fv_set: FxIndexSet<Ident<'ctx>>,
 }
 
 /// Analyzes `LetRec` to decide whether to make a closure.
@@ -248,10 +248,10 @@ fn analyze_let_rec<'ctx>(
     follows: &ir_knorm::Expr<'ctx>,
 ) -> LetRecAnalysisResult<'ctx> {
     let fn_name = binding.pattern.as_var().unwrap();
-    let mut fv_set = SetLikeVec::default();
+    let mut fv_set = FxIndexSet::default();
     let mut collect_fv = ir_knorm::FvVisitorHelper::new({
         struct CollectFvVisitor<'a, 'ctx> {
-            fv_set: &'a mut SetLikeVec<Ident<'ctx>>,
+            fv_set: &'a mut FxIndexSet<Ident<'ctx>>,
         }
 
         impl<'a, 'ctx> ir_knorm::FvVisitor<'ctx> for CollectFvVisitor<'a, 'ctx> {
@@ -347,7 +347,7 @@ fn analyze_let_rec<'ctx>(
         }
     }
 
-    let fn_used_as_value = fv_set.remove(&fn_name).is_some();
+    let fn_used_as_value = fv_set.shift_remove(&fn_name);
     let fn_name = FnName::new(fn_name);
 
     // Make a decision.

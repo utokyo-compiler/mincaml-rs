@@ -5,7 +5,7 @@ use function::lower_function;
 
 use crate::{context::Context, Program};
 
-pub fn lowering<'ctx>(
+pub fn lower<'ctx>(
     ctx: &'ctx Context<'ctx>,
     closure_program: ir_closure::Program<'ctx>,
 ) -> Program<'ctx> {

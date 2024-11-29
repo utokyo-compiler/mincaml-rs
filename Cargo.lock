@@ -418,7 +418,7 @@ dependencies = [
  "cranelift-entity",
  "cranelift-isle",
  "gimli",
- "hashbrown",
+ "hashbrown 0.14.5",
  "log",
  "regalloc2",
  "rustc-hash",
@@ -556,6 +556,7 @@ version = "0.2.1"
 dependencies = [
  "bitvec",
  "cfg-if",
+ "indexmap",
  "rustc-hash",
  "typed-arena",
 ]
@@ -787,6 +788,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "hashbrown"
+version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a9bfc1af68b1726ea47d3d5109de126281def866b33970e10fbab11b5dafab3"
+
+[[package]]
 name = "heck"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -829,12 +836,12 @@ checksum = "25a2bc672d1148e28034f176e01fffebb08b35768468cc954630da77a1449005"
 
 [[package]]
 name = "indexmap"
-version = "2.0.0"
+version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d5477fe2230a79769d8dc68e0eabf5437907c0457a5614a9e8dddb67f65eb65d"
+checksum = "707907fe3c25f5424cce2cb7e1cbcafee6bdbe735ca90ef77c29e84591e5b9da"
 dependencies = [
  "equivalent",
- "hashbrown",
+ "hashbrown 0.15.1",
  "serde",
 ]
 
@@ -866,6 +873,15 @@ version = "0.2.1"
 dependencies = [
  "data_structure",
  "ir_closure",
+]
+
+[[package]]
+name = "ir_asm_virtual_passes"
+version = "0.2.1"
+dependencies = [
+ "data_structure",
+ "ir_asm_virtual",
+ "middleware",
 ]
 
 [[package]]
@@ -1074,6 +1090,7 @@ dependencies = [
  "codegen_wasm",
  "data_structure",
  "ir_asm_virtual",
+ "ir_asm_virtual_passes",
  "ir_closure",
  "ir_knorm",
  "ir_typed_ast",
@@ -1138,7 +1155,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "084f1a5821ac4c651660a94a7153d27ac9d8a53736203f58b31945ded098070a"
 dependencies = [
  "crc32fast",
- "hashbrown",
+ "hashbrown 0.14.5",
  "indexmap",
  "memchr",
 ]
@@ -1423,7 +1440,7 @@ version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "12908dbeb234370af84d0579b9f68258a0f67e201412dd9a2814e6f45b2fc0f0"
 dependencies = [
- "hashbrown",
+ "hashbrown 0.14.5",
  "log",
  "rustc-hash",
  "slice-group-by",
@@ -2014,7 +2031,7 @@ checksum = "ca917a21307d3adf2b9857b94dd05ebf8496bdcff4437a9b9fb3899d3e6c74e7"
 dependencies = [
  "ahash",
  "bitflags 2.6.0",
- "hashbrown",
+ "hashbrown 0.14.5",
  "indexmap",
  "semver",
  "serde",
@@ -2047,7 +2064,7 @@ dependencies = [
  "encoding_rs",
  "fxprof-processed-profile",
  "gimli",
- "hashbrown",
+ "hashbrown 0.14.5",
  "indexmap",
  "ittapi",
  "libc",
