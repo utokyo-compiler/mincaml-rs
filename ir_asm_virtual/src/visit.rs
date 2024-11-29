@@ -119,8 +119,14 @@ macro_rules! declare_visitor {
                 self.super_projection(base, projection_kind, context);
             }
 
-            fn super_projection(&mut self, base: & $($mutability)? Local, _projection_kind: & $($mutability)? ProjectionKind, context: LocalVisitContext) {
+            fn super_projection(&mut self, base: & $($mutability)? Local, projection_kind: & $($mutability)? ProjectionKind, context: LocalVisitContext) {
                 self.visit_local(base, context);
+                match projection_kind {
+                    ProjectionKind::TupleIndex(_index) => {}
+                    ProjectionKind::ArrayElem(local) => {
+                        self.visit_local(local, LocalVisitContext::Use);
+                    }
+                }
             }
 
             fn visit_expr(&mut self, expr: & $($mutability)? ExprKind<'ctx>) {
