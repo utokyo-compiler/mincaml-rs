@@ -169,7 +169,6 @@ impl PlaceBinder {
                         }),
                         target,
                     );
-                    state.builder.set_args_to_current(index_vec![branch_arg]);
                 }
                 PlaceBindee::Call {
                     calling_conv,
@@ -188,7 +187,6 @@ impl PlaceBinder {
                         },
                         target,
                     );
-                    state.builder.set_args_to_current(index_vec![call_result]);
                 }
             },
         }
