@@ -456,7 +456,7 @@ pub fn lower_expr<'ctx>(
                 state.push_binder(new_binder);
                 lower_expr(e3, ctx, state);
 
-                let bb_after_if = state.builder.next_basic_block();
+                let bb_after_if = state.builder.current_basic_block();
                 // This call will also fire the deferred terminator creation.
                 state.resolve_label(label_after_if, bb_after_if);
 
