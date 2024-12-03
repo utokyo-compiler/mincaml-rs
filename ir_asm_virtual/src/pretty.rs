@@ -45,12 +45,20 @@ impl BasicBlockPrinter<'_, '_> {
         }
     }
 
-    fn format_branch(&self, f: &mut Formatter<'_>, branch: &Branch) -> fmt::Result {
+    fn format_branch(
+        &self,
+        f: &mut Formatter<'_>,
+        branch: &Branch,
+        prepend_br: bool,
+    ) -> fmt::Result {
         let args: Vec<_> = branch
             .args
             .iter()
             .map(|arg| self.locals[*arg].to_string())
             .collect();
+        if prepend_br {
+            write!(f, "br ")?;
+        }
         if args.is_empty() {
             write!(f, "{}", branch.target)
         } else {
@@ -145,17 +153,15 @@ impl BasicBlockPrinter<'_, '_> {
                 }
                 Ok(())
             }
-            TerminatorKind::Branch(branch) => {
-                write!(f, "br {}", branch.target)
-            }
+            TerminatorKind::Branch(branch) => self.format_branch(f, branch, true),
             TerminatorKind::ConditionalBranch {
                 condition,
                 targets: [true_target, false_target],
             } => {
-                write!(f, "if {} {{ br ", self.locals[*condition].ident.value,)?;
-                self.format_branch(f, true_target)?;
-                write!(f, " }} else {{ br ")?;
-                self.format_branch(f, false_target)?;
+                write!(f, "if {} {{ ", self.locals[*condition].ident.value,)?;
+                self.format_branch(f, true_target, true)?;
+                write!(f, " }} else {{ ")?;
+                self.format_branch(f, false_target, true)?;
                 write!(f, " }}")
             }
             TerminatorKind::Call {
@@ -177,7 +183,7 @@ impl BasicBlockPrinter<'_, '_> {
                     .collect::<Vec<_>>()
                     .join(", ");
                 write!(f, " ({args}) -> ")?;
-                self.format_branch(f, branch)
+                self.format_branch(f, branch, false)
             }
         }
     }
