@@ -7,6 +7,7 @@ use super::utils::{
     build_field_mapping, should_generate_arg, FieldMap, HasFieldMap, SetOnce, SpannedOption,
     SubdiagnosticKind, SubdiagnosticVariant,
 };
+
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote, quote_spanned};
 use syn::Token;

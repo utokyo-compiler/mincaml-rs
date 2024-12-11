@@ -97,7 +97,7 @@ pub enum LitKind {
     Unit,
     Bool(bool),
     Int(i32),
-    /// Floating point number as `u32` bits. Mutually convertible with `f32` via `u32::from_bits` and `f32::to_bits`.
+    /// Floating point number as [`u32`] bits. Mutually convertible with [`f32`] via [`f32::from_bits`] and [`f32::to_bits`].
     Float(u32),
 }
 

@@ -1,10 +1,10 @@
-use std::cell::RefCell;
-
-use error::DeriveError;
 use proc_macro2::TokenStream;
 use quote::quote;
+use std::cell::RefCell;
 use syn::spanned::Spanned;
 use synstructure::Structure;
+
+use error::DeriveError;
 use utils::SetOnce;
 
 use crate::util::span_err;
