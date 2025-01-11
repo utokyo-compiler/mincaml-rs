@@ -1,3 +1,4 @@
+#![feature(let_chains)]
 use ir_knorm::Expr;
 use middleware::GlobalContext;
 

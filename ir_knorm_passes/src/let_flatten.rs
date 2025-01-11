@@ -11,7 +11,9 @@ impl<'ctx> KnormPass<'ctx> for LetFlatten {
             binders: &mut Vec<Expr<'ctx>>,
             mut expr: Expr<'ctx>,
         ) -> Expr<'ctx> {
-            if let ExprKind::Let(let_expr) = &mut expr.value {
+            if let ExprKind::Let(let_expr) = &mut expr.value
+                && !let_expr.binding.is_function()
+            {
                 let body = let_expr.take_body().unwrap();
                 let new_bindee = extract_binders(binders, let_expr.binding.take_bindee().unwrap());
                 let_expr.binding.set_bindee(new_bindee);
@@ -43,7 +45,12 @@ impl<'ctx> KnormPass<'ctx> for LetFlatten {
         impl<'ctx> MutVisitor<'ctx> for LookupVisitor<'ctx> {
             fn visit_expr(&mut self, expr: &mut Expr<'ctx>) {
                 if let ExprKind::Let(let_expr) = &mut expr.value {
-                    if let_expr.binding.bindee().kind().is_let() {
+                    if let_expr.binding.is_function() {
+                        self.visit_expr(let_expr.binding.bindee_mut());
+                        self.visit_expr(let_expr.body_mut());
+                    } else if !let_expr.binding.bindee().kind().is_let() {
+                        self.visit_expr(let_expr.body_mut());
+                    } else {
                         let body = let_expr.take_body().unwrap();
                         let mut binders = Vec::new();
                         let bindee =
@@ -53,9 +60,9 @@ impl<'ctx> KnormPass<'ctx> for LetFlatten {
                         let new_expr = fold_binders(binders.into_iter(), body);
                         *expr = new_expr;
                         self.visit_expr(expr);
-                    } else {
-                        self.visit_expr(let_expr.body_mut());
                     }
+                } else {
+                    self.super_expr(expr);
                 }
             }
         }
