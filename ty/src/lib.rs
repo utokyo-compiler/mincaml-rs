@@ -233,8 +233,8 @@ impl<'ctx, T: Default> Typed<'ctx, T> {
     /// Creates a new `Typed` with the default value of `T`.
     pub fn take(&mut self) -> Self {
         Self {
-            value: std::mem::take(self),
             ty: self.ty,
+            value: std::mem::take(self),
         }
     }
 }
