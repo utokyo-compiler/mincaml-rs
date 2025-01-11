@@ -23,7 +23,7 @@ impl<'ctx> KnormPass<'ctx> for BetaConvert {
                     self.super_binding(binding);
                     return;
                 };
-                let Some(old_ident) = binding.value.as_var() else {
+                let Some(old_ident) = binding.bindee().as_var() else {
                     self.super_binding(binding);
                     return;
                 };

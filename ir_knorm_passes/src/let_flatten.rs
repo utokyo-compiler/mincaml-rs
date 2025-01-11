@@ -6,39 +6,55 @@ pub struct LetFlatten;
 
 impl<'ctx> KnormPass<'ctx> for LetFlatten {
     fn run_pass(&mut self, ctx: &'ctx middleware::GlobalContext<'ctx>, expr: &mut Expr<'ctx>) {
+        /// Extracts `let` binders from an [`Expr`]ession and returns a tail [`Expr`]ession.
+        fn extract_binders<'ctx>(
+            binders: &mut Vec<Expr<'ctx>>,
+            mut expr: Expr<'ctx>,
+        ) -> Expr<'ctx> {
+            if let ExprKind::Let(let_expr) = &mut expr.value {
+                let body = let_expr.take_body().unwrap();
+                let new_bindee = extract_binders(binders, let_expr.binding.take_bindee().unwrap());
+                let_expr.binding.set_bindee(new_bindee);
+                binders.push(expr);
+                extract_binders(binders, body)
+            } else {
+                expr
+            }
+        }
+
+        /// Folds binders to reconstruct `let` chains.
+        fn fold_binders<'ctx>(
+            binders: impl DoubleEndedIterator<Item = Expr<'ctx>>,
+            bottom: Expr<'ctx>,
+        ) -> Expr<'ctx> {
+            binders.rfold(bottom, |acc, mut binder| {
+                let ExprKind::Let(let_expr) = &mut binder.value else {
+                    unreachable!()
+                };
+                let_expr.set_body(acc);
+                binder
+            })
+        }
+
         struct LookupVisitor<'ctx> {
             ctx: &'ctx ir_knorm::Context<'ctx>,
-            outer_lets: Vec<Expr<'ctx>>,
-            last_result: Option<Expr<'ctx>>,
         }
 
         impl<'ctx> MutVisitor<'ctx> for LookupVisitor<'ctx> {
             fn visit_expr(&mut self, expr: &mut Expr<'ctx>) {
-                match &mut expr.value {
-                    ExprKind::Let(binding, continuation) => {
-                        self.visit_expr(continuation);
-
-                        let mut new_inner = self.ctx.new_expr(binding.value.take());
-                        let new_outer_let = self.ctx.new_expr(expr.take());
-
-                        self.outer_lets.push(new_outer_let);
-                        self.visit_expr(&mut new_inner);
-
-                        *expr = self.last_result.take().unwrap();
-                    }
-                    _ => {
-                        // Not a let binding
-                        if let Some(mut outer) = self.outer_lets.pop() {
-                            match &mut outer.value {
-                                ExprKind::Let(b, _) => {
-                                    std::mem::swap(&mut b.value, expr);
-                                }
-                                _ => {
-                                    unreachable!()
-                                }
-                            }
-                            self.last_result = Some(outer);
-                        }
+                if let ExprKind::Let(let_expr) = &mut expr.value {
+                    if let_expr.binding.bindee().kind().is_let() {
+                        let body = let_expr.take_body().unwrap();
+                        let mut binders = Vec::new();
+                        let bindee =
+                            extract_binders(&mut binders, let_expr.binding.take_bindee().unwrap());
+                        let_expr.binding.set_bindee(bindee);
+                        binders.push(self.ctx.new_expr(expr.take()));
+                        let new_expr = fold_binders(binders.into_iter(), body);
+                        *expr = new_expr;
+                        self.visit_expr(expr);
+                    } else {
+                        self.visit_expr(let_expr.body_mut());
                     }
                 }
             }
@@ -46,8 +62,6 @@ impl<'ctx> KnormPass<'ctx> for LetFlatten {
 
         LookupVisitor {
             ctx: ctx.knorm_context(),
-            outer_lets: vec![],
-            last_result: None,
         }
         .visit_expr(expr);
     }

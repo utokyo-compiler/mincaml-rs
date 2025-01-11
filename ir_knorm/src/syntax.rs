@@ -41,7 +41,7 @@ pub enum ExprKind<'ctx> {
     Unary(UnOp, Ident<'ctx>),
     Binary(BinOp, Ident<'ctx>, Ident<'ctx>),
     If(Ident<'ctx>, Expr<'ctx>, Expr<'ctx>),
-    Let(LetBinding<'ctx>, Expr<'ctx>),
+    Let(LetExpr<'ctx>),
     Var(Ident<'ctx>),
     App(Ident<'ctx>, IndexVec<ArgIndex, Ident<'ctx>>),
     Tuple(IndexVec<TupleIndex, Ident<'ctx>>),
@@ -69,6 +69,14 @@ impl<'ctx> ExprKind<'ctx> {
             None
         }
     }
+
+    /// Returns `true` if the expr kind is [`Let`].
+    ///
+    /// [`Let`]: ExprKind::Let
+    #[must_use]
+    pub fn is_let(&self) -> bool {
+        matches!(self, Self::Let(..))
+    }
 }
 
 impl<'ctx> ExprKind<'ctx> {
@@ -92,18 +100,64 @@ impl<'ctx> ExprKind<'ctx> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct LetExpr<'ctx> {
+    /// (`let x = e`)`in e`
+    pub binding: LetBinding<'ctx>,
+
+    /// `let x = e in`(`e`)
+    body: Option<Expr<'ctx>>,
+}
+
+impl<'ctx> LetExpr<'ctx> {
+    pub fn new(binding: LetBinding<'ctx>, body: Expr<'ctx>) -> Self {
+        Self {
+            binding,
+            body: Some(body),
+        }
+    }
+
+    pub fn body(&self) -> &Expr<'ctx> {
+        self.body.as_ref().unwrap()
+    }
+
+    pub fn body_mut(&mut self) -> &mut Expr<'ctx> {
+        self.body.as_mut().unwrap()
+    }
+
+    pub fn take_body(&mut self) -> Option<Expr<'ctx>> {
+        self.body.take()
+    }
+
+    pub fn set_body(&mut self, body: Expr<'ctx>) {
+        self.body = Some(body)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct LetBinding<'ctx> {
     pub pattern: Pattern<'ctx>,
     pub args: IndexVec<ArgIndex, Ident<'ctx>>,
-    pub value: Expr<'ctx>,
+    bindee: Option<Expr<'ctx>>,
 }
 
 impl<'ctx> LetBinding<'ctx> {
+    pub fn new(
+        pattern: Pattern<'ctx>,
+        args: IndexVec<ArgIndex, Ident<'ctx>>,
+        value: Expr<'ctx>,
+    ) -> Self {
+        Self {
+            pattern,
+            args,
+            bindee: Some(value),
+        }
+    }
+
     pub fn let_var(pattern: Ident<'ctx>, value: Expr<'ctx>) -> Self {
         Self {
             pattern: Pattern::Var(pattern),
             args: IndexVec::new(),
-            value,
+            bindee: Some(value),
         }
     }
     pub fn let_discard(value: Expr<'ctx>) -> Self {
@@ -111,11 +165,27 @@ impl<'ctx> LetBinding<'ctx> {
         Self {
             pattern: Pattern::Unit,
             args: IndexVec::new(),
-            value,
+            bindee: Some(value),
         }
     }
     pub fn is_function(&self) -> bool {
         !self.args.is_empty()
+    }
+
+    pub fn bindee(&self) -> &Expr<'ctx> {
+        self.bindee.as_ref().unwrap()
+    }
+
+    pub fn bindee_mut(&mut self) -> &mut Expr<'ctx> {
+        self.bindee.as_mut().unwrap()
+    }
+
+    pub fn take_bindee(&mut self) -> Option<Expr<'ctx>> {
+        self.bindee.take()
+    }
+
+    pub fn set_bindee(&mut self, value: Expr<'ctx>) {
+        self.bindee = Some(value)
     }
 }
 
