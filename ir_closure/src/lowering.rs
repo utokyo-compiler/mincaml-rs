@@ -141,14 +141,10 @@ fn lower_expr<'ctx>(
             lower_expr(ctx, state, e1),
             lower_expr(ctx, state, e2),
         ),
-        ir_knorm::ExprKind::Let(
-            binding @ ir_knorm::LetBinding {
-                pattern,
-                args,
-                value,
-            },
-            follows,
-        ) => {
+        ir_knorm::ExprKind::Let(let_expr) => {
+            let binding @ ir_knorm::LetBinding { pattern, args, .. } = &let_expr.binding;
+            let value = binding.bindee();
+            let follows = let_expr.body();
             let pattern = pattern.clone();
             let (value, follows) = if args.is_empty() {
                 // Let or LetTuple
@@ -303,7 +299,7 @@ fn analyze_let_rec<'ctx>(
             fn visit_binding(&mut self, binding: &ir_knorm::LetBinding<'ctx>) {
                 self.visit_pattern(&binding.pattern);
                 self.collect_fv.super_binding_args(&binding.args);
-                self.visit_expr(&binding.value);
+                self.visit_expr(binding.bindee());
             }
             fn visit_pattern(&mut self, pattern: &Pattern<'ctx>) {
                 // initial binding
@@ -342,7 +338,7 @@ fn analyze_let_rec<'ctx>(
             }
             fn visit_binding(&mut self, binding: &ir_knorm::LetBinding<'ctx>) {
                 // optimization: no need to visit the binder
-                self.visit_expr(&binding.value);
+                self.visit_expr(binding.bindee());
             }
         }
     }

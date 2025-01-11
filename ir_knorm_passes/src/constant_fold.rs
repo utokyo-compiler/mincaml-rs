@@ -54,7 +54,7 @@ impl<'ctx> KnormPass<'ctx> for ConstantFold {
         impl<'ctx> MutVisitor<'ctx> for ConstantFoldVisitor<'ctx> {
             fn visit_binding(&mut self, binding: &mut LetBinding<'ctx>) {
                 if let Some(x) = binding.pattern.as_var() {
-                    if let ExprKind::Const(lit) = binding.value.kind() {
+                    if let ExprKind::Const(lit) = binding.bindee().kind() {
                         self.env.insert(x, *lit);
                     }
                 }

@@ -55,7 +55,7 @@ impl<'ctx> AlphaRename<'ctx> {
 
             fn visit_binding(&mut self, binding: &mut LetBinding<'ctx>) {
                 if let Some(introduced) = binding.pattern.as_var() {
-                    let renamed = generate_fresh_ident(self.ctx, self.tag, binding.value.ty);
+                    let renamed = generate_fresh_ident(self.ctx, self.tag, binding.bindee().ty);
                     self.env.insert(introduced, renamed);
                     binding.pattern = Pattern::Var(renamed);
                 }

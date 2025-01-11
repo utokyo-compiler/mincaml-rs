@@ -1,5 +1,6 @@
 use crate::{
-    context::Context, DisambiguatedIdent, Expr, ExprKind, Ident, LetBinding, Pattern, Typed,
+    context::Context, DisambiguatedIdent, Expr, ExprKind, Ident, LetBinding, LetExpr, Pattern,
+    Typed,
 };
 
 pub fn lowering<'ctx>(
@@ -35,8 +36,8 @@ fn lowering_ref<'ctx>(
             ExprKind::If(e1, e2, e3)
         }
         ir_typed_ast::ExprKind::Let(binding, follows) => {
-            let binding = LetBinding {
-                pattern: match &binding.pattern {
+            let binding = LetBinding::new(
+                match &binding.pattern {
                     ir_typed_ast::Pattern::Var(ident) => {
                         Pattern::Var(ctx.intern_resolved_ident(****ident))
                     }
@@ -47,22 +48,22 @@ fn lowering_ref<'ctx>(
                             .collect(),
                     ),
                 },
-                args: binding
+                binding
                     .args
                     .iter()
                     .map(|i| ctx.intern_resolved_ident(****i))
                     .collect(),
-                value: lowering_ref(ctx, &binding.value),
-            };
+                lowering_ref(ctx, &binding.value),
+            );
             let follows = lowering_ref(ctx, follows);
 
-            ExprKind::Let(binding, follows)
+            ExprKind::Let(LetExpr::new(binding, follows))
         }
         ir_typed_ast::ExprKind::Then(e1, e2) => {
             let e1 = lowering_ref(ctx, e1);
             let e2 = lowering_ref(ctx, e2);
 
-            ExprKind::Let(LetBinding::let_discard(e1), e2)
+            ExprKind::Let(LetExpr::new(LetBinding::let_discard(e1), e2))
         }
         ir_typed_ast::ExprKind::Var(ident) => {
             let ident = ctx.intern_resolved_ident(****ident);
@@ -160,7 +161,7 @@ impl<'ctx> Binders<'ctx> {
         let mut expr = expr;
         while let Some(binder) = self.inner.pop() {
             let ty = expr.ty;
-            expr = ctx.new_expr(Typed::new(ExprKind::Let(binder, expr), ty));
+            expr = ctx.new_expr(Typed::new(ExprKind::Let(LetExpr::new(binder, expr)), ty));
         }
         expr
     }

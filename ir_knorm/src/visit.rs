@@ -1,7 +1,23 @@
 use crate::{
-    ArgIndex, BinOp, Expr, ExprKind, Ident, LetBinding, LitKind, Pattern, TupleIndex, Ty, UnOp,
+    ArgIndex, BinOp, Expr, ExprKind, Ident, LetBinding, LetExpr, LitKind, Pattern, TupleIndex, Ty,
+    UnOp,
 };
 use data_structure::{index::vec::IndexVec, FxHashSet};
+
+macro_rules! overload_mut {
+    ($receiver:ident, [bindee],) => {
+        $receiver.bindee()
+    };
+    ($receiver:ident, [bindee], mut) => {
+        $receiver.bindee_mut()
+    };
+    ($receiver:ident, [body],) => {
+        $receiver.body()
+    };
+    ($receiver:ident, [body], mut) => {
+        $receiver.body_mut()
+    };
+}
 
 macro_rules! declare_visitor {
     ($name:ident, $($mutability:ident)?) => {
@@ -45,9 +61,8 @@ macro_rules! declare_visitor {
                         self.visit_expr(e2);
                         self.visit_expr(e3);
                     }
-                    ExprKind::Let(binding, e) => {
-                        self.visit_binding(binding);
-                        self.visit_expr(e);
+                    ExprKind::Let(let_expr) => {
+                        self.visit_let(let_expr);
                     }
                     ExprKind::Var(ident) => self.visit_ident(ident),
                     ExprKind::App(e, es) => {
@@ -115,12 +130,12 @@ macro_rules! declare_visitor {
             }
 
             fn super_binding(&mut self, binding: & $($mutability)? LetBinding<'ctx>) {
-                let LetBinding { pattern, args, value } = binding;
+                let LetBinding { pattern, args, .. } = binding;
                 self.visit_pattern(pattern);
                 for arg in args {
                     self.visit_ident(arg);
                 }
-                self.visit_expr(value);
+                self.visit_expr(overload_mut!(binding, [bindee], $($mutability)?));
             }
 
             fn visit_pattern(&mut self, pattern: & $($mutability)? Pattern<'ctx>) {
@@ -137,6 +152,15 @@ macro_rules! declare_visitor {
                         }
                     }
                 }
+            }
+
+            fn visit_let(&mut self, let_expr: & $($mutability)? LetExpr<'ctx>) {
+                self.super_let(let_expr);
+            }
+
+            fn super_let(&mut self, let_expr: & $($mutability)? LetExpr<'ctx>) {
+                self.visit_binding(& $($mutability)? let_expr.binding);
+                self.visit_expr(overload_mut!(let_expr, [body], $($mutability)?));
             }
 
             fn visit_app(&mut self, e: & $($mutability)? Ident<'ctx>, es: & $($mutability)? IndexVec<ArgIndex, Ident<'ctx>>) {

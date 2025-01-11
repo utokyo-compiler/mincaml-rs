@@ -61,16 +61,16 @@ impl<'ctx> KnormPass<'ctx> for EliminateUnused {
         impl<'ctx> MutVisitor<'ctx> for EliminationVisitor<'ctx> {
             fn visit_expr(&mut self, expr: &mut Expr<'ctx>) {
                 match &mut expr.value {
-                    ExprKind::Let(binding, continuation) if is_pure(&binding.value) => {
-                        let should_eliminate = match &binding.pattern {
-                            ir_knorm::Pattern::Var(x) => is_every_var_free(&[*x], continuation),
-                            ir_knorm::Pattern::Tuple(xs) => is_every_var_free(xs, continuation),
+                    ExprKind::Let(let_expr) if is_pure(let_expr.binding.bindee()) => {
+                        let should_eliminate = match &let_expr.binding.pattern {
+                            ir_knorm::Pattern::Var(x) => is_every_var_free(&[*x], let_expr.body()),
+                            ir_knorm::Pattern::Tuple(xs) => is_every_var_free(xs, let_expr.body()),
                             ir_knorm::Pattern::Unit => true,
                         };
 
                         if should_eliminate {
                             // Skip the binding and directly visit the continuation.
-                            *expr = self.ctx.new_expr(continuation.take());
+                            *expr = self.ctx.new_expr(let_expr.body_mut().take());
 
                             self.visit_expr(expr);
                         }
