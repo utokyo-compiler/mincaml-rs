@@ -7,6 +7,6 @@ pub fn is_doc_comment(attr: &Attribute) -> bool {
 
 /// Returns an error diagnostic on span `span` with msg `msg`.
 #[must_use]
-pub fn span_err<T: Into<String>>(span: impl Spanned, msg: T) -> Diagnostic {
+pub fn span_err(span: impl Spanned, msg: impl Into<String>) -> Diagnostic {
     Diagnostic::spanned(span.span().unwrap(), Level::Error, msg)
 }

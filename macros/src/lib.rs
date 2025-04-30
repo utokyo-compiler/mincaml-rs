@@ -2,10 +2,11 @@
 #![feature(proc_macro_diagnostic)]
 #![feature(proc_macro_span)]
 #![feature(never_type)]
+#![feature(let_chains)]
 
 use proc_macro::TokenStream;
 
-mod diagnostic;
+mod diagnostics;
 mod doc;
 mod fluent;
 mod util;
@@ -88,5 +89,28 @@ synstructure::decl_derive!([Diagnostic, attributes(
     suggestion,
     suggestion_short,
     suggestion_hidden,
-    suggestion_verbose)] => diagnostic::diagnostic_macro_derive
+    suggestion_verbose)] => diagnostics::diagnostic_macro_derive
+);
+
+synstructure::decl_derive!(
+    [Subdiagnostic, attributes(
+        // struct/variant attributes
+        label,
+        help,
+        help_once,
+        note,
+        note_once,
+        warning,
+        subdiagnostic,
+        suggestion,
+        suggestion_short,
+        suggestion_hidden,
+        suggestion_verbose,
+        multipart_suggestion,
+        multipart_suggestion_short,
+        multipart_suggestion_hidden,
+        multipart_suggestion_verbose,
+        // field attributes
+        skip_arg,
+        primary_span)] => diagnostics::subdiagnostic_derive
 );

@@ -62,7 +62,7 @@ macro_rules! throw_span_err {
     }};
     ($span:expr, $msg:expr, $f:expr) => {{
         let diag = span_err($span, $msg);
-        return Err(crate::diagnostic::error::_throw_err(diag, $f));
+        return Err($crate::diagnostics::error::_throw_err(diag, $f));
     }};
 }
 
@@ -87,8 +87,8 @@ macro_rules! throw_invalid_attr {
         throw_invalid_attr!($attr, |diag| diag)
     }};
     ($attr:expr, $f:expr) => {{
-        let diag = crate::diagnostic::error::invalid_attr($attr);
-        return Err(crate::diagnostic::error::_throw_err(diag, $f));
+        let diag = $crate::diagnostics::error::invalid_attr($attr);
+        return Err($crate::diagnostics::error::_throw_err(diag, $f));
     }};
 }
 
