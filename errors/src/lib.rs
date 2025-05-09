@@ -580,16 +580,10 @@ impl AddLabel for Option<Span> {
     }
 }
 
-impl AddLabel for AllowMissingSpan {
-    fn try_into_span(self) -> Option<Span> {
-        self.to_option()
-    }
-}
-
 #[diagnostic::on_unimplemented(
     message = "`{Self}` cannot be used as a type of #[help], #[note], etc.",
     label = "`#[help], #[note] and #[warning] does not recognize this type",
-    note = "consider using `Span`, `()`, `Option<()>`"
+    note = "consider using `Span`, `AlwaysShow`, or `Option<Span>`"
 )]
 pub trait TryIntoMultiSpan<'dcx> {
     fn try_into_spans(self) -> Option<MultiSpan<'dcx>>;
@@ -609,16 +603,20 @@ impl<'dcx> TryIntoMultiSpan<'dcx> for Span {
     }
 }
 
-impl<'dcx> TryIntoMultiSpan<'dcx> for () {
+#[derive(Clone, Copy, Default)]
+/// Always show the subdiagnostic.
+pub struct AlwaysShow;
+
+impl<'dcx> TryIntoMultiSpan<'dcx> for AlwaysShow {
     fn try_into_spans(self) -> Option<MultiSpan<'dcx>> {
         Some(MultiSpan::default())
     }
 }
 
-/// A `Span` that may be missing. This is useful when a span is optional, but
-/// we want to emit the subdiagnostic anyway.
+/// A [`Span`] that may be missing. Shows the subdiagnostic even if the
+/// [`Span`] is missing.
 ///
-/// This example shows how this type differs from `Option<Span>`:
+/// This example shows how this type differs from [`Option<Span>`]:
 ///
 /// ```ignore (illustrative)
 /// SomeError {
@@ -646,50 +644,50 @@ impl<'dcx> TryIntoMultiSpan<'dcx> for () {
 /// }.into_diag().emit(); // does not emit the subdiagnostic
 /// ```
 pub enum AllowMissingSpan {
+    /// Shows the subdiagnostic with the span.
     Exist(Span),
+
+    /// Shows the subdiagnostic without a span.
     Missing,
-}
-
-impl AllowMissingSpan {
-    /// Converts from an [`Option<Span>`].
-    pub fn from_option(opt: Option<Span>) -> Self {
-        match opt {
-            Some(span) => AllowMissingSpan::Exist(span),
-            None => AllowMissingSpan::Missing,
-        }
-    }
-
-    /// Converts back into an [`Option<Span>`].
-    pub fn to_option(self) -> Option<Span> {
-        match self {
-            AllowMissingSpan::Exist(span) => Some(span),
-            AllowMissingSpan::Missing => None,
-        }
-    }
-}
-
-impl From<Option<Span>> for AllowMissingSpan {
-    fn from(opt: Option<Span>) -> Self {
-        AllowMissingSpan::from_option(opt)
-    }
-}
-
-impl From<AllowMissingSpan> for Option<Span> {
-    fn from(ams: AllowMissingSpan) -> Self {
-        ams.to_option()
-    }
 }
 
 impl<'dcx> TryIntoMultiSpan<'dcx> for AllowMissingSpan {
     fn try_into_spans(self) -> Option<MultiSpan<'dcx>> {
         match self {
-            AllowMissingSpan::Exist(span) => span.try_into_spans(),
-            AllowMissingSpan::Missing => ().try_into_spans(),
+            Self::Exist(span) => span.try_into_spans(),
+            Self::Missing => AlwaysShow.try_into_spans(),
         }
     }
 }
 
-impl<'dcx, T: TryIntoMultiSpan<'dcx>> TryIntoMultiSpan<'dcx> for Option<T> {
+impl<'dcx> TryIntoMultiSpan<'dcx> for Option<Span> {
+    fn try_into_spans(self) -> Option<MultiSpan<'dcx>> {
+        self.and_then(TryIntoMultiSpan::try_into_spans)
+    }
+}
+
+/// A [`MultiSpan`] that may be missing. Shows the subdiagnostic even if the
+/// [`MultiSpan`] is missing.
+///
+/// See [`AllowMissingSpan`] for more details.
+pub enum AllowMissingMultiSpan<'dcx> {
+    /// Shows the subdiagnostic with the span.
+    Exist(MultiSpan<'dcx>),
+
+    /// Shows the subdiagnostic without a span.
+    Missing,
+}
+
+impl<'dcx> TryIntoMultiSpan<'dcx> for AllowMissingMultiSpan<'dcx> {
+    fn try_into_spans(self) -> Option<MultiSpan<'dcx>> {
+        match self {
+            Self::Exist(span) => span.try_into_spans(),
+            Self::Missing => AlwaysShow.try_into_spans(),
+        }
+    }
+}
+
+impl<'dcx> TryIntoMultiSpan<'dcx> for Option<MultiSpan<'dcx>> {
     fn try_into_spans(self) -> Option<MultiSpan<'dcx>> {
         self.and_then(TryIntoMultiSpan::try_into_spans)
     }
@@ -788,6 +786,9 @@ impl<'dcx> Diag<'dcx> {
         }
     }
 
+    /// Add a subdiagnostic to this diagnostic.
+    ///
+    /// If the span is null, the subdiagnostic will *not* be added.
     pub fn may_add_sub(
         &mut self,
         level: Level,
