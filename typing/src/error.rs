@@ -47,6 +47,8 @@ impl std::fmt::Display for CoarseExprKind {
 #[diag(typing_fail)]
 pub struct TypingError {
     pub phase: Phase,
+    #[note]
+    pub note: AlwaysShow,
 }
 
 #[derive(Debug)]

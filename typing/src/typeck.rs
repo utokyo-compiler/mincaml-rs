@@ -82,7 +82,13 @@ pub fn typeck<'ctx>(
             if has_error {
                 dcx.emit_err(error::InvalidTypeAscription::default());
                 taint.fail();
-                return (Err(dcx.create_err(error::TypingError { phase })), taint);
+                return (
+                    Err(dcx.create_err(error::TypingError {
+                        phase,
+                        note: AlwaysShow,
+                    })),
+                    taint,
+                );
             }
             let ret = types.pop().unwrap();
             let ty = Ty::mk_fun(ctx, types, ret);
@@ -109,7 +115,13 @@ pub fn typeck<'ctx>(
         parsed,
     ) else {
         taint.fail();
-        return (Err(dcx.create_err(error::TypingError { phase })), taint);
+        return (
+            Err(dcx.create_err(error::TypingError {
+                phase,
+                note: AlwaysShow,
+            })),
+            taint,
+        );
     };
     // Unify the type of the main expression with `unit`.
     unify(dcx, &mut subst, typed.ty, common_types.unit).unwrap();
