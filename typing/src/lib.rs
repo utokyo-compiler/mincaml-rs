@@ -4,8 +4,7 @@
 use std::borrow::Cow;
 
 use data_structure::{index::vec::IndexVec, FxHashSet};
-use error::UnifyError;
-use errors::{Diag, DiagContext};
+use errors::{AlwaysShow, Diag, DiagContext};
 use macros::fluent_messages;
 use sourcemap::Spanned;
 use ty::{context::CommonTypes, Ty, Typed};
@@ -17,7 +16,7 @@ mod unify;
 
 fluent_messages! { "../messages.ftl" }
 
-use unify::{unify, UnifyArg};
+use unify::unify;
 
 pub type Context<'ctx> = ty::context::TypingContext<
     'ctx,
@@ -117,7 +116,7 @@ pub fn typeck<'ctx>(
 
     // Top level call of `decide_ty` to infer the type of the main expression.
     let mut subst = Cow::Owned(ty_var_subst::Env::new());
-    let Some(mut typed) = decide_ty(
+    let DecideTyReturn::Ok(mut typed) = decide_ty(
         ctx,
         dcx,
         common_types,
@@ -158,29 +157,40 @@ impl<'ctx> Taint<'ctx> {
     }
 }
 
-fn expect<'ctx>(
-    dcx: &'ctx DiagContext<'ctx>,
-    subst: &mut Cow<ty_var_subst::Env<'ctx>>,
-    expected_ty: Ty<'ctx>,
-    expr: &ir_typed_ast::Expr<'ctx>,
-) {
-    if let Err(err) = unify(dcx, subst, expr.ty, expected_ty) {
-        let diag = dcx.create_err(error::GeneralExpectFailure {
-            span: *expr.span.as_user_defined().unwrap(),
-            expected_ty,
-            found_ty: expr.ty,
-            expr_kind: expr.kind().into(),
-        });
-        if let UnifyError::UnifyFailed { lhs, rhs, kind } = err {
-            todo!()
+/// A return type for [`decide_ty`].
+///
+/// This type is nominally different from [`Result`] or [`Option`], to prevent
+/// the caller from using `?` operator or [`Result::unwrap`] method on it, since
+/// the implementation of [`decide_ty`] is crucial to the type system and should
+/// not be overly simplified.
+///
+/// N.B., do not add or remove variants from this enum as `if let` statements
+/// are used in the code. Instead, consider reimplementing the entire function.
+enum DecideTyReturn<'ctx> {
+    Ok(ir_typed_ast::Expr<'ctx>),
+    RecoverTy(Ty<'ctx>),
+    Fail,
+}
+
+impl<'ctx> DecideTyReturn<'ctx> {
+    fn ty(&self) -> Option<Ty<'ctx>> {
+        match self {
+            DecideTyReturn::Ok(e) => Some(e.ty),
+            DecideTyReturn::RecoverTy(ty) => Some(*ty),
+            DecideTyReturn::Fail => None,
         }
-        diag.emit();
     }
 }
 
 /// Recursively infer the type of the given expression.
 ///
 /// Originally named `Typing.g` (or `typing_g`).
+///
+/// # Returns
+///
+/// - `Ok(typed)`: The typed expression.
+/// - `RecoverTy(ty)`: Failed to infer the type, but the type is recoverable.
+/// - `Fail`: Failed to infer the type and the type is not recoverable.
 fn decide_ty<'ctx>(
     ctx: &'ctx Context<'ctx>,
     dcx: &'ctx DiagContext<'ctx>,
@@ -189,7 +199,7 @@ fn decide_ty<'ctx>(
     subst: &mut Cow<ty_var_subst::Env<'ctx>>,
     taint: &mut Taint<'ctx>,
     expr: syntax::Expr<'ctx>,
-) -> Option<ir_typed_ast::Expr<'ctx>> {
+) -> DecideTyReturn<'ctx> {
     let span = expr.span;
     let (ty, node) = match expr.kind() {
         syntax::ExprKind::Const(lit) => {
@@ -202,14 +212,21 @@ fn decide_ty<'ctx>(
             (ty, ir_typed_ast::ExprKind::Const(*lit))
         }
         syntax::ExprKind::Unary(un_op, e) => {
-            let e = decide_ty(ctx, dcx, common_types, name_res, subst, taint, e)?;
+            let e = decide_ty(ctx, dcx, common_types, name_res, subst, taint, e);
             let (un_op, ty) = match un_op {
                 syntax::UnOp::Neg => {
+                    // `- : int -> int | float -> float`
+
+                    let Some(t) = e.ty() else {
+                        // If the type is not recoverable, we can fail, but
+                        // we should recover the type to continue type checking.
+                        return DecideTyReturn::RecoverTy(Ty::mk_ty_var(ctx));
+                    };
                     // Try to unify with `int` first in a new temporary environment,
-                    // then `float` if it fails.
+                    // then try `float` if it fails.
                     let mut new_subst = Cow::Borrowed(&**subst);
-                    if let Err(_err) = unify(dcx, &mut new_subst, e.ty, common_types.int) {
-                        unify(dcx, subst, e.ty, common_types.float).unwrap();
+                    if let Err(_err) = unify(dcx, &mut new_subst, t, common_types.int) {
+                        unify(dcx, subst, t, common_types.float).unwrap();
                         (ir_typed_ast::UnOp::Fneg, common_types.float)
                     } else {
                         // If the first unification succeeds and modified the environment,
@@ -223,52 +240,83 @@ fn decide_ty<'ctx>(
                     }
                 }
                 syntax::UnOp::FNeg => {
-                    unify(dcx, subst, e.ty, common_types.float).unwrap();
+                    // `-. : float -> float`
+                    if let Some(t) = e.ty() {
+                        unify(dcx, subst, t, common_types.float).unwrap();
+                    }
                     (ir_typed_ast::UnOp::Fneg, common_types.float)
                 }
                 syntax::UnOp::Not => {
-                    unify(dcx, subst, e.ty, common_types.bool).unwrap();
+                    // `not : bool -> bool`
+                    if let Some(t) = e.ty() {
+                        unify(dcx, subst, t, common_types.bool).unwrap();
+                    }
                     (ir_typed_ast::UnOp::Not, common_types.bool)
                 }
+            };
+            let DecideTyReturn::Ok(e) = e else {
+                return DecideTyReturn::RecoverTy(ty);
             };
             (ty, ir_typed_ast::ExprKind::Unary(un_op, e))
         }
         syntax::ExprKind::Binary(bin_op, e1, e2) => {
-            let e1 = decide_ty(ctx, dcx, common_types, name_res, subst, taint, e1).unwrap();
-            let e2 = decide_ty(ctx, dcx, common_types, name_res, subst, taint, e2).unwrap();
+            let e1 = decide_ty(ctx, dcx, common_types, name_res, subst, taint, e1);
+            let e2 = decide_ty(ctx, dcx, common_types, name_res, subst, taint, e2);
             let ty = match bin_op {
                 syntax::BinOp::Relation(..) => {
-                    unify(dcx, subst, e1.ty, e2.ty).unwrap();
+                    // `(relationship) : 'a -> 'a -> bool`
+                    if let (Some(t1), Some(t2)) = (e1.ty(), e2.ty()) {
+                        unify(dcx, subst, t1, t2).unwrap();
+                    }
                     common_types.bool
                 }
                 syntax::BinOp::Int(..) => {
-                    unify(dcx, subst, e1.ty, common_types.int).unwrap();
-                    unify(dcx, subst, e2.ty, common_types.int).unwrap();
+                    // `(integer operation) : int -> int -> int`
+                    if let Some(t1) = e1.ty() {
+                        unify(dcx, subst, t1, common_types.int).unwrap();
+                    }
+                    if let Some(t2) = e2.ty() {
+                        unify(dcx, subst, t2, common_types.int).unwrap();
+                    }
                     common_types.int
                 }
                 syntax::BinOp::Float(..) => {
-                    unify(dcx, subst, e1.ty, common_types.float).unwrap();
-                    unify(dcx, subst, e2.ty, common_types.float).unwrap();
+                    // `(float operation) : float -> float -> float`
+                    if let Some(t1) = e1.ty() {
+                        unify(dcx, subst, t1, common_types.float).unwrap();
+                    }
+                    if let Some(t2) = e2.ty() {
+                        unify(dcx, subst, t2, common_types.float).unwrap();
+                    }
                     common_types.float
                 }
+            };
+            let (DecideTyReturn::Ok(e1), DecideTyReturn::Ok(e2)) = (e1, e2) else {
+                return DecideTyReturn::RecoverTy(ty);
             };
             (ty, ir_typed_ast::ExprKind::Binary(*bin_op, e1, e2))
         }
         syntax::ExprKind::If(e1, e2, e3) => {
+            // `if : bool -> 'a -> 'a (with conditional evaluation)`
             let e1_typed = decide_ty(ctx, dcx, common_types, name_res, subst, taint, e1);
             let e2_typed = decide_ty(ctx, dcx, common_types, name_res, subst, taint, e2);
             let e3_typed = decide_ty(ctx, dcx, common_types, name_res, subst, taint, e3);
-            if let Some(e1) = &e1_typed {
-                expect(dcx, subst, common_types.bool, e1);
+            if let Some(e1) = e1_typed.ty() {
+                unify(dcx, subst, e1, common_types.bool).unwrap();
             }
-            if let (Some(e2), Some(e3)) = (&e2_typed, &e3_typed) {
-                unify(dcx, subst, e2.ty, e3.ty).unwrap();
+            if let (Some(e2_ty), Some(e3_ty)) = (e2_typed.ty(), e3_typed.ty()) {
+                unify(dcx, subst, e2_ty, e3_ty).unwrap();
             }
-            let (Some(e1), Some(e2), Some(e3)) = (e1_typed, e2_typed, e3_typed) else {
-                taint.fail();
-                return None;
-            };
-            (e2.ty, ir_typed_ast::ExprKind::If(e1, e2, e3))
+
+            match (e1_typed, e2_typed, e3_typed) {
+                (DecideTyReturn::Ok(e1), DecideTyReturn::Ok(e2), DecideTyReturn::Ok(e3)) => {
+                    (e2.ty, ir_typed_ast::ExprKind::If(e1, e2, e3))
+                }
+                (_, DecideTyReturn::Ok(e), _) | (_, _, DecideTyReturn::Ok(e)) => {
+                    return DecideTyReturn::RecoverTy(e.ty);
+                }
+                _ => return DecideTyReturn::Fail,
+            }
         }
         syntax::ExprKind::Let(let_binder, follows) => {
             let mut typed_args: Vec<ir_typed_ast::Ident<'_>> =
@@ -370,106 +418,198 @@ fn decide_ty<'ctx>(
 
             let AnalyzedBinding { rhs_ty, typed_pattern } = analyzed.unwrap();
 
-            let Some(typed_bound_value) = typed_bound_value else {
-                // Register the variables as unbound.
-                for ident in typed_pattern.iter_idents() {
-                    // `to_owned`: `ident` is borrowed from `typed_pattern`, which is going to be moved.
-                    taint.undefined(ident.to_owned());
-                }
-
-                // Try continue with the next expression.
-                return decide_ty(ctx, dcx, common_types, name_res, subst,taint, follows);
-            };
-
-            unify(dcx, subst, rhs_ty, typed_bound_value.ty).unwrap();
-            let typed_follows =
-                decide_ty(ctx, dcx, common_types, name_res, subst, taint,follows).unwrap();
+            if let Some(t) = typed_bound_value.ty() {
+                // Unify the type of the bound value with the type of the pattern.
+                unify(dcx, subst, rhs_ty, t).unwrap();
             }
 
-            (
-                typed_follows.ty,
-                ir_typed_ast::ExprKind::Let(
-                    ir_typed_ast::LetBinding {
-                        pattern: typed_pattern,
-                        args: IndexVec::from_raw_vec(typed_args),
-                        value: typed_bound_value,
-                    },
-                    typed_follows,
+            let typed_bound_value = match typed_bound_value {
+                DecideTyReturn::Ok(typed_bound_value) => typed_bound_value,
+                _ => {
+                    // Register the variables as unbound.
+                    for ident in typed_pattern.iter_idents() {
+                        // `to_owned`: `ident` is borrowed from `typed_pattern`,
+                        // which is going to be moved.
+                        taint.undefined(ident.to_owned());
+                    }
+
+                    // Try continue with the next expression.
+                    return decide_ty(ctx, dcx, common_types, name_res, subst, taint, follows);
+                }
+            };
+
+            let typed_follower =
+                decide_ty(ctx, dcx, common_types, name_res, subst, taint, follows);
+            }
+
+            match typed_follower {
+                DecideTyReturn::Ok(typed_follower) => (
+                    typed_follower.ty,
+                    ir_typed_ast::ExprKind::Let(
+                        ir_typed_ast::LetBinding {
+                            pattern: typed_pattern,
+                            args: IndexVec::from_raw_vec(typed_args),
+                            value: typed_bound_value,
+                        },
+                        typed_follower,
+                    ),
                 ),
-            )
+                other => return other,
+            }
         }
         syntax::ExprKind::Then(e1, e2) => {
-            let e1 = decide_ty(ctx, dcx, common_types, name_res, subst, taint, e1).unwrap();
-            let e2 = decide_ty(ctx, dcx, common_types, name_res, subst, taint, e2).unwrap();
-            unify(dcx, subst, e1.ty, common_types.unit).unwrap();
-            (e2.ty, ir_typed_ast::ExprKind::Then(e1, e2))
+            // `(;) : () -> 'a -> 'a`
+            let e1 = decide_ty(ctx, dcx, common_types, name_res, subst, taint, e1);
+            let e2 = decide_ty(ctx, dcx, common_types, name_res, subst, taint, e2);
+
+            if let Some(t1) = e1.ty() {
+                unify(dcx, subst, t1, common_types.unit).unwrap();
+            }
+
+            match (e1, e2) {
+                (DecideTyReturn::Ok(e1), DecideTyReturn::Ok(e2)) => {
+                    (e2.ty, ir_typed_ast::ExprKind::Then(e1, e2))
+                }
+                (_, e2) if let Some(t2) = e2.ty() => {
+                    return DecideTyReturn::RecoverTy(t2);
+                }
+                _ => {
+                    return DecideTyReturn::Fail;
+                }
+            }
         }
         syntax::ExprKind::Var(var) => {
             let Some(typed_var) = name_res.get(*var) else {
+                taint.fail();
                 dcx.emit_err(error::UnboundIdent {
-                    span: *expr.span.as_user_defined().unwrap(),
+                    span: expr.span.as_user_defined().unwrap(),
                     var: *var,
                 });
-                return None;
+                return DecideTyReturn::Fail;
             };
             let typed_var = ir_typed_ast::Ident::new(ctx.alloc_ident(typed_var));
             (typed_var.ty, ir_typed_ast::ExprKind::Var(typed_var))
         }
         syntax::ExprKind::App(fun, args) => {
-            let typed_fun = decide_ty(ctx, dcx, common_types, name_res, subst, taint, fun).unwrap();
-            let typed_args =
-                decide_ty_many(ctx, dcx, common_types, name_res, subst, taint, args).unwrap();
+            let fun = decide_ty(ctx, dcx, common_types, name_res, subst, taint, fun);
+            let args = decide_ty_many(ctx, dcx, common_types, name_res, subst, taint, args);
             let ret_ty = Ty::mk_ty_var(ctx);
-            let fun_ty = Ty::mk_fun(ctx, typed_args.iter().map(|e| e.ty).collect(), ret_ty);
-            unify(dcx, subst, typed_fun.ty, fun_ty).unwrap();
+            let typed_args = args.complete_ty_list(ctx);
+            if let Some(typed_fun_ty) = fun.ty() {
+                unify(
+                    dcx,
+                    subst,
+                    typed_fun_ty,
+                    Ty::mk_fun(ctx, typed_args, ret_ty),
+                )
+                .unwrap();
+            }
+            let (DecideTyReturn::Ok(fun), DecideTyManyReturn::Ok(args)) = (fun, args) else {
+                return DecideTyReturn::RecoverTy(ret_ty);
+            };
             (
                 ret_ty,
-                ir_typed_ast::ExprKind::App(typed_fun, IndexVec::from_raw_vec(typed_args)),
+                ir_typed_ast::ExprKind::App(fun, IndexVec::from_raw_vec(args)),
             )
         }
         syntax::ExprKind::Tuple(exprs) => {
-            let typed_exprs =
-                decide_ty_many(ctx, dcx, common_types, name_res, subst, taint, exprs).unwrap();
-            let ty = Ty::mk_tuple(ctx, typed_exprs.iter().map(|e| e.ty).collect());
+            let typed_exprs = decide_ty_many(ctx, dcx, common_types, name_res, subst, taint, exprs);
+            let tys = typed_exprs.complete_ty_list(ctx);
+            let ty = Ty::mk_tuple(ctx, tys);
+            let DecideTyManyReturn::Ok(typed_exprs) = typed_exprs else {
+                return DecideTyReturn::RecoverTy(ty);
+            };
             (
                 ty,
                 ir_typed_ast::ExprKind::Tuple(IndexVec::from_raw_vec(typed_exprs)),
             )
         }
         syntax::ExprKind::ArrayMake(e1, e2) => {
-            let e1 = decide_ty(ctx, dcx, common_types, name_res, subst, taint, e1).unwrap();
-            let e2 = decide_ty(ctx, dcx, common_types, name_res, subst, taint, e2).unwrap();
-            unify(dcx, subst, e1.ty, common_types.int).unwrap();
-            let ty = Ty::mk_array(ctx, e2.ty);
-            (ty, ir_typed_ast::ExprKind::ArrayMake(e1, e2))
+            // `Array.Make: int -> 'a -> 'a array`
+            let e1 = decide_ty(ctx, dcx, common_types, name_res, subst, taint, e1);
+            let e2 = decide_ty(ctx, dcx, common_types, name_res, subst, taint, e2);
+            if let Some(t1) = e1.ty() {
+                unify(dcx, subst, t1, common_types.int).unwrap();
+            }
+            match (e1, e2) {
+                (DecideTyReturn::Ok(e1), DecideTyReturn::Ok(e2)) => {
+                    let ty = Ty::mk_array(ctx, e2.ty);
+                    (ty, ir_typed_ast::ExprKind::ArrayMake(e1, e2))
+                }
+                (_, e2) if let Some(t2) = e2.ty() => {
+                    return DecideTyReturn::RecoverTy(Ty::mk_array(ctx, t2));
+                }
+                _ => return DecideTyReturn::Fail,
+            }
         }
         syntax::ExprKind::Get(e1, e2) => {
-            let e1 = decide_ty(ctx, dcx, common_types, name_res, subst, taint, e1).unwrap();
-            let e2 = decide_ty(ctx, dcx, common_types, name_res, subst, taint, e2).unwrap();
+            // `Get: 'a array -> int -> 'a`
+            let e1 = decide_ty(ctx, dcx, common_types, name_res, subst, taint, e1);
+            let e2 = decide_ty(ctx, dcx, common_types, name_res, subst, taint, e2);
             let ty = Ty::mk_ty_var(ctx);
-            unify(dcx, subst, e1.ty, Ty::mk_array(ctx, ty)).unwrap();
-            unify(dcx, subst, e2.ty, common_types.int).unwrap();
+            if let Some(t1) = e1.ty() {
+                unify(dcx, subst, t1, Ty::mk_array(ctx, ty)).unwrap();
+            }
+            if let Some(t2) = e2.ty() {
+                unify(dcx, subst, t2, common_types.int).unwrap();
+            }
+            let (DecideTyReturn::Ok(e1), DecideTyReturn::Ok(e2)) = (e1, e2) else {
+                return DecideTyReturn::RecoverTy(ty);
+            };
             (ty, ir_typed_ast::ExprKind::Get(e1, e2))
         }
         syntax::ExprKind::Set(e1, e3) => {
+            // `Set: 'a array -> int -> 'a -> unit`
+
             // We restrict the form of `e1` to be `Get(e1, e2)` here.
             let syntax::ExprKind::Get(e1, e2) = &e1.node else {
+                taint.fail();
                 dcx.emit_err(error::InvalidSetSyntax {
-                    lhs: *e1.span.as_user_defined().unwrap(),
-                    note: (),
+                    lhs: e1.span.as_user_defined().unwrap(),
+                    note: AlwaysShow,
                 });
-                return None;
+                return DecideTyReturn::Fail;
             };
-            let e1 = decide_ty(ctx, dcx, common_types, name_res, subst, taint, e1).unwrap();
-            let e2 = decide_ty(ctx, dcx, common_types, name_res, subst, taint, e2).unwrap();
-            let e3 = decide_ty(ctx, dcx, common_types, name_res, subst, taint, e3).unwrap();
-            unify(dcx, subst, e1.ty, Ty::mk_array(ctx, e3.ty)).unwrap();
-            unify(dcx, subst, e2.ty, common_types.int).unwrap();
+            let e1 = decide_ty(ctx, dcx, common_types, name_res, subst, taint, e1);
+            let e2 = decide_ty(ctx, dcx, common_types, name_res, subst, taint, e2);
+            let e3 = decide_ty(ctx, dcx, common_types, name_res, subst, taint, e3);
+            if let (Some(t1), Some(t3)) = (e1.ty(), e3.ty()) {
+                unify(dcx, subst, t1, Ty::mk_array(ctx, t3)).unwrap();
+            }
+            if let Some(t2) = e2.ty() {
+                unify(dcx, subst, t2, common_types.int).unwrap();
+            }
+            let (DecideTyReturn::Ok(e1), DecideTyReturn::Ok(e2), DecideTyReturn::Ok(e3)) =
+                (e1, e2, e3)
+            else {
+                return DecideTyReturn::RecoverTy(common_types.unit);
+            };
             (common_types.unit, ir_typed_ast::ExprKind::Set(e1, e2, e3))
         }
     };
     let e = ctx.alloc_expr(Typed::new(Spanned { node, span }, ty));
-    Some(ir_typed_ast::Expr::new(e))
+    DecideTyReturn::Ok(ir_typed_ast::Expr::new(e))
+}
+
+enum DecideTyManyReturn<'ctx> {
+    Ok(Vec<ir_typed_ast::Expr<'ctx>>),
+    RecoverTypes(Vec<Option<Ty<'ctx>>>),
+}
+
+impl<'ctx> DecideTyManyReturn<'ctx> {
+    /// Returns a vector of types for the expressions.
+    ///
+    /// If an element of the types vector is unrecoverable, it will be replaced
+    /// with a new type variable. `ctx` is needed to create new type variables.
+    fn complete_ty_list(&self, ctx: &'ctx Context<'ctx>) -> Vec<Ty<'ctx>> {
+        match self {
+            DecideTyManyReturn::Ok(exprs) => exprs.iter().map(|e| e.ty).collect(),
+            DecideTyManyReturn::RecoverTypes(types) => types
+                .iter()
+                .map(|o| o.unwrap_or_else(|| Ty::mk_ty_var(ctx)))
+                .collect(),
+        }
+    }
 }
 
 fn decide_ty_many<'ctx>(
@@ -480,11 +620,40 @@ fn decide_ty_many<'ctx>(
     subst: &mut Cow<ty_var_subst::Env<'ctx>>,
     taint: &mut Taint<'ctx>,
     exprs: &Vec<syntax::Expr<'ctx>>,
-) -> Result<Vec<ir_typed_ast::Expr<'ctx>>, ()> {
+) -> DecideTyManyReturn<'ctx> {
     let mut typed = Vec::with_capacity(exprs.len());
+    let mut failed = false;
+    let mut recovery = Vec::new();
     for expr in exprs {
-        let e = decide_ty(ctx, dcx, common_types, name_res, subst, taint, expr).unwrap();
-        typed.push(e);
+        let e = decide_ty(ctx, dcx, common_types, name_res, subst, taint, expr);
+        if !failed {
+            match e {
+                DecideTyReturn::Ok(typed_expr) => {
+                    typed.push(typed_expr);
+                }
+                failure => {
+                    failed = true;
+                    // Recovery path: store the type of the expression already seen
+                    // and the type of the expression in the recovery vector.
+                    for t in &typed {
+                        recovery.push(Some(t.ty));
+                    }
+                    if let DecideTyReturn::RecoverTy(ty) = failure {
+                        recovery.push(Some(ty));
+                    } else {
+                        recovery.push(None);
+                    }
+                }
+            }
+        } else {
+            // Already failed, so we just push recovery infomation.
+            recovery.push(e.ty());
+        }
     }
-    Ok(typed)
+
+    if !failed {
+        DecideTyManyReturn::Ok(typed)
+    } else {
+        DecideTyManyReturn::RecoverTypes(recovery)
+    }
 }

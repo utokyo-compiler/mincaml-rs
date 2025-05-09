@@ -1,9 +1,8 @@
 typing_fail = failed to type `{$phase}`
     .note = see errors above
 
-typing_occurck_failed = occur check failed
+typing_occurck_failed = unsolvable constraint: `{$var} == {$ty}`
     .note = of this expression
-    .error = unsolvable constraint: `{$var} == {$ty}`
 
 typing_general_expect = type mismatch
     .label = {$expr_kind} has type `{$found_ty}` but an expression was expected of type `{$expected_ty}`

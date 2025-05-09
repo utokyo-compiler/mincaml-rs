@@ -1,11 +1,11 @@
-use errors::{into_diag_arg_using_display, DiagContext, Diagnostic};
+use errors::{into_diag_arg_using_display, AlwaysShow};
 use macros::Diagnostic;
 use sourcemap::Span;
 use ty::{Ty, TyVarId};
 
 into_diag_arg_using_display!(Phase);
 
-use crate::{unify::SpannedTy, Phase};
+use crate::Phase;
 
 into_diag_arg_using_display!(CoarseExprKind);
 #[derive(Debug)]
@@ -51,51 +51,15 @@ pub struct TypingError {
 
 #[derive(Debug)]
 pub enum UnifyError<'ctx> {
-    UnifyFailed {
-        lhs: SpannedTy<'ctx>,
-        rhs: SpannedTy<'ctx>,
-        kind: UnifyFailKind<'ctx>,
-    },
-    AlreadyReported,
-}
-
-#[derive(Debug)]
-pub enum UnifyFailKind<'ctx> {
-    FunArgLenMismatch {
-        left: usize,
-        right: usize,
-    },
+    FunArgLenMismatch { left: usize, right: usize },
     TupleLenMismatch,
-    TupleElemsMismatch {
-        mismatched: Vec<(Ty<'ctx>, Ty<'ctx>)>,
-    },
+    TupleElemsMismatch { mismatches: Vec<Self> },
     DifferentDiscriminants,
-}
-
-impl<'ctx> UnifyError<'ctx> {
-    pub fn failed(lhs: SpannedTy<'ctx>, rhs: SpannedTy<'ctx>, kind: UnifyFailKind<'ctx>) -> Self {
-        Self::UnifyFailed { lhs, rhs, kind }
-    }
-
-    pub fn report(dcx: &'ctx DiagContext<'ctx>, diag: impl Diagnostic) -> Self {
-        dcx.emit_err(diag);
-        Self::AlreadyReported
-    }
+    OccurckFailed { var: TyVarId, ty: Ty<'ctx> },
 }
 
 #[derive(Diagnostic)]
-#[diag(typing_occurck_failed)]
-pub struct OccurckFailed<'ctx> {
-    #[note]
-    pub span: Option<Span>,
-    pub var: TyVarId,
-    pub ty: Ty<'ctx>,
-    #[note(error)]
-    pub error: (),
-}
-
-#[derive(Diagnostic)]
-#[diag(typing_invalid_set_syntax)]
+#[diag(typing_unbound_ident)]
 pub struct UnboundIdent<'ctx> {
     #[primary_span]
     #[label]
@@ -107,9 +71,9 @@ pub struct UnboundIdent<'ctx> {
 #[diag(typing_invalid_type_ascription)]
 pub struct InvalidTypeAscription {
     #[note]
-    note: (),
+    note: AlwaysShow,
     #[note(bug_report)]
-    bug_report: (),
+    bug_report: AlwaysShow,
 }
 
 #[derive(Diagnostic)]
@@ -119,7 +83,7 @@ pub struct InvalidSetSyntax {
     #[label]
     pub lhs: Span,
     #[note(bug_report)]
-    pub note: (),
+    pub note: AlwaysShow,
 }
 
 #[derive(Diagnostic)]

@@ -27,25 +27,31 @@ impl<'ctx> Env<'ctx> {
         self.inner.insert(var, ty);
     }
 
-    pub fn deref_ty_var(self, ctx: &'ctx Context<'ctx>, e: &mut ir_typed_ast::Expr<'ctx>) {
+    pub fn deref_ty_var(&self, ctx: &'ctx Context<'ctx>, e: &mut ir_typed_ast::Expr<'ctx>) {
         use ir_typed_ast::MutVisitor;
         let mut visitor = DerefTyVisitor { env: self, ctx };
         visitor.visit_expr(e);
     }
+
+    pub fn deref_ty_var_for_ty(&self, ctx: &'ctx Context<'ctx>, ty: &mut Ty<'ctx>) {
+        use ir_typed_ast::MutVisitor;
+        let mut visitor = DerefTyVisitor { env: self, ctx };
+        visitor.visit_ty(ty);
+    }
 }
 
-struct DerefTyVisitor<'ctx> {
-    env: Env<'ctx>,
+struct DerefTyVisitor<'a, 'ctx> {
+    env: &'a Env<'ctx>,
     ctx: &'ctx Context<'ctx>,
 }
 
-impl<'ctx> ir_typed_ast::MutVisitor<'ctx> for DerefTyVisitor<'ctx> {
+impl<'ctx> ir_typed_ast::MutVisitor<'ctx> for DerefTyVisitor<'_, 'ctx> {
     fn visit_ty(&mut self, ty: &mut Ty<'ctx>) {
         *ty = self.deref_ty(*ty);
     }
 }
 
-impl<'ctx> DerefTyVisitor<'ctx> {
+impl<'ctx> DerefTyVisitor<'_, 'ctx> {
     fn deref_ty(&self, mut ty: Ty<'ctx>) -> Ty<'ctx> {
         loop {
             match ty.kind() {

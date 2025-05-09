@@ -104,7 +104,7 @@ impl<'ctx> Env<'ctx> {
             .push_scoped_ident(
                 ident.node,
                 ty,
-                *ident.span.as_user_defined().unwrap(),
+                ident.span.as_user_defined().unwrap(),
                 scope_id,
             )
     }
