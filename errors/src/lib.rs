@@ -513,6 +513,11 @@ pub enum DiagArgValue {
 /// converted rather than on `DiagArgValue`, which enables types from other crates to
 /// implement this.
 #[counterpart(rustc_errors::diagnostic::IntoDiagArg)]
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` cannot be a diagnostic argument",
+    label = "this type cannot be used as a diagnostic argument",
+    note = "consider implementing `IntoDiagArg` for it, or perhaps forget adding attributes?"
+)]
 pub trait IntoDiagArg {
     fn into_diag_arg(self) -> DiagArgValue;
 }
@@ -606,6 +611,12 @@ impl<'dcx> TryIntoMultiSpan<'dcx> for Span {
 #[derive(Clone, Copy, Default)]
 /// Always show the subdiagnostic.
 pub struct AlwaysShow;
+
+impl std::fmt::Debug for AlwaysShow {
+    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Ok(())
+    }
+}
 
 impl<'dcx> TryIntoMultiSpan<'dcx> for AlwaysShow {
     fn try_into_spans(self) -> Option<MultiSpan<'dcx>> {

@@ -8,6 +8,9 @@ use crate::{DiagArgValue, IntoDiagArg};
 
 pub struct DiagArgFromDisplay<'a>(pub &'a dyn fmt::Display);
 
+/// Implements [`IntoDiagArg`] for any type that implements [`fmt::Display`]
+/// via strong type aliasing.
+#[diagnostic::do_not_recommend]
 impl IntoDiagArg for DiagArgFromDisplay<'_> {
     fn into_diag_arg(self) -> DiagArgValue {
         self.0.to_string().into_diag_arg()
@@ -26,12 +29,14 @@ impl<'a, T: fmt::Display> From<&'a T> for DiagArgFromDisplay<'a> {
     }
 }
 
+#[diagnostic::do_not_recommend]
 impl<T: Clone + IntoDiagArg> IntoDiagArg for &'_ T {
     fn into_diag_arg(self) -> DiagArgValue {
         self.clone().into_diag_arg()
     }
 }
 
+#[diagnostic::do_not_recommend]
 impl<'a, T> IntoDiagArg for data_structure::interning::Interned<'a, T>
 where
     &'a T: IntoDiagArg,
