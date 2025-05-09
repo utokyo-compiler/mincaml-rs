@@ -125,15 +125,3 @@ impl<'ctx> Env<'ctx> {
             .and_then(|candidates| candidates.find(&self.ended_scopes))
     }
 }
-
-#[macro_export]
-/// A macro to create a new scope for the given name resolution.
-///
-/// Purpose: To ensure that the scope is ended after the block of code is executed.
-macro_rules! with_scope {
-    (with $scope:ident = $name_res:ident.with_scope(); $($tt:tt)*) => {
-        let $scope = $name_res.begin_scope();
-        $($tt)*
-        $name_res.end_scope($scope);
-    };
-}
