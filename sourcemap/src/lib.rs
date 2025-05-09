@@ -1,4 +1,4 @@
-use std::{fmt::Display, borrow::Cow, path::PathBuf};
+use std::{borrow::Cow, fmt::Display, path::PathBuf};
 
 use data_structure::index::{
     vec::{Idx, IndexVec},
@@ -56,9 +56,9 @@ pub enum SpanOrigin {
 }
 
 impl SpanOrigin {
-    pub fn as_user_defined(&self) -> Option<&Span> {
+    pub fn as_user_defined(&self) -> Option<Span> {
         if let Self::UserDefined(v) = self {
-            Some(v)
+            Some(*v)
         } else {
             None
         }
