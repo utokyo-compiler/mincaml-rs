@@ -78,9 +78,17 @@ pub enum FloatBinOpKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+/// Represents a binary operator.
+///
+/// This enum is divided according to how the type of the operand is determined
+/// in type inference. Therefore, changes to this enum or related enums must
+/// correspond to changes in the type inference implementation.
 pub enum BinOp {
+    /// `'a -> 'a -> bool`
     Relation(RelationBinOpKind),
+    /// `int -> int -> int`
     Int(IntBinOpKind),
+    /// `float -> float -> float`
     Float(FloatBinOpKind),
 }
 
