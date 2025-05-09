@@ -1,4 +1,4 @@
-typing_fail = failed to type `{$phase}`
+typing_fail = failed to type {$phase}
     .note = see errors above
 
 typing_occurck_failed = unsolvable constraint: `{$var} == {$ty}`
