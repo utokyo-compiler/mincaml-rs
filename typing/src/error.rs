@@ -5,7 +5,7 @@ use ty::{Ty, TyVarId};
 
 into_diag_arg_using_display!(Phase);
 
-use crate::Phase;
+use crate::typeck::Phase;
 
 into_diag_arg_using_display!(CoarseExprKind);
 #[derive(Debug)]

@@ -1,28 +1,11 @@
-#![feature(iterator_try_collect)]
-#![feature(if_let_guard)]
-
 use std::borrow::Cow;
 
 use data_structure::{index::vec::IndexVec, FxHashSet};
 use errors::{AlwaysShow, Diag, DiagContext};
-use macros::fluent_messages;
 use sourcemap::Spanned;
 use ty::{context::CommonTypes, Ty, Typed};
 
-mod error;
-mod name_res;
-mod ty_var_subst;
-mod unify;
-
-fluent_messages! { "../messages.ftl" }
-
-use unify::unify;
-
-pub type Context<'ctx> = ty::context::TypingContext<
-    'ctx,
-    Typed<'ctx, ir_typed_ast::DisambiguatedIdent<'ctx>>,
-    Typed<'ctx, Spanned<ir_typed_ast::ExprKind<'ctx>>>,
->;
+use crate::{error, name_res, ty_var_subst, unify::unify, with_scope, Context};
 
 #[derive(Debug)]
 pub enum Phase {
