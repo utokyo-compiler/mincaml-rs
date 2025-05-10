@@ -1,6 +1,7 @@
 #![feature(iterator_try_collect)]
 #![feature(if_let_guard)]
 
+mod decide_ty_edsl;
 mod error;
 mod name_res;
 mod ty_var_subst;

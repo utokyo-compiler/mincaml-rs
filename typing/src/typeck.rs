@@ -3,9 +3,9 @@ use std::borrow::Cow;
 use data_structure::{index::vec::IndexVec, FxHashSet};
 use errors::{AlwaysShow, Diag, DiagContext};
 use sourcemap::Spanned;
-use ty::{context::CommonTypes, Ty, Typed};
+use ty::{context::CommonTypes, HasTy, Ty, Typed};
 
-use crate::{error, name_res, ty_var_subst, unify::unify, Context};
+use crate::{decide_ty_edsl, error, name_res, ty_var_subst, unify::unify, Context};
 
 #[derive(Debug)]
 pub enum Phase {
@@ -154,7 +154,9 @@ impl<'ctx> Taint<'ctx> {
 /// The type checker.
 ///
 /// This struct carries references that are used over function calls.
-struct TypeChecker<'ctx, 'common_types, 'name_res, 'subst, 'env, 'taint> {
+///
+/// This item is `pub(crate)` to allow access from the [`decide_ty_edsl!`] macro documentation.
+pub(crate) struct TypeChecker<'ctx, 'common_types, 'name_res, 'subst, 'env, 'taint> {
     ctx: &'ctx Context<'ctx>,
     dcx: &'ctx DiagContext<'ctx>,
     common_types: &'common_types CommonTypes<'ctx>,
@@ -188,7 +190,9 @@ impl<'ctx> TypeChecker<'ctx, '_, '_, '_, '_, '_> {
                 (ty, ir_typed_ast::ExprKind::Const(*lit))
             }
             syntax::ExprKind::Unary(un_op, e) => {
-                let e = self.decide_ty(e);
+                decide_ty_edsl! { self;
+                    prelude: decide e;
+                }
                 let (un_op, ty) = match un_op {
                     syntax::UnOp::Neg => {
                         // `- : int -> int | float -> float`
@@ -196,7 +200,7 @@ impl<'ctx> TypeChecker<'ctx, '_, '_, '_, '_, '_> {
                         let Some(t) = e.ty() else {
                             // If the type is not recoverable, we can fail, but
                             // we should recover the type to continue type checking.
-                            return DecideTyReturn::RecoverTy(Ty::mk_ty_var(self.ctx));
+                            return DecideTyReturn::Recover(Ty::mk_ty_var(self.ctx));
                         };
                         // Try to unify with `int` first in a new temporary environment,
                         // then try `float` if it fails.
@@ -220,88 +224,90 @@ impl<'ctx> TypeChecker<'ctx, '_, '_, '_, '_, '_> {
                     }
                     syntax::UnOp::FNeg => {
                         // `-. : float -> float`
-                        if let Some(t) = e.ty() {
-                            self.unify_with_current_subst(t, self.common_types.float)
-                                .unwrap();
+                        decide_ty_edsl! { self;
+                            interlude: unify {
+                                e: float;
+                            }
                         }
                         (ir_typed_ast::UnOp::Fneg, self.common_types.float)
                     }
                     syntax::UnOp::Not => {
                         // `not : bool -> bool`
-                        if let Some(t) = e.ty() {
-                            self.unify_with_current_subst(t, self.common_types.bool)
-                                .unwrap();
+                        decide_ty_edsl! { self;
+                            interlude: unify {
+                                e: bool;
+                            }
                         }
                         (ir_typed_ast::UnOp::Not, self.common_types.bool)
                     }
                 };
-                let DecideTyReturn::Ok(e) = e else {
-                    return DecideTyReturn::RecoverTy(ty);
-                };
-                (ty, ir_typed_ast::ExprKind::Unary(un_op, e))
+                decide_ty_edsl! { self;
+                    postlude: for(e)
+                    (
+                        || (#ty),
+                        ir_typed_ast::ExprKind::Unary(un_op, e)
+                    )
+                }
             }
             syntax::ExprKind::Binary(bin_op, e1, e2) => {
-                let e1 = self.decide_ty(e1);
-                let e2 = self.decide_ty(e2);
+                decide_ty_edsl! { self;
+                    prelude: decide e1, e2
+                }
                 let ty = match bin_op {
                     syntax::BinOp::Relation(..) => {
                         // `(relationship) : 'a -> 'a -> bool`
-                        if let (Some(t1), Some(t2)) = (e1.ty(), e2.ty()) {
-                            self.unify_with_current_subst(t1, t2).unwrap();
+                        decide_ty_edsl! { self;
+                            interlude: unify {
+                                (e1, e2): ('a, 'a);
+                            }
                         }
                         self.common_types.bool
                     }
                     syntax::BinOp::Int(..) => {
                         // `(integer operation) : int -> int -> int`
-                        if let Some(t1) = e1.ty() {
-                            self.unify_with_current_subst(t1, self.common_types.int)
-                                .unwrap();
-                        }
-                        if let Some(t2) = e2.ty() {
-                            self.unify_with_current_subst(t2, self.common_types.int)
-                                .unwrap();
+                        decide_ty_edsl! { self;
+                            interlude: unify {
+                                e1: int;
+                                e2: int;
+                            }
                         }
                         self.common_types.int
                     }
                     syntax::BinOp::Float(..) => {
                         // `(float operation) : float -> float -> float`
-                        if let Some(t1) = e1.ty() {
-                            self.unify_with_current_subst(t1, self.common_types.float)
-                                .unwrap();
-                        }
-                        if let Some(t2) = e2.ty() {
-                            self.unify_with_current_subst(t2, self.common_types.float)
-                                .unwrap();
+                        decide_ty_edsl! { self;
+                            interlude: unify {
+                                e1: float;
+                                e2: float;
+                            }
                         }
                         self.common_types.float
                     }
                 };
-                let (DecideTyReturn::Ok(e1), DecideTyReturn::Ok(e2)) = (e1, e2) else {
-                    return DecideTyReturn::RecoverTy(ty);
-                };
-                (ty, ir_typed_ast::ExprKind::Binary(*bin_op, e1, e2))
+                decide_ty_edsl! { self;
+                    postlude: for(e1, e2)
+                    (
+                        || (#ty),
+                        ir_typed_ast::ExprKind::Binary(*bin_op, e1, e2)
+                    )
+                }
             }
             syntax::ExprKind::If(e1, e2, e3) => {
                 // `if : bool -> 'a -> 'a -> 'a (with conditional evaluation)`
-                let e1 = self.decide_ty(e1);
-                let e2 = self.decide_ty(e2);
-                let e3 = self.decide_ty(e3);
-                if let Some(e1) = e1.ty() {
-                    self.unify_with_current_subst(e1, self.common_types.bool)
-                        .unwrap();
-                }
-                if let (Some(e2_ty), Some(e3_ty)) = (e2.ty(), e3.ty()) {
-                    self.unify_with_current_subst(e2_ty, e3_ty).unwrap();
-                }
-
-                match (e1, e2, e3) {
-                    (DecideTyReturn::Ok(e1), DecideTyReturn::Ok(e2), DecideTyReturn::Ok(e3)) => {
-                        (e2.ty, ir_typed_ast::ExprKind::If(e1, e2, e3))
+                decide_ty_edsl! { self;
+                    decide e1, e2, e3;
+                    unify {
+                        e1: bool;
+                        (e2, e3): ('a, 'a);
                     }
-                    (_, e, _) | (_, _, e) if let Some(t) = e.ty() => {
-                        return DecideTyReturn::RecoverTy(t);
-                    }
-                    _ => return DecideTyReturn::Fail,
+                    (
+                        |e2| (#e2) else {
+                            |e3| {
+                                return recover (#e3);
+                            }
+                        },
+                        ir_typed_ast::ExprKind::If(e1, e2, e3)
+                    )
                 }
             }
             syntax::ExprKind::Let(let_binder, follows) => {
@@ -449,25 +455,13 @@ impl<'ctx> TypeChecker<'ctx, '_, '_, '_, '_, '_> {
                 }
             }
             syntax::ExprKind::Then(e1, e2) => {
-                // `(;) : () -> 'a -> 'a`
-                let e1 = self.decide_ty(e1);
-                let e2 = self.decide_ty(e2);
-
-                if let Some(t1) = e1.ty() {
-                    self.unify_with_current_subst(t1, self.common_types.unit)
-                        .unwrap();
-                }
-
-                match (e1, e2) {
-                    (DecideTyReturn::Ok(e1), DecideTyReturn::Ok(e2)) => {
-                        (e2.ty, ir_typed_ast::ExprKind::Then(e1, e2))
+                // `(;) : unit -> 'a -> 'a`
+                decide_ty_edsl! { self;
+                    decide e1, e2;
+                    unify {
+                        e1: unit;
                     }
-                    (_, e2) if let Some(t2) = e2.ty() => {
-                        return DecideTyReturn::RecoverTy(t2);
-                    }
-                    _ => {
-                        return DecideTyReturn::Fail;
-                    }
+                    (|e2| (#e2), ir_typed_ast::ExprKind::Then(e1, e2))
                 }
             }
             syntax::ExprKind::Var(var) => {
@@ -476,7 +470,7 @@ impl<'ctx> TypeChecker<'ctx, '_, '_, '_, '_, '_> {
                         span: expr.span.as_user_defined().unwrap(),
                         var: *var,
                     });
-                    return DecideTyReturn::Fail;
+                    return DecideTyReturn::Fail(());
                 };
                 let typed_var = ir_typed_ast::Ident::new(self.ctx.alloc_ident(typed_var));
                 (typed_var.ty, ir_typed_ast::ExprKind::Var(typed_var))
@@ -493,94 +487,67 @@ impl<'ctx> TypeChecker<'ctx, '_, '_, '_, '_, '_> {
                     )
                     .unwrap();
                 }
-                let (DecideTyReturn::Ok(fun), DecideTyManyReturn::Ok(args)) = (fun, args) else {
-                    return DecideTyReturn::RecoverTy(ret_ty);
-                };
-                (
-                    ret_ty,
-                    ir_typed_ast::ExprKind::App(fun, IndexVec::from_raw_vec(args)),
-                )
+                decide_ty_edsl! { self;
+                    postlude: for(fun, args)
+                    (
+                        || (#ret_ty),
+                        ir_typed_ast::ExprKind::App(fun, IndexVec::from_raw_vec(args)),
+                    )
+                }
             }
             syntax::ExprKind::Tuple(exprs) => {
                 let typed_exprs = self.decide_ty_many(exprs);
                 let tys = typed_exprs.complete_ty_list(self.ctx);
                 let ty = Ty::mk_tuple(self.ctx, tys);
-                let DecideTyManyReturn::Ok(typed_exprs) = typed_exprs else {
-                    return DecideTyReturn::RecoverTy(ty);
-                };
-                (
-                    ty,
-                    ir_typed_ast::ExprKind::Tuple(IndexVec::from_raw_vec(typed_exprs)),
-                )
+                decide_ty_edsl! { self;
+                    postlude: for(typed_exprs)
+                    (
+                        || (#ty),
+                        ir_typed_ast::ExprKind::Tuple(IndexVec::from_raw_vec(typed_exprs)),
+                    )
+                }
             }
             syntax::ExprKind::ArrayMake(e1, e2) => {
                 // `Array.Make: int -> 'a -> 'a array`
-                let e1 = self.decide_ty(e1);
-                let e2 = self.decide_ty(e2);
-                if let Some(t1) = e1.ty() {
-                    self.unify_with_current_subst(t1, self.common_types.int)
-                        .unwrap();
-                }
-                match (e1, e2) {
-                    (DecideTyReturn::Ok(e1), DecideTyReturn::Ok(e2)) => {
-                        let ty = Ty::mk_array(self.ctx, e2.ty);
-                        (ty, ir_typed_ast::ExprKind::ArrayMake(e1, e2))
+                decide_ty_edsl! { self;
+                    decide e1, e2;
+                    unify {
+                        e1: int;
                     }
-                    (_, e2) if let Some(t2) = e2.ty() => {
-                        return DecideTyReturn::RecoverTy(Ty::mk_array(self.ctx, t2));
-                    }
-                    _ => return DecideTyReturn::Fail,
+                    (|e2| (#e2 array), ir_typed_ast::ExprKind::ArrayMake(e1, e2))
                 }
             }
             syntax::ExprKind::Get(e1, e2) => {
                 // `Get: 'a array -> int -> 'a`
-                let e1 = self.decide_ty(e1);
-                let e2 = self.decide_ty(e2);
                 let ty = Ty::mk_ty_var(self.ctx);
-                if let Some(t1) = e1.ty() {
-                    self.unify_with_current_subst(t1, Ty::mk_array(self.ctx, ty))
-                        .unwrap();
+                decide_ty_edsl! { self;
+                    decide e1, e2;
+                    unify {
+                        e1: (#ty array);
+                        e2: int;
+                    }
+                    (|| (#ty), ir_typed_ast::ExprKind::Get(e1, e2))
                 }
-                if let Some(t2) = e2.ty() {
-                    self.unify_with_current_subst(t2, self.common_types.int)
-                        .unwrap();
-                }
-                let (DecideTyReturn::Ok(e1), DecideTyReturn::Ok(e2)) = (e1, e2) else {
-                    return DecideTyReturn::RecoverTy(ty);
-                };
-                (ty, ir_typed_ast::ExprKind::Get(e1, e2))
             }
             syntax::ExprKind::Set(e1, e3) => {
-                // `Set: 'a array -> int -> 'a -> unit`
-
                 // We restrict the form of `e1` to be `Get(e1, e2)` here.
                 let syntax::ExprKind::Get(e1, e2) = &e1.node else {
                     self.throw_first_cause(error::InvalidSetSyntax {
                         lhs: e1.span.as_user_defined().unwrap(),
                         note: AlwaysShow,
                     });
-                    return DecideTyReturn::Fail;
+                    return DecideTyReturn::Fail(());
                 };
-                let e1 = self.decide_ty(e1);
-                let e2 = self.decide_ty(e2);
-                let e3 = self.decide_ty(e3);
-                if let (Some(t1), Some(t3)) = (e1.ty(), e3.ty()) {
-                    self.unify_with_current_subst(t1, Ty::mk_array(self.ctx, t3))
-                        .unwrap();
+
+                // `Set: 'a array -> int -> 'a -> unit`
+                decide_ty_edsl! { self;
+                    decide e1, e2, e3;
+                    unify {
+                        (e1, e3): ('a array, 'a);
+                        e2: int;
+                    }
+                    (|| unit, ir_typed_ast::ExprKind::Set(e1, e2, e3))
                 }
-                if let Some(t2) = e2.ty() {
-                    self.unify_with_current_subst(t2, self.common_types.int)
-                        .unwrap();
-                }
-                let (DecideTyReturn::Ok(e1), DecideTyReturn::Ok(e2), DecideTyReturn::Ok(e3)) =
-                    (e1, e2, e3)
-                else {
-                    return DecideTyReturn::RecoverTy(self.common_types.unit);
-                };
-                (
-                    self.common_types.unit,
-                    ir_typed_ast::ExprKind::Set(e1, e2, e3),
-                )
             }
         };
         // Do not add important implementations here, as this is a
@@ -594,45 +561,40 @@ impl<'ctx> TypeChecker<'ctx, '_, '_, '_, '_, '_> {
     ///
     /// See [`Self::decide_ty`] for more details,
     /// and [`DecideTyManyReturn`] for the return type.
-    fn decide_ty_many(&mut self, exprs: &Vec<syntax::Expr<'ctx>>) -> DecideTyManyReturn<'ctx> {
-        let mut typed = Vec::with_capacity(exprs.len());
-        let mut failed = false;
-        let mut recovery = Vec::new();
-        for expr in exprs {
-            let e = self.decide_ty(expr);
-            if !failed {
-                match e {
-                    DecideTyReturn::Ok(typed_expr) => {
-                        typed.push(typed_expr);
-                    }
-                    failure => {
-                        failed = true;
-                        // Recovery path: store the type of the expression already seen
-                        // and the type of the expression in the recovery vector.
+    fn decide_ty_many(&mut self, exprs: &[syntax::Expr<'ctx>]) -> DecideTyManyReturn<'ctx> {
+        let recover_path = |this: &mut Self, typed: Vec<ir_typed_ast::Expr<'ctx>>, failure, it| {
+            // Recovery path: store the type of the expression already seen
+            // and the type of the expression in the recovery vector.
 
-                        // We cannot take the ownership of `typed` here, as
-                        // the compiler will not see the value of `failed` flag.
-                        for t in &typed {
-                            recovery.push(Some(t.ty));
-                        }
-                        if let DecideTyReturn::RecoverTy(ty) = failure {
-                            recovery.push(Some(ty));
-                        } else {
-                            recovery.push(None);
-                        }
-                    }
-                }
+            let mut recovery = Vec::new();
+            for t in typed {
+                recovery.push(Some(t.ty));
+            }
+            recovery.push(if let DecideTyReturn::Recover(ty) = failure {
+                Some(ty)
             } else {
-                // Already failed, so we just push recovery infomation.
-                recovery.push(e.ty());
+                None
+            });
+            for &expr in it {
+                // Already failed, so we just push recovery information.
+                recovery.push(this.decide_ty(expr).ty());
+            }
+            DecideTyManyReturn::Recover(recovery)
+        };
+        let mut typed = Vec::with_capacity(exprs.len());
+        let mut it = exprs.iter();
+        if let Some(expr) = it.next() {
+            match self.decide_ty(expr) {
+                DecideTyReturn::Ok(typed_expr) => {
+                    typed.push(typed_expr);
+                }
+                failure => {
+                    return recover_path(self, typed, failure, it);
+                }
             }
         }
 
-        if !failed {
-            DecideTyManyReturn::Ok(typed)
-        } else {
-            DecideTyManyReturn::RecoverTypes(recovery)
-        }
+        DecideTyManyReturn::Ok(typed)
     }
 
     #[inline(always)]
@@ -656,13 +618,27 @@ impl<'ctx> TypeChecker<'ctx, '_, '_, '_, '_, '_> {
     }
 }
 
+/// An underlying type for [`DecideTyReturn`] and [`DecideTyManyReturn`].
+///
+/// This type is introduced to call them structurally from [`decide_ty_edsl!`] macro.
+enum ResultWithRecover<Ok, Recover, Fail> {
+    /// The input is successfully typed.
+    Ok(Ok),
+
+    /// The input is not successfully typed, but the type is recoverable.
+    Recover(Recover),
+
+    /// The input is not successfully typed and the type is not recoverable.
+    Fail(Fail),
+}
+
 /// A return type for [`TypeChecker::decide_ty`].
 ///
 /// This type is used to return the result of type checking an expression.
 /// It has three variants:
-/// - [`DecideTyReturn::Ok`]: The expression is successfully typed.
-/// - [`DecideTyReturn::RecoverTy`]: The expression is not successfully typed, but the type is recoverable.
-/// - [`DecideTyReturn::Fail`]: The expression is not successfully typed and the type is not recoverable.
+/// - [`Ok`]: The expression is successfully typed.
+/// - [`RecoverTy`]: The expression is not successfully typed, but the type is recoverable.
+/// - [`Fail`]: The expression is not successfully typed and the type is not recoverable.
 ///
 /// This type is nominally different from [`Result`] or [`Option`], to prevent
 /// the caller from using `?` operator or [`Result::unwrap`] method on it, since
@@ -671,23 +647,19 @@ impl<'ctx> TypeChecker<'ctx, '_, '_, '_, '_, '_> {
 ///
 /// N.B., do not add or remove variants from this enum as `if let` statements
 /// are used in the code. Instead, consider reimplementing the entire function.
-enum DecideTyReturn<'ctx> {
-    /// The expression is successfully typed.
-    Ok(ir_typed_ast::Expr<'ctx>),
-
-    /// The expression is not successfully typed, but the type is recoverable.
-    RecoverTy(Ty<'ctx>),
-
-    /// The expression is not successfully typed and the type is not recoverable.
-    Fail,
-}
+///
+/// [`Ok`]: ResultWithRecover::Ok
+/// [`RecoverTy`]: ResultWithRecover::Recover
+/// [`Fail`]: ResultWithRecover::Fail
+type DecideTyReturn<'ctx> = ResultWithRecover<ir_typed_ast::Expr<'ctx>, Ty<'ctx>, ()>;
 
 impl<'ctx> DecideTyReturn<'ctx> {
+    /// Extracts the type of the expression if it is obtainable.
     fn ty(&self) -> Option<Ty<'ctx>> {
         match self {
             DecideTyReturn::Ok(e) => Some(e.ty),
-            DecideTyReturn::RecoverTy(ty) => Some(*ty),
-            DecideTyReturn::Fail => None,
+            DecideTyReturn::Recover(ty) => Some(*ty),
+            DecideTyReturn::Fail(()) => None,
         }
     }
 }
@@ -699,10 +671,11 @@ impl<'ctx> DecideTyReturn<'ctx> {
 /// - To return a recovery information for the expressions in case of failure.
 ///
 /// See [`DecideTyReturn`] for more details.
-enum DecideTyManyReturn<'ctx> {
-    Ok(Vec<ir_typed_ast::Expr<'ctx>>),
-    RecoverTypes(Vec<Option<Ty<'ctx>>>),
-}
+type DecideTyManyReturn<'ctx> = ResultWithRecover<
+    Vec<ir_typed_ast::Expr<'ctx>>,
+    Vec<Option<Ty<'ctx>>>,
+    std::convert::Infallible,
+>;
 
 impl<'ctx> DecideTyManyReturn<'ctx> {
     /// Returns a vector of types for the expressions.
@@ -712,10 +685,13 @@ impl<'ctx> DecideTyManyReturn<'ctx> {
     fn complete_ty_list(&self, ctx: &'ctx Context<'ctx>) -> Vec<Ty<'ctx>> {
         match self {
             DecideTyManyReturn::Ok(exprs) => exprs.iter().map(|e| e.ty).collect(),
-            DecideTyManyReturn::RecoverTypes(types) => types
+            DecideTyManyReturn::Recover(types) => types
                 .iter()
                 .map(|o| o.unwrap_or_else(|| Ty::mk_ty_var(ctx)))
                 .collect(),
+            // This case should never happen, but current version of rustc
+            // requires it to be handled as below.
+            DecideTyManyReturn::Fail(infallible) => match *infallible {},
         }
     }
 }

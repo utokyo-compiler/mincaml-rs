@@ -218,6 +218,18 @@ impl<'ctx> Ty<'ctx> {
     }
 }
 
+/// A value that has a type.
+pub trait HasTy<'ctx> {
+    /// Returns the type of the value.
+    fn ty(&self) -> Ty<'ctx>;
+}
+
+impl<'ctx> HasTy<'ctx> for Ty<'ctx> {
+    fn ty(&self) -> Ty<'ctx> {
+        *self
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Typed<'ctx, T> {
     pub value: T,
@@ -227,6 +239,12 @@ pub struct Typed<'ctx, T> {
 impl<'ctx, T> Typed<'ctx, T> {
     pub fn new(value: T, ty: Ty<'ctx>) -> Self {
         Self { value, ty }
+    }
+}
+
+impl<'ctx, T> HasTy<'ctx> for Typed<'ctx, T> {
+    fn ty(&self) -> Ty<'ctx> {
+        self.ty
     }
 }
 
