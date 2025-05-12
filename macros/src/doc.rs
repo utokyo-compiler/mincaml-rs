@@ -45,7 +45,7 @@ pub fn counterpart(
             };
             Some(lit)
         });
-        let contain_nonempty = last_comment.map_or(false, |lit| !lit.value().is_empty());
+        let contain_nonempty = last_comment.is_some_and(|lit| !lit.value().is_empty());
         if contain_nonempty {
             attrs.push(syn::parse_quote!(#[doc = ""]));
             let doc = format!("See also the `rustc` counterpart: `{counterpart_path}`.");

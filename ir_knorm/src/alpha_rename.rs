@@ -5,13 +5,13 @@ use crate::{Context, DisambiguatedIdent, Expr, Ident, LetBinding, MutVisitor, Pa
 fn generate_fresh_ident<'ctx>(ctx: &Context<'ctx>, tag: &'static str, ty: Ty<'ctx>) -> Ident<'ctx> {
     static COMPILER_GENERATED_COUNTER: std::sync::atomic::AtomicUsize =
         std::sync::atomic::AtomicUsize::new(0);
-    return ctx.intern_resolved_ident(Typed::new(
+    ctx.intern_resolved_ident(Typed::new(
         DisambiguatedIdent::new_compiler_unchecked(
             tag,
             COMPILER_GENERATED_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
         ),
         ty,
-    ));
+    ))
 }
 
 pub struct AlphaRename<'ctx> {

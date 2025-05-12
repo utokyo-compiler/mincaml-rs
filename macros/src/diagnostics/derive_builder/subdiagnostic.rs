@@ -219,7 +219,7 @@ impl<'diag> SubdiagnosticDeriveVariantBuilder<'diag> {
                     {
                         quote! { #diag.#fn_name(#message, #span); }
                     } else {
-                        quote! { #diag.#fn_name(#message, ()); }
+                        quote! { #diag.#fn_name(#message, errors::AlwaysShow); }
                     }
                 }
             };

@@ -13,6 +13,7 @@ use crate::{
     ty::WasmTy,
 };
 
+/// Code generation for a function.
 pub fn codegen<'ctx>(
     program_state: &mut program::State<'_, 'ctx>,
     mut function: ir_closure::FunctionDef<'ctx>,
@@ -200,7 +201,7 @@ impl<'ctx> State<'ctx> {
             match wasm_ty {
                 WasmTy::I32 => self.instrs.push(Instruction::I32Store(mem_arg)),
                 WasmTy::F32 => self.instrs.push(Instruction::F32Store(mem_arg)),
-            };
+            }
             mem_arg.offset += wasm_ty.size_of() as u64;
         }
         self.instrs_grow_heap(mem_arg.offset as i32);

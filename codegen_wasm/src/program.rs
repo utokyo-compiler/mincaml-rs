@@ -16,6 +16,13 @@ use crate::{
     ty::WasmTy,
 };
 
+/// Code generation for the program.
+///
+/// This function generates a WebAssembly module from the given closure program.
+///
+/// # Errors
+///
+/// Returns an error if a part of the code generation fails.
 pub fn codegen<'ctx>(
     closure_prog: ir_closure::Program<'ctx>,
     typed_interface: &middleware::Mli<'ctx>,
@@ -184,7 +191,7 @@ pub struct State<'arena, 'ctx> {
 
 impl<'ctx> State<'_, 'ctx> {
     pub fn push_function_def(&mut self, value: function::FunctionDef<'ctx>) {
-        self.functions.push(value)
+        self.functions.push(value);
     }
 
     /// Create a new function index.
@@ -193,10 +200,12 @@ impl<'ctx> State<'_, 'ctx> {
             ir_closure::FunctionInstance::Defined(fn_index) => {
                 self.get_func_idx_from_fn_index(fn_index)
             }
-            ir_closure::FunctionInstance::Imported(fn_name) => self
-                .find_imported_fn(fn_name)
-                .map(FuncIdx::new)
-                .unwrap_or_else(|| panic!("imported function not found: {fn_name:?}")),
+            ir_closure::FunctionInstance::Imported(fn_name) => {
+                self.find_imported_fn(fn_name).map_or_else(
+                    || panic!("imported function not found: {fn_name:?}"),
+                    FuncIdx::new,
+                )
+            }
         }
     }
 

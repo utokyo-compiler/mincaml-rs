@@ -3,6 +3,13 @@ use crate::{
     SelectedEmitter,
 };
 
+/// A switch between early and late diagnostics.
+///
+/// This is used to determine the type of source map to use in the
+/// [`DiagContext`] and [`EarlyDiagContext`].
+///
+/// [`DiagContext`]: crate::DiagContext
+/// [`EarlyDiagContext`]: crate::EarlyDiagContext
 pub trait EarlySwitch {
     type SourceMap;
 }
@@ -26,7 +33,7 @@ pub struct DiagContext<Switch: EarlySwitch> {
     emitter: SelectedEmitter<Switch>,
 }
 
-impl DiagContext<Early<'static>> {
+impl crate::EarlyDiagContext {
     pub fn new(emitter: EarlyDiagnosticEmitter) -> Self {
         Self { emitter }
     }
@@ -40,7 +47,7 @@ impl DiagContext<Early<'static>> {
     }
 }
 
-impl<'dcx> DiagContext<Late<'dcx>> {
+impl<'dcx> crate::DiagContext<'dcx> {
     pub fn from_early(
         early: DiagContext<Early<'_>>,
         source_map: &'dcx sourcemap::MultipleInput,

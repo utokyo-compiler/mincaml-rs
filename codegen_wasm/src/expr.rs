@@ -8,6 +8,7 @@ use crate::{
     ty::WasmTy,
 };
 
+/// Code generation for expressions in the closure language.
 pub fn codegen<'ctx>(
     program_state: &mut program::State<'_, 'ctx>,
     function_state: &mut function::State<'ctx>,
@@ -32,7 +33,7 @@ pub fn codegen<'ctx>(
                         .instrs
                         .push(Instruction::F32Const(f32::from_bits(*f_bits)));
                 }
-            };
+            }
         }
         ir_closure::ExprKind::Unary(un_op, e1) => {
             let local = function_state.local_def.get(*e1).unwrap();
@@ -57,7 +58,7 @@ pub fn codegen<'ctx>(
                         .push(Instruction::LocalGet(local.unwrap_idx()));
                     function_state.instrs.push(Instruction::F32Neg);
                 }
-            };
+            }
         }
         ir_closure::ExprKind::Binary(bin_op, e1, e2) => {
             let local1 = function_state.local_def.get(*e1).unwrap();
@@ -158,7 +159,7 @@ pub fn codegen<'ctx>(
 
                     function_state.instrs_load_from_tuple(vars.iter().copied(), local, MEM_ARG);
                 }
-            };
+            }
 
             // Continue with the rest of the code.
             codegen(program_state, function_state, follows)?;
