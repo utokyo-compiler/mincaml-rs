@@ -203,7 +203,7 @@ impl DiagnosticDeriveVariantBuilder {
                     return quote! {};
                 }
 
-                let binding = quote_spanned! {field.ty.span()=> #field_binding.clone() };
+                let binding = quote_spanned! {field.ty.span()=> #field_binding };
 
                 self.generate_inner_field_code(attr, binding)
                     .unwrap_or_else(|v| v.to_compile_error())
@@ -228,7 +228,7 @@ impl DiagnosticDeriveVariantBuilder {
                 });
             }
             (Meta::Path(_), "subdiagnostic") => {
-                return Ok(quote! { diag.subdiagnostic(diag.dcx, #binding); });
+                return Ok(quote! { diag.subdiagnostic(#binding); });
             }
             _ => (),
         }

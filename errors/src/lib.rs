@@ -537,6 +537,7 @@ impl From<DiagArgValue> for FluentValue<'static> {
     }
 }
 
+/// Argument type for [`Diag::primary_span`].
 #[diagnostic::on_unimplemented(
     message = "`{Self}` cannot be a primary span",
     label = "this type cannot be used as a primary span",
@@ -564,6 +565,39 @@ impl PrimarySpan for Vec<Span> {
     }
 }
 
+/// Argument type for [`Diag::subdiagnostic`].
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` cannot be used as a type of #[subdiagnostic]",
+    label = "`#[subdiagnostic] does not recognize this type",
+    note = "consider using types that implement `Subdiagnostic`"
+)]
+pub trait SubdiagnosticArg {
+    type Subdiagnostic: Subdiagnostic;
+    fn iter_subdiagnostic(self) -> impl Iterator<Item = Self::Subdiagnostic>;
+}
+
+impl<Sub: Subdiagnostic> SubdiagnosticArg for Sub {
+    type Subdiagnostic = Sub;
+    fn iter_subdiagnostic(self) -> impl Iterator<Item = Self::Subdiagnostic> {
+        std::iter::once(self)
+    }
+}
+
+impl<Sub: Subdiagnostic> SubdiagnosticArg for Option<Sub> {
+    type Subdiagnostic = Sub;
+    fn iter_subdiagnostic(self) -> impl Iterator<Item = Self::Subdiagnostic> {
+        self.into_iter()
+    }
+}
+
+impl<Sub: Subdiagnostic> SubdiagnosticArg for Vec<Sub> {
+    type Subdiagnostic = Sub;
+    fn iter_subdiagnostic(self) -> impl Iterator<Item = Self::Subdiagnostic> {
+        self.into_iter()
+    }
+}
+
+/// Argument type for [`Diag::label`].
 #[diagnostic::on_unimplemented(
     message = "`{Self}` cannot be used as a type of #[label]",
     label = "`#[label] does not recognize this type",
@@ -585,6 +619,7 @@ impl AddLabel for Option<Span> {
     }
 }
 
+/// Argument type for [`Diag::note`], [`Diag::help`], [`Diag::warn`].
 #[diagnostic::on_unimplemented(
     message = "`{Self}` cannot be used as a type of #[help], #[note], etc.",
     label = "`#[help], #[note] and #[warning] does not recognize this type",
@@ -624,6 +659,33 @@ impl<'dcx> TryIntoMultiSpan<'dcx> for AlwaysShow {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum AllowMissing<T> {
+    /// Shows the subdiagnostic with the value.
+    Exist(T),
+
+    /// Shows the subdiagnostic without a value.
+    Missing,
+}
+
+impl<T> From<Option<T>> for AllowMissing<T> {
+    fn from(value: Option<T>) -> Self {
+        match value {
+            Some(v) => AllowMissing::Exist(v),
+            None => AllowMissing::Missing,
+        }
+    }
+}
+
+impl<T> From<AllowMissing<T>> for Option<T> {
+    fn from(value: AllowMissing<T>) -> Self {
+        match value {
+            AllowMissing::Exist(v) => Some(v),
+            AllowMissing::Missing => None,
+        }
+    }
+}
+
 /// A [`Span`] that may be missing. Shows the subdiagnostic even if the
 /// [`Span`] is missing.
 ///
@@ -654,13 +716,7 @@ impl<'dcx> TryIntoMultiSpan<'dcx> for AlwaysShow {
 ///     ..
 /// }.into_diag().emit(); // does not emit the subdiagnostic
 /// ```
-pub enum AllowMissingSpan {
-    /// Shows the subdiagnostic with the span.
-    Exist(Span),
-
-    /// Shows the subdiagnostic without a span.
-    Missing,
-}
+pub type AllowMissingSpan = AllowMissing<Span>;
 
 impl<'dcx> TryIntoMultiSpan<'dcx> for AllowMissingSpan {
     fn try_into_spans(self) -> Option<MultiSpan<'dcx>> {
@@ -681,13 +737,7 @@ impl<'dcx> TryIntoMultiSpan<'dcx> for Option<Span> {
 /// [`MultiSpan`] is missing.
 ///
 /// See [`AllowMissingSpan`] for more details.
-pub enum AllowMissingMultiSpan<'dcx> {
-    /// Shows the subdiagnostic with the span.
-    Exist(MultiSpan<'dcx>),
-
-    /// Shows the subdiagnostic without a span.
-    Missing,
-}
+pub type AllowMissingMultiSpan<'dcx> = AllowMissing<MultiSpan<'dcx>>;
 
 impl<'dcx> TryIntoMultiSpan<'dcx> for AllowMissingMultiSpan<'dcx> {
     fn try_into_spans(self) -> Option<MultiSpan<'dcx>> {
@@ -767,6 +817,13 @@ impl<'dcx> Diag<'dcx> {
         }
     }
 
+    pub fn subdiagnostic(&mut self, sub: impl SubdiagnosticArg) -> &mut Self {
+        for sub in sub.iter_subdiagnostic() {
+            sub.add_to_diag(self);
+        }
+        self
+    }
+
     with_fn! { with_arg,
     /// Add an argument.
     pub fn arg(&mut self, name: impl Into<DiagArgName>, arg: impl IntoDiagArg) -> &mut Self {
@@ -785,17 +842,13 @@ impl<'dcx> Diag<'dcx> {
 
     with_fn! { with_label,
     /// Add a label to span.
-    pub fn label(&mut self, label: impl Into<SubdiagMessage<'dcx>>, span: Span) -> &mut Self {
-        let msg = self.subdiagnostic_message_to_diagnostic_message(label);
-        self.content.span.add_label(span, msg);
+    pub fn label(&mut self, label: impl Into<SubdiagMessage<'dcx>>, span: impl AddLabel) -> &mut Self {
+        if let Some(span) = span.try_into_span() {
+            let msg = self.subdiagnostic_message_to_diagnostic_message(label);
+            self.content.span.add_label(span, msg);
+        }
         self
     } }
-
-    pub fn may_add_label(&mut self, label: impl Into<SubdiagMessage<'dcx>>, span: impl AddLabel) {
-        if let Some(span) = span.try_into_span() {
-            self.label(label, span);
-        }
-    }
 
     /// Add a subdiagnostic to this diagnostic.
     ///

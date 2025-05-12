@@ -22,5 +22,23 @@ typing_invalid_type_ascription = invalid type ascription
     .note = take a look at the `.mli` files and try another syntax
     .bug_report = this might be a bug, consult TAs or developers
 
-typing_typevar_remain = unresolved type variables
-    .label = type of this expression remains unresolved
+typing_typevar_remain = { $count ->
+        [one]   a type variable remains
+       *[other] {$count} type variables remain
+    } unresolved
+
+-typevar_recover = a type variable introduced
+
+typing_typevar_recover_polymorphism = {-typevar_recover} because {$kind} is polymorphic but failed to type
+
+typing_typevar_let_var = {-typevar_recover} for this ident to be checked
+
+typing_typevar_let_arg = {-typevar_recover} for this argument to be checked
+
+typing_typevar_let_tuple_pat = {-typevar_recover} for this pattern to be checked
+
+typing_typevar_get_impl = {-typevar_recover} for the inner type of {$kind}
+
+typing_typevar_recover_list = {-typevar_recover} to create a type list for {$kind} that contains it
+
+typing_typevar_app_impl = {-typevar_recover} for return type of this function

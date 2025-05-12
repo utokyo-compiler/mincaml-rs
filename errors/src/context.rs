@@ -35,7 +35,7 @@ impl DiagContext<Early<'static>> {
         self.emitter.emit_diagnostic(diag);
     }
 
-    pub fn struct_err<'a>(&'a self, msg: impl Into<DiagMessage<'a>>) -> EarlyDiag<'_> {
+    pub fn struct_err<'a>(&'a self, msg: impl Into<DiagMessage<'a>>) -> EarlyDiag<'a> {
         EarlyDiag::new(self, Level::Error, msg)
     }
 }
@@ -54,12 +54,12 @@ impl<'dcx> DiagContext<Late<'dcx>> {
         self.emitter.emit_diagnostic(diag);
     }
 
-    pub fn struct_err(&'dcx self, msg: impl Into<DiagMessage<'dcx>>) -> Diag<'_> {
+    pub fn struct_err(&'dcx self, msg: impl Into<DiagMessage<'dcx>>) -> Diag<'dcx> {
         Diag::new(self, Level::Error, msg)
     }
 
     #[track_caller]
-    pub fn create_err(&'dcx self, err: impl Diagnostic) -> Diag<'_> {
+    pub fn create_err(&'dcx self, err: impl Diagnostic) -> Diag<'dcx> {
         err.into_diag(self, Level::Error)
     }
 

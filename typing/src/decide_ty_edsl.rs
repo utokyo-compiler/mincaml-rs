@@ -26,6 +26,7 @@
 /// PassSelfKw = "self" ";"
 /// IdentifierList = RustIdentifier ("," RustIdentifier)*
 /// QuoteOCamlTy = "unit" / "bool" / "int" / "float"
+/// QuoteOCamlTy =/ "#" RustIdentifier "->" "#" RustIdentifier
 /// QuoteOCamlTy =/ "#" RustIdentifier "array"
 /// QuoteOCamlTy =/ "#" RustIdentifier
 /// QuoteOCamlTy =/ "(" QuoteOCamlTy ")"
@@ -168,6 +169,9 @@ macro_rules! quote_ocaml_ty {
     };
     ([$the_self:ident] float) => {
         $the_self.common_types.float
+    };
+    ([$the_self:ident] #$ident1:ident -> #$ident2:ident) => {
+        Ty::mk_fun($the_self.ctx, $ident1, $ident2.ty())
     };
     ([$the_self:ident] #$ident:ident array) => {
         Ty::mk_array($the_self.ctx, $ident.ty())

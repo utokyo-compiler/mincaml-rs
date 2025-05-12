@@ -111,7 +111,7 @@ impl IntoDiagArg for char {
     }
 }
 
-impl<'a> IntoDiagArg for &'a str {
+impl IntoDiagArg for &str {
     fn into_diag_arg(self) -> DiagArgValue {
         self.to_string().into_diag_arg()
     }
@@ -129,7 +129,7 @@ impl<'a> IntoDiagArg for Cow<'a, str> {
     }
 }
 
-impl<'a> IntoDiagArg for &'a Path {
+impl IntoDiagArg for &Path {
     fn into_diag_arg(self) -> DiagArgValue {
         DiagArgValue::Str(Cow::Owned(self.display().to_string()))
     }

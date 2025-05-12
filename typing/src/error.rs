@@ -8,7 +8,7 @@ into_diag_arg_using_display!(Phase);
 use crate::typeck::Phase;
 
 into_diag_arg_using_display!(CoarseExprKind);
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum CoarseExprKind {
     Constant,
     Variable,

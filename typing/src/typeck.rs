@@ -2,10 +2,15 @@ use std::borrow::Cow;
 
 use data_structure::{index::vec::IndexVec, FxHashSet};
 use errors::{AlwaysShow, Diag, DiagContext};
-use sourcemap::Spanned;
+use sourcemap::{Span, Spanned};
 use ty::{context::CommonTypes, HasTy, Ty, Typed};
 
-use crate::{decide_ty_edsl, error, name_res, ty_var_subst, unify::unify, Context};
+use crate::{
+    decide_ty_edsl, error, name_res,
+    ty_var_subst::{self, IntroducedTypeVar},
+    unify::unify,
+    Context,
+};
 
 #[derive(Debug)]
 pub enum Phase {
@@ -20,6 +25,15 @@ impl std::fmt::Display for Phase {
             Phase::Main => write!(f, "main expression"),
         }
     }
+}
+
+/// Error type for this crate.
+pub struct Error<'ctx> {
+    /// The diagnosis for the error.
+    pub diag: Diag<'ctx>,
+
+    /// The taint information for the error.
+    pub taint: Taint<'ctx>,
 }
 
 /// The main entry point for type checking.
@@ -40,7 +54,7 @@ pub fn typeck<'ctx>(
     parsed: syntax::Expr<'ctx>,
     parsed_interface: syntax::mli::Mli<'ctx>,
     typed_interface: &'ctx ir_typed_ast::mli::Mli<'ctx>,
-) -> (Result<ir_typed_ast::Expr<'ctx>, Diag<'ctx>>, Taint<'ctx>) {
+) -> Result<ir_typed_ast::Expr<'ctx>, Error<'ctx>> {
     let mut name_res = name_res::Env::new();
     let mut taint = Taint::default();
 
@@ -82,13 +96,13 @@ pub fn typeck<'ctx>(
             if has_error {
                 taint.fail();
                 dcx.emit_err(error::InvalidTypeAscription::default());
-                return (
-                    Err(dcx.create_err(error::TypingError {
+                return Err(Error {
+                    diag: dcx.create_err(error::TypingError {
                         phase,
                         note: AlwaysShow,
-                    })),
+                    }),
                     taint,
-                );
+                });
             }
             let ret = types.pop().unwrap();
             let ty = Ty::mk_fun(ctx, types, ret);
@@ -114,18 +128,27 @@ pub fn typeck<'ctx>(
         taint: &mut taint,
     };
     let DecideTyReturn::Ok(mut typed) = type_checker.decide_ty(parsed) else {
-        return (
-            Err(dcx.create_err(error::TypingError {
+        return Err(Error {
+            diag: dcx.create_err(error::TypingError {
                 phase,
                 note: AlwaysShow,
-            })),
+            }),
             taint,
-        );
+        });
     };
     // Unify the type of the main expression with `unit`.
     unify(&mut subst, typed.ty, common_types.unit).unwrap();
-    subst.into_owned().deref_ty_var(ctx, &mut typed);
-    (Ok(typed), taint)
+    if let Err(error) = subst.deref_ty_var(ctx, &mut typed) {
+        dcx.emit_err(error);
+        return Err(Error {
+            diag: dcx.create_err(error::TypingError {
+                phase,
+                note: AlwaysShow,
+            }),
+            taint,
+        });
+    };
+    Ok(typed)
 }
 
 #[derive(Default)]
@@ -138,7 +161,7 @@ pub struct Taint<'ctx> {
     pub undefined_vars: FxHashSet<ir_typed_ast::Ident<'ctx>>,
 
     /// A boolean flag indicating whether the type checking has failed.
-    pub failed: bool,
+    failed: bool,
 }
 
 impl<'ctx> Taint<'ctx> {
@@ -148,6 +171,11 @@ impl<'ctx> Taint<'ctx> {
 
     fn fail(&mut self) {
         self.failed = true;
+    }
+
+    #[allow(dead_code)]
+    fn has_failed(&self) -> bool {
+        self.failed
     }
 }
 
@@ -189,63 +217,68 @@ impl<'ctx> TypeChecker<'ctx, '_, '_, '_, '_, '_> {
                 };
                 (ty, ir_typed_ast::ExprKind::Const(*lit))
             }
-            syntax::ExprKind::Unary(un_op, e) => {
+            syntax::ExprKind::Unary(syntax::UnOp::Neg, e) => {
+                let e_alias = e;
+                // `- : int -> int | float -> float`
                 decide_ty_edsl! { self;
                     prelude: decide e;
                 }
-                let (un_op, ty) = match un_op {
-                    syntax::UnOp::Neg => {
-                        // `- : int -> int | float -> float`
-
-                        let Some(t) = e.ty() else {
-                            // If the type is not recoverable, we can fail, but
-                            // we should recover the type to continue type checking.
-                            return DecideTyReturn::Recover(Ty::mk_ty_var(self.ctx));
-                        };
-                        // Try to unify with `int` first in a new temporary environment,
-                        // then try `float` if it fails.
-                        let mut new_subst = Cow::Borrowed(&**self.subst);
-                        if let Err(_err) = unify(&mut new_subst, t, self.common_types.int) {
-                            // If the first unification fails, we should try to unify with `float`,
-                            // providing the original substitution environment.
-                            self.unify_with_current_subst(t, self.common_types.float)
-                                .unwrap();
-                            (ir_typed_ast::UnOp::Fneg, self.common_types.float)
-                        } else {
-                            // If the first unification succeeds and modified the environment,
-                            // we should update the original substitution environment with the new one.
-                            if let Cow::Owned(new_subst) = new_subst {
-                                // N.B., These two expressions looks identical,
-                                // but they refer to different instances of `Cow`.
-                                *self.subst = Cow::Owned(new_subst);
-                            }
-                            (ir_typed_ast::UnOp::Ineg, self.common_types.int)
-                        }
+                let Some(t) = e.ty() else {
+                    // If the type is not recoverable, we can fail, but
+                    // we should recover the type to continue type checking.
+                    return DecideTyReturn::Recover(
+                        self.new_ty_var(IntroducedTypeVar::undecidable_polymorphism(e_alias)),
+                    );
+                };
+                // Try to unify with `int` first in a new temporary environment,
+                // then try `float` if it fails.
+                let mut new_subst = Cow::Borrowed(&**self.subst);
+                let (un_op, ty) = if let Err(_err) = unify(&mut new_subst, t, self.common_types.int)
+                {
+                    // If the first unification fails, we should try to unify with `float`,
+                    // providing the original substitution environment.
+                    self.unify_with_current_subst(t, self.common_types.float)
+                        .unwrap();
+                    (ir_typed_ast::UnOp::Fneg, self.common_types.float)
+                } else {
+                    // If the first unification succeeds and modified the environment,
+                    // we should update the original substitution environment with the new one.
+                    if let Cow::Owned(new_subst) = new_subst {
+                        // N.B., These two expressions looks identical,
+                        // but they refer to different instances of `Cow`.
+                        *self.subst = Cow::Owned(new_subst);
                     }
-                    syntax::UnOp::FNeg => {
-                        // `-. : float -> float`
-                        decide_ty_edsl! { self;
-                            interlude: unify {
-                                e: float;
-                            }
-                        }
-                        (ir_typed_ast::UnOp::Fneg, self.common_types.float)
-                    }
-                    syntax::UnOp::Not => {
-                        // `not : bool -> bool`
-                        decide_ty_edsl! { self;
-                            interlude: unify {
-                                e: bool;
-                            }
-                        }
-                        (ir_typed_ast::UnOp::Not, self.common_types.bool)
-                    }
+                    (ir_typed_ast::UnOp::Ineg, self.common_types.int)
                 };
                 decide_ty_edsl! { self;
                     postlude: for(e)
                     (
                         || (#ty),
                         ir_typed_ast::ExprKind::Unary(un_op, e)
+                    )
+                }
+            }
+            syntax::ExprKind::Unary(syntax::UnOp::FNeg, e) => {
+                decide_ty_edsl! { self;
+                    decide e;
+                    unify {
+                        e: float;
+                    }
+                    (
+                        || float,
+                        ir_typed_ast::ExprKind::Unary(ir_typed_ast::UnOp::Fneg, e)
+                    )
+                }
+            }
+            syntax::ExprKind::Unary(syntax::UnOp::Not, e) => {
+                decide_ty_edsl! { self;
+                    decide e;
+                    unify {
+                        e: bool;
+                    }
+                    (
+                        || bool,
+                        ir_typed_ast::ExprKind::Unary(ir_typed_ast::UnOp::Not, e)
                     )
                 }
             }
@@ -349,15 +382,17 @@ impl<'ctx> TypeChecker<'ctx, '_, '_, '_, '_, '_> {
                     let syntax::Pattern::Var(var) = pattern else {
                         unreachable!()
                     };
-                    let rhs_ty_ = Ty::mk_ty_var(self.ctx);
+                    let rhs_ty = self.new_ty_var(IntroducedTypeVar::let_var(*var));
                     let arg_tys = let_binder
                         .args()
-                        .map(|_| Ty::mk_ty_var(self.ctx))
+                        .map(|spanned_ident| {
+                            self.new_ty_var(IntroducedTypeVar::let_arg(spanned_ident))
+                        })
                         .collect::<Vec<_>>();
-                    let lhs_ty = Ty::mk_fun(self.ctx, arg_tys.clone(), rhs_ty_);
+                    let lhs_ty = Ty::mk_fun(self.ctx, arg_tys.clone(), rhs_ty);
                     let ident = self.name_res.define_in(scope, *var, lhs_ty);
                     analyzed.set(AnalyzedBinding {
-                        rhs_ty: rhs_ty_,
+                        rhs_ty,
                         typed_pattern: ir_typed_ast::Pattern::Var(ir_typed_ast::Ident::new(
                             self.ctx.alloc_ident(ident),
                         )),
@@ -379,7 +414,7 @@ impl<'ctx> TypeChecker<'ctx, '_, '_, '_, '_, '_> {
                 if !let_binder.has_args() {
                     if let syntax::Pattern::Var(var) = pattern {
                         {
-                            let lhs_ty = Ty::mk_ty_var(self.ctx);
+                            let lhs_ty = self.new_ty_var(IntroducedTypeVar::let_var(*var));
                             let ident = self.name_res.define_in(scope, *var, lhs_ty);
 
                             analyzed.set(AnalyzedBinding {
@@ -397,7 +432,7 @@ impl<'ctx> TypeChecker<'ctx, '_, '_, '_, '_, '_> {
                     let idents = vars
                         .iter()
                         .map(|var| {
-                            let lhs_ty = Ty::mk_ty_var(self.ctx);
+                            let lhs_ty = self.new_ty_var(IntroducedTypeVar::let_tuple(*var));
                             lhs_tys.push(lhs_ty);
                             let ident = self.name_res.define_in(scope, *var, lhs_ty);
                             ir_typed_ast::Ident::new(self.ctx.alloc_ident(ident))
@@ -476,16 +511,18 @@ impl<'ctx> TypeChecker<'ctx, '_, '_, '_, '_, '_> {
                 (typed_var.ty, ir_typed_ast::ExprKind::Var(typed_var))
             }
             syntax::ExprKind::App(fun, args) => {
+                let fun_alias = fun;
                 let fun = self.decide_ty(fun);
                 let args = self.decide_ty_many(args);
-                let ret_ty = Ty::mk_ty_var(self.ctx);
-                let typed_args = args.complete_ty_list(self.ctx);
-                if let Some(typed_fun_ty) = fun.ty() {
-                    self.unify_with_current_subst(
-                        typed_fun_ty,
-                        Ty::mk_fun(self.ctx, typed_args, ret_ty),
-                    )
-                    .unwrap();
+                let ret_ty = self.new_ty_var(IntroducedTypeVar::app_impl(fun_alias));
+                let typed_args =
+                    self.complete_ty_list(&args, ty_var_subst::RecoverTyListKind::Function);
+                decide_ty_edsl! { self;
+                    interlude: unify {
+                        fun: (#typed_args -> #ret_ty) else {
+                            self.subst.to_mut().mark_as_incomplete(ret_ty);
+                        };
+                    }
                 }
                 decide_ty_edsl! { self;
                     postlude: for(fun, args)
@@ -497,7 +534,8 @@ impl<'ctx> TypeChecker<'ctx, '_, '_, '_, '_, '_> {
             }
             syntax::ExprKind::Tuple(exprs) => {
                 let typed_exprs = self.decide_ty_many(exprs);
-                let tys = typed_exprs.complete_ty_list(self.ctx);
+                let tys =
+                    self.complete_ty_list(&typed_exprs, ty_var_subst::RecoverTyListKind::Tuple);
                 let ty = Ty::mk_tuple(self.ctx, tys);
                 decide_ty_edsl! { self;
                     postlude: for(typed_exprs)
@@ -519,11 +557,13 @@ impl<'ctx> TypeChecker<'ctx, '_, '_, '_, '_, '_> {
             }
             syntax::ExprKind::Get(e1, e2) => {
                 // `Get: 'a array -> int -> 'a`
-                let ty = Ty::mk_ty_var(self.ctx);
+                let ty = self.new_ty_var(IntroducedTypeVar::get_impl(e1));
                 decide_ty_edsl! { self;
                     decide e1, e2;
                     unify {
-                        e1: (#ty array);
+                        e1: (#ty array) else {
+                            self.subst.to_mut().mark_as_incomplete(ty);
+                        };
                         e2: int;
                     }
                     (|| (#ty), ir_typed_ast::ExprKind::Get(e1, e2))
@@ -562,25 +602,26 @@ impl<'ctx> TypeChecker<'ctx, '_, '_, '_, '_, '_> {
     /// See [`Self::decide_ty`] for more details,
     /// and [`DecideTyManyReturn`] for the return type.
     fn decide_ty_many(&mut self, exprs: &[syntax::Expr<'ctx>]) -> DecideTyManyReturn<'ctx> {
-        let recover_path = |this: &mut Self, typed: Vec<ir_typed_ast::Expr<'ctx>>, failure, it| {
-            // Recovery path: store the type of the expression already seen
-            // and the type of the expression in the recovery vector.
+        let recover_path =
+            |this: &mut Self, typed: Vec<ir_typed_ast::Expr<'ctx>>, span, failure, it| {
+                // Recovery path: store the type of the expression already seen
+                // and the type of the expression in the recovery vector.
 
-            let mut recovery = Vec::new();
-            for t in typed {
-                recovery.push(Some(t.ty));
-            }
-            recovery.push(if let DecideTyReturn::Recover(ty) = failure {
-                Some(ty)
-            } else {
-                None
-            });
-            for &expr in it {
-                // Already failed, so we just push recovery information.
-                recovery.push(this.decide_ty(expr).ty());
-            }
-            DecideTyManyReturn::Recover(recovery)
-        };
+                let mut recovery = Vec::new();
+                for t in typed {
+                    recovery.push(Ok(t.ty));
+                }
+                recovery.push(if let DecideTyReturn::Recover(ty) = failure {
+                    Ok(ty)
+                } else {
+                    Err(span)
+                });
+                for &expr in it {
+                    // Already failed, so we just push recovery information.
+                    recovery.push(this.decide_ty(expr).ty().ok_or(expr.span.as_user_defined()));
+                }
+                DecideTyManyReturn::Recover(recovery)
+            };
         let mut typed = Vec::with_capacity(exprs.len());
         let mut it = exprs.iter();
         if let Some(expr) = it.next() {
@@ -589,7 +630,7 @@ impl<'ctx> TypeChecker<'ctx, '_, '_, '_, '_, '_> {
                     typed.push(typed_expr);
                 }
                 failure => {
-                    return recover_path(self, typed, failure, it);
+                    return recover_path(self, typed, expr.span.as_user_defined(), failure, it);
                 }
             }
         }
@@ -615,6 +656,23 @@ impl<'ctx> TypeChecker<'ctx, '_, '_, '_, '_, '_> {
     fn throw_first_cause(&mut self, diag: impl errors::Diagnostic) {
         self.taint.fail();
         self.dcx.emit_err(diag);
+    }
+
+    #[inline(always)]
+    fn new_ty_var(&mut self, introduced: ty_var_subst::IntroducedTypeVar<'ctx>) -> Ty<'ctx> {
+        // `to_mut()` here is likely no-op, but it is needed to obtain a mutable reference.
+        self.subst.to_mut().new_ty_var(self.ctx, introduced)
+    }
+
+    #[inline(always)]
+    fn complete_ty_list(
+        &mut self,
+        result: &DecideTyManyReturn<'ctx>,
+        kind: ty_var_subst::RecoverTyListKind,
+    ) -> Vec<Ty<'ctx>> {
+        result.complete_ty_list(|span| {
+            self.new_ty_var(IntroducedTypeVar::recover_ty_list(span, kind))
+        })
     }
 }
 
@@ -673,7 +731,7 @@ impl<'ctx> DecideTyReturn<'ctx> {
 /// See [`DecideTyReturn`] for more details.
 type DecideTyManyReturn<'ctx> = ResultWithRecover<
     Vec<ir_typed_ast::Expr<'ctx>>,
-    Vec<Option<Ty<'ctx>>>,
+    Vec<Result<Ty<'ctx>, Option<Span>>>,
     std::convert::Infallible,
 >;
 
@@ -682,12 +740,15 @@ impl<'ctx> DecideTyManyReturn<'ctx> {
     ///
     /// If an element of the types vector is unrecoverable, it will be replaced
     /// with a new type variable. `ctx` is needed to create new type variables.
-    fn complete_ty_list(&self, ctx: &'ctx Context<'ctx>) -> Vec<Ty<'ctx>> {
+    fn complete_ty_list(
+        &self,
+        mut new_ty_var: impl FnMut(Option<Span>) -> Ty<'ctx>,
+    ) -> Vec<Ty<'ctx>> {
         match self {
             DecideTyManyReturn::Ok(exprs) => exprs.iter().map(|e| e.ty).collect(),
             DecideTyManyReturn::Recover(types) => types
                 .iter()
-                .map(|o| o.unwrap_or_else(|| Ty::mk_ty_var(ctx)))
+                .map(|o| o.unwrap_or_else(&mut new_ty_var))
                 .collect(),
             // This case should never happen, but current version of rustc
             // requires it to be handled as below.

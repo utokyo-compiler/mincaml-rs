@@ -94,7 +94,7 @@ pub fn run_compiler(at_args: CompilerArgs) -> impl Termination {
         parser::lex_and_parse_mli(global_ctxt.parsing_context(), &input_interface).unwrap();
     let input = global_ctxt.session().input.concatenated_string();
     let parsed_tree = parser::lex_and_parse(global_ctxt.parsing_context(), &input).unwrap();
-    let (typeck_result, _taint) = typing::typeck(
+    let typeck_result = typing::typeck(
         global_ctxt.typing_context(),
         global_ctxt.dcx(),
         &global_ctxt.common_types,
@@ -105,7 +105,7 @@ pub fn run_compiler(at_args: CompilerArgs) -> impl Termination {
     let typed_tree = match typeck_result {
         Ok(tree) => tree,
         Err(err) => {
-            err.emit();
+            err.diag.emit();
             return ExitCode::FAILURE;
         }
     };
