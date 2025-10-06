@@ -83,7 +83,7 @@ pub fn typeck<'ctx>(
                 })
             }
             let mut types = Vec::with_capacity(elements.len());
-            let mut has_error = elements.len() >= 2;
+            let mut has_error = false;
             for element in elements {
                 let ty = ty_try_from_ascribed(element, common_types);
                 match ty {
@@ -624,7 +624,7 @@ impl<'ctx> TypeChecker<'ctx, '_, '_, '_, '_, '_> {
             };
         let mut typed = Vec::with_capacity(exprs.len());
         let mut it = exprs.iter();
-        if let Some(expr) = it.next() {
+        while let Some(expr) = it.next() {
             match self.decide_ty(expr) {
                 DecideTyReturn::Ok(typed_expr) => {
                     typed.push(typed_expr);
@@ -676,6 +676,7 @@ impl<'ctx> TypeChecker<'ctx, '_, '_, '_, '_, '_> {
     }
 }
 
+#[derive(Debug)]
 /// An underlying type for [`DecideTyReturn`] and [`DecideTyManyReturn`].
 ///
 /// This type is introduced to call them structurally from [`decide_ty_edsl!`] macro.
