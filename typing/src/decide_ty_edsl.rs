@@ -176,10 +176,11 @@ macro_rules! quote_ocaml_ty {
     ([$the_self:ident] #$ident:ident array) => {
         Ty::mk_array($the_self.ctx, $ident.ty())
     };
-    // This syntax requires parentheses, since this macro accepts a single TT.
     ([$the_self:ident] #$ident:ident) => {
         $ident.ty()
     };
+
+    // These two rules require parentheses, since this macro accepts a single TT.
     ([$the_self:ident] ($($tt:tt)*)) => {
         $crate::quote_ocaml_ty! { [$the_self] $($tt)* }
     };
