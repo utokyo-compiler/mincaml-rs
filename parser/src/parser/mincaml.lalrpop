@@ -83,7 +83,7 @@ SeqMacro<TrailExpr, TrailSelf>: Expr<'ctx> = {
     <l:@L> "if" <e1:Expr> "then" <e2:Expr> "else" <e3:TrailSelf> <r2:@R>
         => alloc.spanned(If(e1, e2, e3), (l, r2)),
 
-    // `set` inside of (`if` or `set`) or `set`
+    // `set` inside of (`if` or `set`)
     <l:@L> <e1:SimpleExpr> "<-" <e2:TrailSelf> <r2:@R>
         => alloc.spanned(Set(e1, e2), (l, r2)),
 
@@ -95,7 +95,7 @@ SeqMacro<TrailExpr, TrailSelf>: Expr<'ctx> = {
     <l:@L> "if" <e1:Expr> "then" <e2:Expr> "else" <e3:Let<TrailExpr>> <r2:@R>
         => alloc.spanned(If(e1, e2, e3), (l, r2)),
 
-    // `set` inside of (`if` or `set`) or `set`
+    // `let` inside of (`if` or `set`)
     <l:@L> <e1:SimpleExpr> "<-" <e2:Let<TrailExpr>> <r2:@R>
         => alloc.spanned(Set(e1, e2), (l, r2)),
 }
