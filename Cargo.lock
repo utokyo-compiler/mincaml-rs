@@ -345,7 +345,7 @@ checksum = "67ba02a97a2bd10f4b59b25c7973101c79642302776489e030cd13cdab09ed15"
 
 [[package]]
 name = "codegen_wasm"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "data_structure",
@@ -552,7 +552,7 @@ dependencies = [
 
 [[package]]
 name = "data_structure"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "bitvec",
  "cfg-if",
@@ -859,7 +859,7 @@ checksum = "187674a687eed5fe42285b40c6291f9a01517d415fad1c3cbc6a9f778af7fcd4"
 
 [[package]]
 name = "ir_asm_virtual"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "data_structure",
  "ir_closure",
@@ -867,7 +867,7 @@ dependencies = [
 
 [[package]]
 name = "ir_asm_virtual_passes"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "data_structure",
  "ir_asm_virtual",
@@ -876,7 +876,7 @@ dependencies = [
 
 [[package]]
 name = "ir_closure"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "data_structure",
  "ir_knorm",
@@ -884,7 +884,7 @@ dependencies = [
 
 [[package]]
 name = "ir_knorm"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "data_structure",
  "ir_typed_ast",
@@ -892,7 +892,7 @@ dependencies = [
 
 [[package]]
 name = "ir_knorm_passes"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "data_structure",
  "ir_knorm",
@@ -901,7 +901,7 @@ dependencies = [
 
 [[package]]
 name = "ir_typed_ast"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "data_structure",
  "sourcemap",
@@ -1075,7 +1075,7 @@ dependencies = [
 
 [[package]]
 name = "main"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "clap",
  "codegen_wasm",
@@ -1117,7 +1117,7 @@ dependencies = [
 
 [[package]]
 name = "middleware"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "data_structure",
  "ir_asm_virtual",
@@ -1181,7 +1181,7 @@ dependencies = [
 
 [[package]]
 name = "parser"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "data_structure",
  "lalrpop",
@@ -1485,7 +1485,7 @@ checksum = "7a66a03ae7c801facd77a29370b4faec201768915ac14a721ba36f20bc9c209b"
 
 [[package]]
 name = "runtime"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "clap",
  "wasi-common",
@@ -1655,7 +1655,7 @@ dependencies = [
 
 [[package]]
 name = "sourcemap"
-version = "0.2.1"
+version = "0.2.2"
 
 [[package]]
 name = "sptr"
@@ -1701,7 +1701,7 @@ dependencies = [
 
 [[package]]
 name = "syntax"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "data_structure",
  "sourcemap",
@@ -1841,7 +1841,7 @@ dependencies = [
 
 [[package]]
 name = "ty"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "data_structure",
 ]
@@ -1860,7 +1860,7 @@ checksum = "42ff0bf0c66b8238c6f3b578df37d0b7848e55df8577b3f74f92a69acceeb825"
 
 [[package]]
 name = "typing"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "data_structure",
  "ir_typed_ast",
