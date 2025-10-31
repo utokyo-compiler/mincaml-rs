@@ -16,11 +16,9 @@ pub type SelectedParser = peg::PegParser;
 #[cfg(feature = "lalrpop")]
 mod lalrpop;
 #[cfg(feature = "lalrpop")]
-#[allow(clippy::all)]
-mod mincaml;
+lalrpop_util::lalrpop_mod!(mincaml, "/parser/mincaml.rs");
 #[cfg(feature = "lalrpop")]
-#[allow(clippy::all)]
-mod mli;
+lalrpop_util::lalrpop_mod!(mli, "/parser/mli.rs");
 #[cfg(feature = "lalrpop")]
 pub type SelectedParser = lalrpop::LalrpopParser;
 
