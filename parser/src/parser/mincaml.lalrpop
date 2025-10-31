@@ -2,7 +2,7 @@ use sourcemap::{Loc, Spanned};
 use syntax::{*, ExprKind::*, LitKind::*, IntBinOpKind::*, RelationBinOpKind::*, FloatBinOpKind::*, UnOp::*};
 
 use crate::lexer::{Error as LexError, Token};
-use super::{Allocator, CtorTranspose, CtorContinuation};
+use super::Allocator;
 
 grammar<'input, 'ctx>(alloc: Allocator<'ctx>);
 extern {
@@ -42,6 +42,79 @@ extern {
         "<-" => Token::LessHyphen,
         ";" => Token::Semi,
     }
+}
+
+pub Expr: Expr<'ctx> = {
+    ExprOpen,
+    ExprClosed,
+}
+
+ExprOpen: Expr<'ctx> = {
+    ExprMacro<ExprOpen>,
+    Seq,
+}
+
+ExprClosed: Expr<'ctx> = ExprMacro<ExprClosed>;
+
+ExprMacro<TrailExpr>: Expr<'ctx> = {
+    Let<TrailExpr>,
+
+    // Expression that can have semicolon, which is a *singularity* of the OCaml syntax.
+    <l:@L> <e1:SeqClosed> ";" <e2:TrailExpr> <r2:@R>
+        => alloc.spanned(Then(e1, e2), (l, r2)),
+}
+
+Seq: Expr<'ctx> = {
+    SeqOpen,
+    SeqClosed,
+}
+
+SeqOpen: Expr<'ctx> = SeqMacro<ExprOpen, SeqOpen>;
+
+SeqClosed: Expr<'ctx> = {
+    SeqMacro<ExprClosed, SeqClosed>,
+    BinaryExpr,
+}
+
+// Expression that can follow `else` or `<-`
+SeqMacro<TrailExpr, TrailSelf>: Expr<'ctx> = {
+    // `if` inside of (`if` or `set`) or `if`
+    // Note: min-caml allows semicolon in then branch.
+    <l:@L> "if" <e1:Expr> "then" <e2:Expr> "else" <e3:TrailSelf> <r2:@R>
+        => alloc.spanned(If(e1, e2, e3), (l, r2)),
+
+    // `set` inside of (`if` or `set`)
+    <l:@L> <e1:SimpleExpr> "<-" <e2:TrailSelf> <r2:@R>
+        => alloc.spanned(Set(e1, e2), (l, r2)),
+
+    // `if e1 then e2 else let ..` or `e1 <- let ..` or `let ..`
+    //
+    // Looking ahead the semicolon after the second expression (e:Expr) in `Let`
+    // should trigger the shift action to OptionalSemi rule within `Expr` in `Let`,
+    // not the reduce action here. i.e., semicolon wins let.
+    <l:@L> "if" <e1:Expr> "then" <e2:Expr> "else" <e3:Let<TrailExpr>> <r2:@R>
+        => alloc.spanned(If(e1, e2, e3), (l, r2)),
+
+    // `let` inside of (`if` or `set`)
+    <l:@L> <e1:SimpleExpr> "<-" <e2:Let<TrailExpr>> <r2:@R>
+        => alloc.spanned(Set(e1, e2), (l, r2)),
+}
+
+// Expression that starts with let
+Let<TrailExpr>: Expr<'ctx> = {
+    <l:@L> "let" <binder:LetBinder> "in" <e:TrailExpr> <r:@R>
+        => alloc.spanned(Let(binder, e), (l, r)),
+}
+
+LetBinder: LetBinder<'ctx> = {
+    <x:SpannedIdent> "=" <val:Expr>
+        => LetBinder::let_var(x, val),
+
+    "rec" <x:SpannedIdent> <arg:FormalArgs> "=" <val:Expr>
+        => LetBinder::let_rec(x, arg, val),
+
+    <p:Pat> "=" <val:Expr>
+        => LetBinder::let_tuple(p, val),
 }
 
 SpannedIdent: Spanned<Ident<'ctx>> = {
@@ -87,7 +160,8 @@ SimpleExpr: Expr<'ctx> = {
     <l:@L> <s:SimpleExpr> "." "(" <x:Expr> ")" <r:@R> => alloc.spanned(Get(s, x), (l, r)),
 }
 
-ExprPrec5: Expr<'ctx> = {
+// Binary operation or higher
+BinaryExpr: Expr<'ctx> = {
     #[precedence(level="0")]
     SimpleExpr,
 
@@ -95,109 +169,35 @@ ExprPrec5: Expr<'ctx> = {
     #[precedence(level="1")]
     <l:@L> <e1:SimpleExpr> <e2:ActualArgs> <r:@R>
         => alloc.spanned(App(e1, e2), (l, r)),
-    <l:@L> "Array.make" <e1:SimpleExpr> <e2:ExprPrec5> <r:@R>
+    <l:@L> "Array.make" <e1:SimpleExpr> <e2:BinaryExpr> <r:@R>
         => alloc.spanned(ArrayMake(e1, e2), (l, r)),
 
     // -
     #[precedence(level="2")]
-    <l:@L> "-" <e1:ExprPrec5> <r:@R>
+    <l:@L> "-" <e1:BinaryExpr> <r:@R>
         => alloc.spanned(Unary(Neg, e1), (l, r)),
 
     // -.
-    <l:@L> "-." <e1:ExprPrec5> <r:@R>
+    <l:@L> "-." <e1:BinaryExpr> <r:@R>
         => alloc.spanned(Unary(FNeg, e1), (l, r)),
 
     // * *. /.
     #[precedence(level="3")]
     #[assoc(side="left")]
-    <l:@L> <e1:ExprPrec5> <op:FactorOp> <e2:ExprPrec5> <r:@R>
+    <l:@L> <e1:BinaryExpr> <op:FactorOp> <e2:BinaryExpr> <r:@R>
         => alloc.spanned(Binary(op, e1, e2), (l, r)),
 
     // + - +. -.
     #[precedence(level="4")]
     #[assoc(side="left")]
-    <l:@L> <e1:ExprPrec5> <op:TermOp> <e2:ExprPrec5> <r:@R>
+    <l:@L> <e1:BinaryExpr> <op:TermOp> <e2:BinaryExpr> <r:@R>
         => alloc.spanned(Binary(op, e1, e2), (l, r)),
 
     // = <> < > <= >=
     #[precedence(level="5")]
     #[assoc(side="left")]
-    <l:@L> <e1:ExprPrec5> <op:RelationBinOp> <e2:ExprPrec5> <r:@R>
+    <l:@L> <e1:BinaryExpr> <op:RelationBinOp> <e2:BinaryExpr> <r:@R>
         => alloc.spanned(Binary(op, e1, e2), (l, r)),
-}
-
-ArraySet: CtorContinuation<'ctx> = {
-    <l:@L> <e1:SimpleExpr> "<-"
-        => CtorContinuation::DelayedSet { e1, l },
-}
-
-// min-caml allows semicolon in then branch
-AfterThen = Expr;
-
-// Expression that starts with if
-If: CtorContinuation<'ctx> = {
-    // if
-    <l:@L> "if" <e1:Expr> "then" <e2:AfterThen> "else"
-        => CtorContinuation::DelayedIf { e1, e2, l },
-}
-
-NoSemi = ExprPrec5;
-
-// Expression that can follow `else` or `<-`
-AfterElseArrow: CtorTranspose<'ctx> = {
-    // `if` inside of (`if` or `set`) or `if`. continue.
-    <cont:If> <trans:AfterElseArrow> => trans.composed_left(cont),
-
-    // `set` inside of (`if` or `set`) or `set`. continue.
-    <cont:ArraySet> <trans:AfterElseArrow> => trans.composed_left(cont),
-
-    // `if e1 then e2 else let ..` or `e1 <- let ..` or `let ..`
-    //
-    // Looking ahead the semicolon after the second expression (e:ExprPrec9) in `Let` should trigger the shift action to OptionalSemi rule within `ExprPrec9` in `Let`,
-    // not the reduce action here.
-    <e:Let> <r:@R> => CtorTranspose::new_eval(e, r),
-
-    // `if e1 then e2 else e3; e4`
-    //                       ^ here
-    // In this case, the proper syntax tree is `(if e1 then e2 else e3); e4`.
-    Semi,
-}
-
-// Expression that can have semicolon, which is a *singularity* of the OCaml syntax.
-Semi: CtorTranspose<'ctx> = {
-    <l:@L> <e1:NoSemi> <e2:OptionalSemi?> <r2:@R> => match e2 {
-        Some((r, e2)) => CtorTranspose::new_delayed_then(e1, r, e2, l, r2),
-        None => CtorTranspose::new_eval(e1, r2),
-    },
-}
-
-#[inline]
-OptionalSemi: (Loc, Expr<'ctx>) = {
-    <r:@R> ";" <e2:ExprPrec9> => (r, e2),
-}
-
-// Expression that starts with let
-Let: Expr<'ctx> = {
-    // let
-    <l:@L> "let" <binder:LetBinder> "in" <e:ExprPrec9> <r:@R>
-        => alloc.spanned(Let(binder, e), (l, r)),
-}
-
-ExprPrec9: Expr<'ctx> = {
-    AfterElseArrow => alloc.apply(<>),
-}
-
-pub Expr = ExprPrec9;
-
-LetBinder: LetBinder<'ctx> = {
-    <x:SpannedIdent> "=" <val:Expr>
-        => LetBinder::let_var(x, val),
-
-    "rec" <x:SpannedIdent> <arg:FormalArgs> "=" <val:Expr>
-        => LetBinder::let_rec(x, arg, val),
-
-    <p:Pat> "=" <val:Expr>
-        => LetBinder::let_tuple(p, val),
 }
 
 FormalArgs: Vec<Spanned<Ident<'ctx>>> = {
