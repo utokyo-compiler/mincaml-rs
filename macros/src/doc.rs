@@ -1,4 +1,3 @@
-use quote::quote;
 use quote::ToTokens;
 use syn::{parse_macro_input, Expr, Item, Lit, Meta, Path};
 
@@ -56,7 +55,5 @@ pub fn counterpart(
         }
     };
 
-    proc_macro::TokenStream::from(quote! {
-        #attributed_item
-    })
+    proc_macro::TokenStream::from(attributed_item.to_token_stream())
 }

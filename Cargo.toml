@@ -55,22 +55,25 @@ proc-macro2 = "1.0.89"
 quote = "1.0.37"
 syn = { version = "2.0.87", features = ["full"] }
 synstructure = "0.13.1"
+plex = "0.3.1"
+peg = "0.8.4"
+lalrpop = "0.21.0"
+lalrpop-util = "0.21.0"
 unic-langid = { version = "0.9.5", features = ["unic-langid-macros"] }
-
-syntax = { path = "./syntax" }
-parser = { path = "./parser" }
-sourcemap = { path = "./sourcemap" }
-ty = { path = "./ty" }
-typing = { path = "./typing" }
-ir_typed_ast = { path = "./ir_typed_ast" }
-ir_knorm = { path = "./ir_knorm" }
-ir_closure = { path = "./ir_closure" }
-ir_asm_virtual = { path = "./ir_asm_virtual" }
-ir_knorm_passes = { path = "./ir_knorm_passes" }
-ir_asm_virtual_passes = { path = "./ir_asm_virtual_passes" }
-data_structure = { path = "./data_structure" }
-middleware = { path = "./middleware" }
-codegen_wasm = { path = "./codegen_wasm" }
+syntax.path = "./syntax"
+parser.path = "./parser"
+sourcemap.path = "./sourcemap"
+ty.path = "./ty"
+typing.path = "./typing"
+ir_typed_ast.path = "./ir_typed_ast"
+ir_knorm.path = "./ir_knorm"
+ir_closure.path = "./ir_closure"
+ir_asm_virtual.path = "./ir_asm_virtual"
+ir_knorm_passes.path = "./ir_knorm_passes"
+ir_asm_virtual_passes.path = "./ir_asm_virtual_passes"
+data_structure.path = "./data_structure"
+middleware.path = "./middleware"
+codegen_wasm.path = "./codegen_wasm"
 macros.path = "./macros"
 errors.path = "./errors"
 session.path = "./session"

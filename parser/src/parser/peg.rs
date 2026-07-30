@@ -127,7 +127,7 @@ peg::parser! {
         use syntax::BBinOpKind::*;
         use syntax::IBinOpKind::*;
         use syntax::FBinOpKind::*;
-        /// 括弧をつけなくても関数の引数になれる式
+        /// An expression that can be a function argument without parentheses.
         #[cache_left_rec]
         pub rule simple_exp() -> Expr<'t, 'b>
             = "(" e:exp() ")" { e }
@@ -148,7 +148,7 @@ peg::parser! {
                     span: span.clone(),
                 })
             }
-        /// 一般の式
+        /// A general expression.
         pub rule exp() -> Expr<'t, 'b>
             = l:l() "Array.make" e1:simple_exp() e2:simple_exp() {
                 let span = (l, e2.span.end);
